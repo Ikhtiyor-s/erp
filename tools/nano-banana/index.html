@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nano Banana — rasm generatsiya paneli</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #121821;
+    --panel-2: #1a2230;
+    --border: #253141;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --brand: #f7c948;
+    --brand-2: #eab308;
+    --danger: #ef4444;
+    --success: #10b981;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .app { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 22px; font-weight: 600; }
+  h1 .banana { font-size: 26px; }
+  .badge { background: var(--panel-2); border: 1px solid var(--border); padding: 4px 10px; border-radius: 999px; font-size: 12px; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 900px) { .grid { grid-template-columns: 420px 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .card h3 { margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  input[type="text"], input[type="password"], textarea, select {
+    width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; font-size: 14px; font-family: inherit; resize: vertical;
+  }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--brand); }
+  textarea { min-height: 100px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { flex: 1; }
+  button {
+    background: var(--brand); color: #1a1a1a; border: none; border-radius: 8px;
+    padding: 10px 16px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+  button:hover { background: var(--brand-2); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  button.secondary:hover { background: var(--border); }
+  button.danger { background: transparent; color: var(--danger); border: 1px solid var(--border); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; background: var(--panel-2); padding: 4px; border-radius: 8px; }
+  .tab { flex: 1; padding: 8px; text-align: center; background: transparent; color: var(--muted); border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
+  .tab.active { background: var(--panel); color: var(--text); }
+  .drop {
+    border: 2px dashed var(--border); border-radius: 8px; padding: 24px; text-align: center;
+    color: var(--muted); cursor: pointer; transition: border-color 0.15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--brand); color: var(--text); }
+  .drop img { max-width: 100%; max-height: 300px; border-radius: 6px; }
+  .output { min-height: 400px; display: flex; align-items: center; justify-content: center; background: var(--panel-2); border-radius: 8px; padding: 16px; }
+  .output img { max-width: 100%; max-height: 700px; border-radius: 6px; }
+  .empty { color: var(--muted); text-align: center; }
+  .status { padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+  .status.err { background: rgba(239, 68, 68, 0.12); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+  .status.ok { background: rgba(16, 185, 129, 0.12); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }
+  .status.info { background: rgba(247, 201, 72, 0.12); color: #fcd34d; border: 1px solid rgba(247, 201, 72, 0.3); }
+  .history { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; margin-top: 12px; }
+  .history img { width: 100%; height: 100px; object-fit: cover; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); }
+  .history img:hover { border-color: var(--brand); }
+  .spinner {
+    display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: var(--brand); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .toolbar { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  a.linklike { color: var(--brand); text-decoration: none; }
+  a.linklike:hover { text-decoration: underline; }
+  .thumb-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .thumb-row img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
+  .cost { font-size: 12px; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <h1><span class="banana">🍌</span> Nano Banana — rasm generatsiya paneli</h1>
+    <span class="badge" id="modelBadge">gemini-2.5-flash-image</span>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: controls -->
+    <div>
+      <div class="card">
+        <h3>Sozlamalar</h3>
+        <div class="field">
+          <label>Gemini API kaliti <a class="linklike" href="https://aistudio.google.com/apikey" target="_blank">olish</a></label>
+          <div class="row">
+            <input type="password" id="apiKey" placeholder="AIza..." autocomplete="off" />
+            <button class="secondary" style="flex: 0 0 auto" id="saveKey" title="Brauzer localStorage'ga saqlash">Saqlash</button>
+          </div>
+          <div class="hint">Kalit faqat sizning brauzerda saqlanadi, hech kimga jo'natilmaydi.</div>
+        </div>
+        <div class="field">
+          <label>Model</label>
+          <select id="model">
+            <option value="gemini-2.5-flash-image">gemini-2.5-flash-image (nano banana)</option>
+            <option value="gemini-2.5-flash-image-preview">gemini-2.5-flash-image-preview</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 16px;">
+        <div class="tabs">
+          <button class="tab active" data-tab="generate">Generatsiya</button>
+          <button class="tab" data-tab="edit">Tahrirlash</button>
+        </div>
+
+        <!-- GENERATE TAB -->
+        <div id="tab-generate">
+          <div class="field">
+            <label>Prompt (rasm tavsifi)</label>
+            <textarea id="prompt" placeholder="Masalan: minimalist O'zbek non do'koni logotipi, oltin va emerald ranglar, oq fon, professional, vector uslub"></textarea>
+          </div>
+          <div class="field">
+            <label>Nechta variant</label>
+            <select id="count">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+            </select>
+          </div>
+          <button id="genBtn" style="width: 100%">Generatsiya qilish</button>
+          <div class="cost">Har rasm ~$0.039 (Gemini 2.5 Flash Image)</div>
+        </div>
+
+        <!-- EDIT TAB -->
+        <div id="tab-edit" style="display: none;">
+          <div class="field">
+            <label>Manba rasm(lar) — 1 dan 3 gacha</label>
+            <div class="drop" id="dropZone">
+              <div id="dropEmpty">Rasm faylni bu yerga tashlang yoki bosing</div>
+              <div class="thumb-row" id="thumbRow"></div>
+            </div>
+            <input type="file" id="fileInput" accept="image/*" multiple style="display: none;" />
+          </div>
+          <div class="field">
+            <label>Tahrirlash prompti</label>
+            <textarea id="editPrompt" placeholder="Masalan: fon rangini emerald yashilga o'zgartir, mahsulot markazda qolsin, professional studio yorug'lik"></textarea>
+          </div>
+          <button id="editBtn" style="width: 100%">Tahrirlash</button>
+          <div class="cost">Multi-image editing — Nano Banana yaxshi ishlaydi</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 16px;">
+        <h3>Tarix</h3>
+        <div id="history" class="history"></div>
+        <button class="danger" style="margin-top: 12px; width: 100%" id="clearHistory">Tarixni o'chirish</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: output -->
+    <div>
+      <div class="card">
+        <h3>Natija</h3>
+        <div id="status"></div>
+        <div class="output" id="output">
+          <div class="empty">
+            Chap tomondagi paneldan prompt kiriting va <b>Generatsiya qilish</b> tugmasini bosing.
+            <br /><br />
+            🍌 Nano Banana — Google'ning yangi eng yaxshi rasm generatsiya/tahrirlash modeli.
+          </div>
+        </div>
+        <div class="toolbar" id="toolbar" style="display: none;">
+          <button class="secondary" id="downloadBtn">Yuklab olish</button>
+          <button class="secondary" id="editThisBtn">Bu rasmni tahrirlash</button>
+          <button class="secondary" id="variantBtn">Yana variant</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+const state = {
+  currentImages: [],   // array of data URLs (latest output)
+  history: [],         // { prompt, images: [dataURL], ts, mode }
+  editSources: [],     // uploaded source images (data URLs)
+  lastPrompt: "",
+  lastMode: "generate",
+};
+
+// ============================================================
+// Utilities
+// ============================================================
+const $ = (id) => document.getElementById(id);
+
+function setStatus(kind, msg) {
+  const s = $("status");
+  if (!kind) { s.innerHTML = ""; return; }
+  s.innerHTML = `<div class="status ${kind}">${msg}</div>`;
+}
+
+function saveHistory() {
+  try {
+    localStorage.setItem("nb_history", JSON.stringify(state.history.slice(-50)));
+  } catch (e) {
+    // localStorage might overflow with many base64 images
+    state.history = state.history.slice(-10);
+    try { localStorage.setItem("nb_history", JSON.stringify(state.history)); } catch {}
+  }
+}
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem("nb_history");
+    if (raw) state.history = JSON.parse(raw);
+  } catch {}
+  renderHistory();
+}
+
+function renderHistory() {
+  const h = $("history");
+  if (!state.history.length) {
+    h.innerHTML = `<div class="empty" style="grid-column: 1/-1;">Hozircha bo'sh</div>`;
+    return;
+  }
+  h.innerHTML = state.history.slice().reverse().map((item, revIdx) => {
+    const idx = state.history.length - 1 - revIdx;
+    const img = item.images[0];
+    return `<img src="${img}" title="${(item.prompt || '').replace(/"/g, '&quot;').slice(0, 100)}" data-idx="${idx}" />`;
+  }).join("");
+  h.querySelectorAll("img").forEach(el => {
+    el.addEventListener("click", () => {
+      const idx = parseInt(el.dataset.idx, 10);
+      const item = state.history[idx];
+      state.currentImages = item.images;
+      state.lastPrompt = item.prompt;
+      renderOutput();
+    });
+  });
+}
+
+function renderOutput() {
+  const out = $("output");
+  const tb = $("toolbar");
+  if (!state.currentImages.length) {
+    out.innerHTML = `<div class="empty">Hali natija yo'q</div>`;
+    tb.style.display = "none";
+    return;
+  }
+  out.innerHTML = state.currentImages.map(img => `<img src="${img}" />`).join("");
+  tb.style.display = "flex";
+}
+
+function renderThumbs() {
+  const tr = $("thumbRow");
+  const de = $("dropEmpty");
+  if (!state.editSources.length) {
+    tr.innerHTML = "";
+    de.style.display = "block";
+    return;
+  }
+  de.style.display = "none";
+  tr.innerHTML = state.editSources.map((src, i) => `<img src="${src}" title="Bosib olib tashlash" data-i="${i}" />`).join("");
+  tr.querySelectorAll("img").forEach(el => {
+    el.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const i = parseInt(el.dataset.i, 10);
+      state.editSources.splice(i, 1);
+      renderThumbs();
+    });
+  });
+}
+
+async function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+function dataURLToInlinePart(dataUrl) {
+  // "data:image/png;base64,AAAA..." -> { inlineData: { mimeType, data } }
+  const m = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+  if (!m) throw new Error("Invalid data URL");
+  return { inlineData: { mimeType: m[1], data: m[2] } };
+}
+
+// ============================================================
+// Gemini API call
+// ============================================================
+async function callGemini({ prompt, sources, count }) {
+  const apiKey = $("apiKey").value.trim();
+  if (!apiKey) throw new Error("Gemini API kaliti kiritilmagan");
+  const model = $("model").value;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const parts = [];
+  for (const s of (sources || [])) {
+    parts.push(dataURLToInlinePart(s));
+  }
+  parts.push({ text: prompt });
+
+  const results = [];
+  const n = Math.max(1, Math.min(4, count || 1));
+
+  for (let i = 0; i < n; i++) {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts }],
+        generationConfig: {
+          responseModalities: ["IMAGE"],
+        },
+      }),
+    });
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(`Gemini API xatosi (${resp.status}): ${err.slice(0, 400)}`);
+    }
+    const data = await resp.json();
+    const cands = data?.candidates || [];
+    for (const c of cands) {
+      const cparts = c?.content?.parts || [];
+      for (const p of cparts) {
+        if (p.inlineData?.data) {
+          const mime = p.inlineData.mimeType || "image/png";
+          results.push(`data:${mime};base64,${p.inlineData.data}`);
+        }
+      }
+    }
+    // If nothing came back on first try, break
+    if (!results.length) {
+      // Include any text feedback for the user
+      const textFb = cands
+        .flatMap(c => c?.content?.parts || [])
+        .map(p => p.text)
+        .filter(Boolean)
+        .join("\n");
+      throw new Error("Modeldan rasm kelmadi." + (textFb ? " Javob: " + textFb.slice(0, 300) : ""));
+    }
+  }
+  return results;
+}
+
+// ============================================================
+// Handlers
+// ============================================================
+async function handleGenerate() {
+  const prompt = $("prompt").value.trim();
+  if (!prompt) { setStatus("err", "Prompt bo'sh"); return; }
+  const count = parseInt($("count").value, 10);
+  const btn = $("genBtn");
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Generatsiya...`;
+  setStatus("info", "Nano Banana ishlamoqda...");
+  try {
+    const images = await callGemini({ prompt, sources: [], count });
+    state.currentImages = images;
+    state.lastPrompt = prompt;
+    state.lastMode = "generate";
+    state.history.push({ prompt, images, ts: Date.now(), mode: "generate" });
+    saveHistory();
+    renderHistory();
+    renderOutput();
+    setStatus("ok", `${images.length} ta rasm tayyor`);
+  } catch (e) {
+    setStatus("err", e.message || String(e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Generatsiya qilish";
+  }
+}
+
+async function handleEdit() {
+  const prompt = $("editPrompt").value.trim();
+  if (!prompt) { setStatus("err", "Tahrirlash prompti bo'sh"); return; }
+  if (!state.editSources.length) { setStatus("err", "Kamida bitta rasm yuklang"); return; }
+  const btn = $("editBtn");
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Tahrirlanmoqda...`;
+  setStatus("info", "Nano Banana tahrirlamoqda...");
+  try {
+    const images = await callGemini({ prompt, sources: state.editSources, count: 1 });
+    state.currentImages = images;
+    state.lastPrompt = prompt;
+    state.lastMode = "edit";
+    state.history.push({ prompt: `[edit] ${prompt}`, images, ts: Date.now(), mode: "edit" });
+    saveHistory();
+    renderHistory();
+    renderOutput();
+    setStatus("ok", "Tahrir tayyor");
+  } catch (e) {
+    setStatus("err", e.message || String(e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Tahrirlash";
+  }
+}
+
+function downloadCurrent() {
+  state.currentImages.forEach((img, i) => {
+    const a = document.createElement("a");
+    a.href = img;
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    a.download = `nano-banana-${ts}-${i + 1}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
+}
+
+async function editCurrent() {
+  if (!state.currentImages.length) return;
+  state.editSources = state.currentImages.slice(0, 3);
+  renderThumbs();
+  // switch to edit tab
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelector('[data-tab="edit"]').classList.add("active");
+  $("tab-generate").style.display = "none";
+  $("tab-edit").style.display = "block";
+  $("editPrompt").focus();
+}
+
+function variantAgain() {
+  if (state.lastMode === "edit") return handleEdit();
+  return handleGenerate();
+}
+
+// ============================================================
+// File upload
+// ============================================================
+async function handleFiles(files) {
+  for (const f of files) {
+    if (state.editSources.length >= 3) break;
+    if (!f.type.startsWith("image/")) continue;
+    const url = await fileToDataURL(f);
+    state.editSources.push(url);
+  }
+  renderThumbs();
+}
+
+// ============================================================
+// Wire up
+// ============================================================
+document.addEventListener("DOMContentLoaded", () => {
+  // Load saved API key
+  const savedKey = localStorage.getItem("nb_api_key");
+  if (savedKey) $("apiKey").value = savedKey;
+
+  $("saveKey").addEventListener("click", () => {
+    localStorage.setItem("nb_api_key", $("apiKey").value.trim());
+    setStatus("ok", "Kalit saqlandi");
+    setTimeout(() => setStatus(""), 2000);
+  });
+
+  // Tabs
+  document.querySelectorAll(".tab").forEach(t => {
+    t.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+      t.classList.add("active");
+      const which = t.dataset.tab;
+      $("tab-generate").style.display = which === "generate" ? "block" : "none";
+      $("tab-edit").style.display = which === "edit" ? "block" : "none";
+    });
+  });
+
+  // Generate / Edit
+  $("genBtn").addEventListener("click", handleGenerate);
+  $("editBtn").addEventListener("click", handleEdit);
+  $("downloadBtn").addEventListener("click", downloadCurrent);
+  $("editThisBtn").addEventListener("click", editCurrent);
+  $("variantBtn").addEventListener("click", variantAgain);
+
+  // History
+  $("clearHistory").addEventListener("click", () => {
+    if (!confirm("Tarixni o'chirishga ishonchingiz komilmi?")) return;
+    state.history = [];
+    saveHistory();
+    renderHistory();
+  });
+
+  // Drop zone
+  const dz = $("dropZone");
+  const fi = $("fileInput");
+  dz.addEventListener("click", () => fi.click());
+  fi.addEventListener("change", (e) => handleFiles(e.target.files));
+  dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("over"); });
+  dz.addEventListener("dragleave", () => dz.classList.remove("over"));
+  dz.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dz.classList.remove("over");
+    handleFiles(e.dataTransfer.files);
+  });
+
+  // Cmd/Ctrl + Enter to submit
+  $("prompt").addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleGenerate();
+  });
+  $("editPrompt").addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleEdit();
+  });
+
+  loadHistory();
+  renderOutput();
+  renderThumbs();
+});
+</script>
+</body>
+</html>

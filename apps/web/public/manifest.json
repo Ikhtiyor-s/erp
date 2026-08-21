@@ -1,0 +1,33 @@
+{
+  "name": "Aniq ERP",
+  "short_name": "Aniq",
+  "description": "Aniq ERP — mobil kassa va boshqaruv tizimi",
+  "start_url": "/m",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbf8ff",
+  "theme_color": "#0922fb",
+  "lang": "uz",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "POS-kassa",
+      "url": "/m/pos",
+      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Sotuvlar",
+      "url": "/m/sales",
+      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "192x192" }]
+    }
+  ]
+}

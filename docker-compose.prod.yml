@@ -1,0 +1,97 @@
+# Aniq ERP — Production overlay
+#
+# Run alongside the main docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Differences from dev:
+#   - All containers restart=always
+#   - Resource limits (mem + cpu)
+#   - Postgres bind to 127.0.0.1 only (Nginx proxies API/web from same host)
+#   - pgAdmin removed
+#   - Logs rotated to 50MB x 5 files
+#   - Sentry DSN passed through to API
+version: "3.9"
+
+services:
+  postgres:
+    restart: always
+    ports:
+      - "127.0.0.1:5434:5432"          # localhost-only
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-erp}
+      POSTGRES_USER: ${POSTGRES_USER:-erp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "5"
+
+  redis:
+    restart: always
+    ports:
+      - "127.0.0.1:6380:6379"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "5"
+
+  api:
+    restart: always
+    ports:
+      - "127.0.0.1:8001:8000"
+    environment:
+      ENV: ${ENV:-production}
+      RELEASE: ${RELEASE:-aniq-erp@v1.0}
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_TRACES_RATE: ${SENTRY_TRACES_RATE:-0.1}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "5"
+
+  web:
+    restart: always
+    ports:
+      - "127.0.0.1:3010:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NODE_ENV: production
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "5"
+
+  # pgAdmin not started in prod — uncomment if needed for emergency access
+  pgadmin:
+    profiles: ["disabled"]

@@ -1,0 +1,88 @@
+# Aniq ERP — Monitoring stack
+#
+# Run separately from the main app:
+#   cd infra/monitoring && docker compose up -d
+#
+# Services:
+#   - prometheus  :9090   metric scrape + storage
+#   - grafana     :3000   dashboards
+#   - cadvisor    :8080   container metrics
+#   - node-exp    :9100   host metrics
+#   - postgres-exporter :9187  PG metrics
+version: "3.9"
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    container_name: aniq-prometheus
+    restart: always
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+      - "--storage.tsdb.retention.size=10GB"
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: aniq-grafana
+    restart: always
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      - prometheus
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: aniq-cadvisor
+    restart: always
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: aniq-node-exporter
+    restart: always
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    ports:
+      - "127.0.0.1:9100:9100"
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.16.0
+    container_name: aniq-pg-exporter
+    restart: always
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-erp}:${POSTGRES_PASSWORD}@host.docker.internal:5434/${POSTGRES_DB:-erp}?sslmode=disable"
+    ports:
+      - "127.0.0.1:9187:9187"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  prometheus_data:
+  grafana_data:

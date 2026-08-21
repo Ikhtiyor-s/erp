@@ -1,0 +1,38 @@
+# Aniq ERP — Prometheus scrape config
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    cluster: aniq-erp
+    env: production
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Host machine metrics (CPU, memory, disk, network)
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # Container metrics (per-container CPU/RAM)
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  # PostgreSQL metrics
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  # FastAPI metrics (when prometheus-fastapi-instrumentator is added)
+  - job_name: aniq-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8001"]
+
+# Alerting (basic — extend with Alertmanager)
+# rule_files:
+#   - "alerts/*.yml"
