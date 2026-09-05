@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, Eye, Search } from "lucide-react";
+import { Eye, Search, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader } from "@/components/ui/page-header";
+import { ProductPicker, type PickerItem } from "@/components/warehouse/product-picker";
 import { useTranslations } from "next-intl";
+import { usePermissions } from "@/lib/permissions";
 
 type Sale = {
   id: string;
@@ -28,12 +31,29 @@ type Sale = {
   created_by_name?: string;
   currency_code?: string;
 };
+
+type PickProgress = {
+  picked_count: number;
+  total_items: number;
+};
+
 type Customer = { id: string; name: string };
 type Warehouse = { id: number; name: string };
-type Product = { id: string; name: string; sale_price: string; sku?: string };
 type Currency = { id: number; code: string; is_base: boolean };
+
+type BomComponent = {
+  component_id: string;
+  component_name: string;
+  qty: number;
+  unit_name: string | null;
+};
+
+type BomCache = Record<string, { loading: boolean; components: BomComponent[] }>;
+
 type Line = {
   product_id: string;
+  product_name: string;
+  unit_name: string;
   quantity: number;
   price: number;
   discount: number;
@@ -44,10 +64,10 @@ const empty = () => ({
   warehouse_id: null as number | null,
   currency_id: null as number | null,
   notes: "",
-  items: [{ product_id: "", quantity: 1, price: 0, discount: 0 }] as Line[],
+  items: [] as Line[],
 });
 
-const fmt = (v: any) =>
+const fmt = (v: number | string) =>
   Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 
 const statusBadge = (s: string) =>
@@ -68,17 +88,75 @@ const statusLabel = (s: string) =>
     cancelled: "Bekor qilindi",
   }[s] || s);
 
+function pickBadgeClass(picked: number, total: number): string {
+  if (total === 0) return "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400";
+  if (picked >= total) return "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300";
+  if (picked > total / 2) return "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300";
+  return "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300";
+}
+
+function pickBarClass(picked: number, total: number): string {
+  if (total === 0) return "bg-slate-300";
+  if (picked >= total) return "bg-emerald-500";
+  return "bg-brand-500";
+}
+
+function PickProgressCell({ data }: { data: PickProgress | null }) {
+  if (!data || data.total_items === 0) {
+    return <span className="text-slate-400 text-xs">—</span>;
+  }
+  const pct = Math.round((data.picked_count / data.total_items) * 100);
+  return (
+    <div className="min-w-[72px]">
+      <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-semibold mb-1 ${pickBadgeClass(data.picked_count, data.total_items)}`}>
+        {data.picked_count}/{data.total_items}
+      </span>
+      <div className="h-1 rounded-full bg-ink-100 dark:bg-ink-800">
+        <div className={`h-full rounded-full transition-all ${pickBarClass(data.picked_count, data.total_items)}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function MobilePickBadge({ data }: { data: PickProgress | null }) {
+  if (!data || data.total_items === 0) return null;
+  const pct = Math.round((data.picked_count / data.total_items) * 100);
+  return (
+    <div className="mt-1">
+      <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-semibold ${pickBadgeClass(data.picked_count, data.total_items)}`}>
+        {data.picked_count}/{data.total_items}
+      </span>
+      <div className="h-1 rounded-full bg-ink-100 dark:bg-ink-800 mt-0.5">
+        <div className={`h-full rounded-full ${pickBarClass(data.picked_count, data.total_items)}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 export default function SaleContractPage() {
   const t = useTranslations("ui");
+  const tSale = useTranslations("sale.contract");
+  const tPick = useTranslations("order.pick");
   const router = useRouter();
+  const { can } = usePermissions();
+  const showPick = can("order.pick.view");
+
   const [rows, setRows] = useState<Sale[]>([]);
+  const [pickMap, setPickMap] = useState<Record<string, PickProgress>>({});
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<ReturnType<typeof empty>>(empty());
+  const [saving, setSaving] = useState(false);
+
+  const [warehouseChangeTarget, setWarehouseChangeTarget] = useState<number | null>(null);
+  const [confirmWarehouseOpen, setConfirmWarehouseOpen] = useState(false);
+
+  const bomCacheRef = useRef<BomCache>({});
+  const [bomCache, setBomCache] = useState<BomCache>({});
+  const [expandedBom, setExpandedBom] = useState<Record<string, boolean>>({});
 
   const [filters, setFilters] = useState({
     q: "",
@@ -88,7 +166,27 @@ export default function SaleContractPage() {
     date_to: "",
   });
 
-  async function load() {
+  const fetchPickSummary = useCallback(async (saleIds: string[]) => {
+    if (!showPick || saleIds.length === 0) return;
+    const CHUNK = 100;
+    const map: Record<string, PickProgress> = {};
+    for (let i = 0; i < saleIds.length; i += CHUNK) {
+      const chunk = saleIds.slice(i, i + CHUNK);
+      try {
+        const r = await api.get<{ order_id: string; picked_count: number; total_items: number }[]>(
+          `/orders/pick-summary?ids=${chunk.join(",")}`
+        );
+        for (const item of r.data) {
+          map[item.order_id] = { picked_count: item.picked_count, total_items: item.total_items };
+        }
+      } catch {
+        // non-fatal — pick summary is supplementary
+      }
+    }
+    setPickMap(map);
+  }, [showPick]);
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const p = new URLSearchParams();
@@ -98,67 +196,101 @@ export default function SaleContractPage() {
       if (filters.status) p.set("status", filters.status);
       if (filters.date_from) p.set("date_from", filters.date_from);
       if (filters.date_to) p.set("date_to", filters.date_to);
-      setRows((await api.get<Sale[]>(`/sale/sales?${p}`)).data);
+      const salesData = (await api.get<Sale[]>(`/sale/sales?${p}`)).data;
+      setRows(salesData);
+      fetchPickSummary(salesData.map((s) => s.id));
     } finally {
       setLoading(false);
     }
-  }
+  }, [filters, fetchPickSummary]);
 
   useEffect(() => {
     Promise.all([
-      api
-        .get<Customer[]>("/customer/customers?limit=200")
-        .then((r) => setCustomers(r.data))
-        .catch(() => {}),
-      api
-        .get<Warehouse[]>("/warehouse/warehouses")
-        .then((r) => setWarehouses(r.data))
-        .catch(() => {}),
-      api
-        .get<Product[]>("/warehouse/products?limit=300")
-        .then((r) => setProducts(r.data))
-        .catch(() => {}),
-      api
-        .get<Currency[]>("/reference/currencies")
-        .then((r) => setCurrencies(r.data))
-        .catch(() => {}),
+      api.get<Customer[]>("/customer/customers?limit=200").then((r) => setCustomers(r.data)).catch(() => {}),
+      api.get<Warehouse[]>("/warehouse/warehouses").then((r) => setWarehouses(r.data)).catch(() => {}),
+      api.get<Currency[]>("/reference/currencies").then((r) => setCurrencies(r.data)).catch(() => {}),
     ]);
     load();
   }, []);
 
-  function addLine() {
-    setForm({
-      ...form,
-      items: [
-        ...form.items,
-        { product_id: "", quantity: 1, price: 0, discount: 0 },
-      ],
-    });
-  }
-  function removeLine(idx: number) {
-    setForm({ ...form, items: form.items.filter((_, i) => i !== idx) });
-  }
-  function setLine(idx: number, k: keyof Line, v: any) {
-    const items = [...form.items];
-    (items[idx] as any)[k] = v;
-    if (k === "product_id") {
-      const p = products.find((x) => x.id === v);
-      if (p) items[idx].price = Number(p.sale_price) || 0;
-    }
-    setForm({ ...form, items });
+  function fetchBom(productId: string) {
+    if (bomCacheRef.current[productId]) return;
+    const loading = { loading: true, components: [] };
+    bomCacheRef.current = { ...bomCacheRef.current, [productId]: loading };
+    setBomCache((prev) => ({ ...prev, [productId]: loading }));
+    api
+      .get<{ items: BomComponent[] }>(`/warehouse/products/${productId}/bom`)
+      .then((r) => {
+        const done = { loading: false, components: r.data?.items ?? [] };
+        bomCacheRef.current = { ...bomCacheRef.current, [productId]: done };
+        setBomCache((prev) => ({ ...prev, [productId]: done }));
+      })
+      .catch(() => {
+        const done = { loading: false, components: [] };
+        bomCacheRef.current = { ...bomCacheRef.current, [productId]: done };
+        setBomCache((prev) => ({ ...prev, [productId]: done }));
+      });
   }
 
-  const total = form.items.reduce(
-    (s, i) => s + (i.quantity * i.price - i.discount),
-    0
-  );
+  function handleAdd(item: PickerItem) {
+    if (form.items.some((i) => i.product_id === item.productId)) return;
+    const line: Line = {
+      product_id: item.productId,
+      product_name: item.productName,
+      unit_name: item.unitName,
+      quantity: 1,
+      price: 0,
+      discount: 0,
+    };
+    setForm((f) => ({ ...f, items: [...f.items, line] }));
+    fetchBom(item.productId);
+  }
+
+  function removeItem(productId: string) {
+    setForm((f) => ({ ...f, items: f.items.filter((i) => i.product_id !== productId) }));
+  }
+
+  function setLineField(productId: string, key: "quantity" | "price" | "discount", value: number) {
+    setForm((f) => ({
+      ...f,
+      items: f.items.map((i) => (i.product_id === productId ? { ...i, [key]: value } : i)),
+    }));
+  }
+
+  function handleWarehouseChange(newWid: number | null) {
+    if (form.items.length > 0 && newWid !== form.warehouse_id) {
+      setWarehouseChangeTarget(newWid);
+      setConfirmWarehouseOpen(true);
+    } else {
+      setForm((f) => ({ ...f, warehouse_id: newWid, items: [] }));
+      bomCacheRef.current = {};
+      setBomCache({});
+      setExpandedBom({});
+    }
+  }
+
+  function confirmWarehouseChange() {
+    setForm((f) => ({ ...f, warehouse_id: warehouseChangeTarget, items: [] }));
+    bomCacheRef.current = {};
+    setBomCache({});
+    setExpandedBom({});
+    setConfirmWarehouseOpen(false);
+    setWarehouseChangeTarget(null);
+  }
+
+  function toggleBom(productId: string) {
+    setExpandedBom((prev) => ({ ...prev, [productId]: !prev[productId] }));
+  }
+
+  const hasInvalidQty = form.items.some((i) => i.quantity <= 0);
+  const total = form.items.reduce((s, i) => s + i.quantity * i.price - i.discount, 0);
 
   async function save() {
     if (!form.warehouse_id) return toast.error(t("ui__выберите_склад_b9bc3ffe"));
     if (!form.currency_id) return toast.error(t("ui__выберите_валюту_99fe6d8b"));
-    if (form.items.some((i) => !i.product_id))
-      return toast.error(t("ui__выберите_товар_во_всех_строках_c53b1724"));
-
+    if (form.items.length === 0) return toast.error(t("ui__выберите_товар_во_всех_строках_c53b1724"));
+    if (hasInvalidQty) return toast.error(tSale("qty_error"));
+    setSaving(true);
     try {
       await api.post("/sale/sales", {
         customer_id: form.customer_id || null,
@@ -175,9 +307,14 @@ export default function SaleContractPage() {
       toast.success(t("ui__продажа_создана_4b75175b"));
       setOpen(false);
       setForm(empty());
+      bomCacheRef.current = {};
+      setBomCache({});
+      setExpandedBom({});
       load();
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error(getErrorMessage(e, "Sotuv yaratishda xato"));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -193,9 +330,7 @@ export default function SaleContractPage() {
       header: t("ui__id_номер_e669322b"),
       width: "120px",
       render: (r) => (
-        <code className="text-xs text-slate-600 dark:text-slate-400">
-          {r.uuid_label}
-        </code>
+        <code className="text-xs text-slate-600 dark:text-slate-400">{r.uuid_label}</code>
       ),
     },
     {
@@ -219,7 +354,14 @@ export default function SaleContractPage() {
     {
       key: "customer_name",
       header: t("ui__клиент_4af22f2d"),
-      render: (r) => r.customer_name || "Chakana",
+      render: (r) => (
+        <div>
+          <div>{r.customer_name || "Chakana"}</div>
+          <div className="md:hidden">
+            {showPick && <MobilePickBadge data={pickMap[r.id] ?? null} />}
+          </div>
+        </div>
+      ),
     },
     {
       key: "customer_phone",
@@ -244,9 +386,7 @@ export default function SaleContractPage() {
       align: "right",
       width: "130px",
       render: (r) => (
-        <span className="font-mono text-green-700 dark:text-green-400">
-          {fmt(r.paid_amount)}
-        </span>
+        <span className="font-mono text-green-700 dark:text-green-400">{fmt(r.paid_amount)}</span>
       ),
     },
     {
@@ -255,17 +395,28 @@ export default function SaleContractPage() {
       align: "center",
       width: "130px",
       render: (r) => (
-        <span
-          className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${statusBadge(
-            r.status
-          )}`}
-        >
+        <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${statusBadge(r.status)}`}>
           {statusLabel(r.status)}
         </span>
       ),
     },
+    ...(showPick
+      ? [
+          {
+            key: "pick" as keyof Sale,
+            header: tPick("column_header"),
+            align: "center" as const,
+            width: "100px",
+            render: (r: Sale) => (
+              <div className="hidden md:block">
+                <PickProgressCell data={pickMap[r.id] ?? null} />
+              </div>
+            ),
+          },
+        ]
+      : []),
     {
-      key: "id" as any,
+      key: "id" as keyof Sale,
       header: "",
       align: "center",
       width: "60px",
@@ -288,21 +439,20 @@ export default function SaleContractPage() {
         description={t("ui__реестр_продаж_40274008")}
         onCreate={() => {
           setForm(empty());
+          bomCacheRef.current = {};
+          setBomCache({});
+          setExpandedBom({});
           setOpen(true);
         }}
         createLabel={t("ui__новая_продажа_4fbfd3e3")}
       />
 
-      {/* Filters panel */}
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="sm:col-span-2 relative">
           <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
             {t("ui__поиск_клиент_телефон_7d318763")}
           </label>
-          <Search
-            size={14}
-            className="absolute left-2.5 top-[34px] text-slate-400"
-          />
+          <Search size={14} className="absolute left-2.5 top-[34px] text-slate-400" />
           <input
             className={`${input} pl-8`}
             placeholder={t("ui__поиск_b84a8f87")}
@@ -318,15 +468,11 @@ export default function SaleContractPage() {
           <select
             className={input}
             value={filters.customer_id}
-            onChange={(e) =>
-              setFilters({ ...filters, customer_id: e.target.value })
-            }
+            onChange={(e) => setFilters({ ...filters, customer_id: e.target.value })}
           >
             <option value="">{t("ui__все_a07b234e")}</option>
             {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
         </div>
@@ -337,9 +483,7 @@ export default function SaleContractPage() {
           <select
             className={input}
             value={filters.status}
-            onChange={(e) =>
-              setFilters({ ...filters, status: e.target.value })
-            }
+            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
           >
             <option value="">{t("ui__все_a07b234e")}</option>
             <option value="draft">{t("ui__черновик_30ab6155")}</option>
@@ -357,9 +501,7 @@ export default function SaleContractPage() {
             type="date"
             className={input}
             value={filters.date_from}
-            onChange={(e) =>
-              setFilters({ ...filters, date_from: e.target.value })
-            }
+            onChange={(e) => setFilters({ ...filters, date_from: e.target.value })}
           />
         </div>
         <div>
@@ -370,9 +512,7 @@ export default function SaleContractPage() {
             type="date"
             className={input}
             value={filters.date_to}
-            onChange={(e) =>
-              setFilters({ ...filters, date_to: e.target.value })
-            }
+            onChange={(e) => setFilters({ ...filters, date_to: e.target.value })}
           />
         </div>
         <div className="flex items-end gap-2">
@@ -384,13 +524,7 @@ export default function SaleContractPage() {
           </button>
           <button
             onClick={() => {
-              setFilters({
-                q: "",
-                customer_id: "",
-                status: "",
-                date_from: "",
-                date_to: "",
-              });
+              setFilters({ q: "", customer_id: "", status: "", date_from: "", date_to: "" });
               setTimeout(load, 0);
             }}
             className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
@@ -402,27 +536,36 @@ export default function SaleContractPage() {
 
       <DataTable columns={columns} rows={rows} loading={loading} />
 
+      <ConfirmDialog
+        open={confirmWarehouseOpen}
+        onClose={() => {
+          setConfirmWarehouseOpen(false);
+          setWarehouseChangeTarget(null);
+        }}
+        onConfirm={confirmWarehouseChange}
+        title={tSale("warehouse_change_title")}
+        message={tSale("warehouse_change_msg")}
+        variant="warning"
+      />
+
       <Modal
         open={open}
         onClose={() => setOpen(false)}
         title={t("ui__новая_продажа_4fbfd3e3")}
-        size="lg"
+        size="xl"
       >
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="space-y-5">
+          {/* Top fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
             <Field label={t("ui__клиент_4af22f2d")}>
               <select
                 className={input}
                 value={form.customer_id}
-                onChange={(e) =>
-                  setForm({ ...form, customer_id: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, customer_id: e.target.value })}
               >
                 <option value="">{t("ui__розничный_db755a2a")}</option>
                 {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </Field>
@@ -430,20 +573,11 @@ export default function SaleContractPage() {
               <select
                 className={input}
                 value={form.warehouse_id || ""}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    warehouse_id: e.target.value
-                      ? Number(e.target.value)
-                      : null,
-                  })
-                }
+                onChange={(e) => handleWarehouseChange(e.target.value ? Number(e.target.value) : null)}
               >
                 <option value="">{t("ui__выбрать_fbbc1d13")}</option>
                 {warehouses.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
+                  <option key={w.id} value={w.id}>{w.name}</option>
                 ))}
               </select>
             </Field>
@@ -451,149 +585,310 @@ export default function SaleContractPage() {
               <select
                 className={input}
                 value={form.currency_id || ""}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    currency_id: e.target.value
-                      ? Number(e.target.value)
-                      : null,
-                  })
-                }
+                onChange={(e) => setForm({ ...form, currency_id: e.target.value ? Number(e.target.value) : null })}
               >
                 <option value="">{t("ui__выбрать_fbbc1d13")}</option>
                 {currencies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.code}
-                  </option>
+                  <option key={c.id} value={c.id}>{c.code}</option>
                 ))}
               </select>
             </Field>
+            <Field label={t("ui__заметки_c8866295")}>
+              <textarea
+                className={input}
+                rows={1}
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              />
+            </Field>
           </div>
 
-          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-300">
-                <tr>
-                  <th className="text-left px-3 py-2">{t("ui__товар_8b35db64")}</th>
-                  <th className="text-right px-3 py-2 w-24">{t("ui__кол_во_302e2bd6")}</th>
-                  <th className="text-right px-3 py-2 w-32">{t("ui__цена_682fa8db")}</th>
-                  <th className="text-right px-3 py-2 w-28">{t("ui__скидка_d9039617")}</th>
-                  <th className="text-right px-3 py-2 w-32">{t("ui__сумма_cf59ebf9")}</th>
-                  <th className="w-10"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {form.items.map((it, idx) => (
-                  <tr
-                    key={idx}
-                    className="border-t border-slate-200 dark:border-slate-700"
-                  >
-                    <td className="px-3 py-2">
-                      <select
-                        className={input}
-                        value={it.product_id}
-                        onChange={(e) =>
-                          setLine(idx, "product_id", e.target.value)
-                        }
-                      >
-                        <option value="">{t("ui__товар_8c2c36d6")}</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                            {p.sku ? ` (${p.sku})` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        step="0.001"
-                        className={`${input} text-right`}
-                        value={it.quantity}
-                        onChange={(e) =>
-                          setLine(idx, "quantity", Number(e.target.value))
-                        }
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        className={`${input} text-right`}
-                        value={it.price}
-                        onChange={(e) =>
-                          setLine(idx, "price", Number(e.target.value))
-                        }
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        className={`${input} text-right`}
-                        value={it.discount}
-                        onChange={(e) =>
-                          setLine(idx, "discount", Number(e.target.value))
-                        }
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono">
-                      {fmt(it.quantity * it.price - it.discount)}
-                    </td>
-                    <td className="text-center">
-                      <button
-                        onClick={() => removeLine(idx)}
-                        className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/40 p-1 rounded"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-slate-50 dark:bg-slate-900/40 font-semibold">
-                  <td className="px-3 py-2" colSpan={4}>
-                    {t("ui__итого_edcf3920")}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono">
-                    {fmt(total)}
-                  </td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
+          {/* ProductPicker */}
+          <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2">
+            {form.warehouse_id ? (
+              <ProductPicker
+                warehouseId={form.warehouse_id}
+                selectedIds={form.items.map((i) => i.product_id)}
+                onAdd={handleAdd}
+                mode="multi"
+              />
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400 py-4 text-center">
+                {tSale("pick_warehouse_first")}
+              </p>
+            )}
           </div>
 
-          <button
-            onClick={addLine}
-            className="flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700 dark:text-brand-400"
-          >
-            <Plus size={14} /> {t("ui__добавить_строку_d70236f2")}
-          </button>
+          {/* Selected items */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">
+              {tSale("selected_products")}
+            </p>
 
-          <Field label={t("ui__заметки_c8866295")}>
-            <textarea
-              className={input}
-              rows={2}
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            />
-          </Field>
+            {form.items.length === 0 ? (
+              <p className="text-sm text-slate-400 dark:text-slate-500 py-3 text-center">
+                {tSale("no_items_yet")}
+              </p>
+            ) : (
+              <>
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto rounded-md border border-slate-200 dark:border-slate-700">
+                  <table className="w-full text-[13px]">
+                    <thead className="bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-300">
+                      <tr>
+                        <th className="text-left px-3 py-2">{tSale("product")}</th>
+                        <th className="px-3 py-2 w-20 text-center">{tSale("unit")}</th>
+                        <th className="px-3 py-2 w-28 text-right">{tSale("qty")}</th>
+                        <th className="px-3 py-2 w-32 text-right">{tSale("price")}</th>
+                        <th className="px-3 py-2 w-28 text-right">{tSale("discount")}</th>
+                        <th className="px-3 py-2 w-32 text-right">{tSale("total")}</th>
+                        <th className="w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {form.items.map((it) => {
+                        const bom = bomCache[it.product_id];
+                        const hasBom = bom && !bom.loading && bom.components.length > 0;
+                        const isExpanded = expandedBom[it.product_id];
+                        const qtyInvalid = it.quantity <= 0;
+
+                        return (
+                          <>
+                            <tr key={it.product_id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/40 dark:hover:bg-slate-800/20">
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium text-ink-900 dark:text-ink-100">{it.product_name}</span>
+                                  {hasBom && (
+                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+                                      {tSale("bom_badge")}
+                                    </span>
+                                  )}
+                                  {bom?.loading && (
+                                    <span className="inline-block w-3 h-3 rounded-full border-2 border-slate-300 border-t-brand-500 animate-spin" />
+                                  )}
+                                  {hasBom && (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleBom(it.product_id)}
+                                      className="inline-flex items-center gap-0.5 text-[11px] text-brand-600 hover:text-brand-700 dark:text-brand-400"
+                                    >
+                                      {isExpanded ? (
+                                        <><ChevronUp size={12} />{tSale("hide_bom")}</>
+                                      ) : (
+                                        <><ChevronDown size={12} />{tSale("show_bom")}</>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-center text-slate-500 dark:text-slate-400">{it.unit_name}</td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number"
+                                  step="0.001"
+                                  min="0.001"
+                                  className={`${input} text-right ${qtyInvalid ? "border-red-400 focus:border-red-500 focus:ring-red-400/30" : ""}`}
+                                  value={it.quantity}
+                                  onChange={(e) => setLineField(it.product_id, "quantity", Number(e.target.value))}
+                                  placeholder={tSale("qty_placeholder")}
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  className={`${input} text-right`}
+                                  value={it.price}
+                                  onChange={(e) => setLineField(it.product_id, "price", Number(e.target.value))}
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  className={`${input} text-right`}
+                                  value={it.discount}
+                                  onChange={(e) => setLineField(it.product_id, "discount", Number(e.target.value))}
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono text-ink-800 dark:text-ink-200">
+                                {fmt(it.quantity * it.price - it.discount)}
+                              </td>
+                              <td className="text-center px-2">
+                                <button
+                                  type="button"
+                                  onClick={() => removeItem(it.product_id)}
+                                  className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/40 p-1 rounded"
+                                  title={tSale("remove")}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                            {isExpanded && hasBom && (
+                              <tr key={`${it.product_id}-bom`} className="bg-violet-50 dark:bg-violet-900/10 border-t border-violet-100 dark:border-violet-800/40">
+                                <td colSpan={7} className="px-5 py-2">
+                                  <p className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 mb-1.5">
+                                    {tSale("bom_preview_title")}
+                                  </p>
+                                  <table className="w-full text-[12px]">
+                                    <thead>
+                                      <tr className="text-slate-500 dark:text-slate-400">
+                                        <th className="text-left pb-1 font-medium">{tSale("bom_component")}</th>
+                                        <th className="text-right pb-1 font-medium w-20">{tSale("bom_qty")}</th>
+                                        <th className="text-left pb-1 font-medium w-20 pl-2">{tSale("bom_unit")}</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {bom.components.map((c) => (
+                                        <tr key={c.component_id} className="border-t border-violet-100 dark:border-violet-800/30">
+                                          <td className="py-1 text-ink-800 dark:text-ink-200">{c.component_name}</td>
+                                          <td className="py-1 text-right font-mono">{c.qty}</td>
+                                          <td className="py-1 pl-2 text-slate-500 dark:text-slate-400">{c.unit_name ?? "—"}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </td>
+                              </tr>
+                            )}
+                          </>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-50 dark:bg-slate-900/40 font-semibold border-t border-slate-200 dark:border-slate-700">
+                        <td className="px-3 py-2" colSpan={5}>{t("ui__итого_edcf3920")}</td>
+                        <td className="px-3 py-2 text-right font-mono">{fmt(total)}</td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* Mobile cards */}
+                <ul className="md:hidden space-y-3">
+                  {form.items.map((it) => {
+                    const bom = bomCache[it.product_id];
+                    const hasBom = bom && !bom.loading && bom.components.length > 0;
+                    const isExpanded = expandedBom[it.product_id];
+                    const qtyInvalid = it.quantity <= 0;
+
+                    return (
+                      <li key={it.product_id} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-1">
+                            <p className="text-[13px] font-medium text-ink-900 dark:text-ink-100">{it.product_name}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400">{it.unit_name}</span>
+                              {hasBom && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+                                  {tSale("bom_badge")}
+                                </span>
+                              )}
+                              {bom?.loading && (
+                                <span className="inline-block w-3 h-3 rounded-full border-2 border-slate-300 border-t-brand-500 animate-spin" />
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeItem(it.product_id)}
+                            className="shrink-0 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/40 p-1 rounded"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5">{tSale("qty")}</label>
+                            <input
+                              type="number"
+                              step="0.001"
+                              min="0.001"
+                              className={`${input} text-right text-[12px] ${qtyInvalid ? "border-red-400" : ""}`}
+                              value={it.quantity}
+                              onChange={(e) => setLineField(it.product_id, "quantity", Number(e.target.value))}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5">{tSale("price")}</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className={`${input} text-right text-[12px]`}
+                              value={it.price}
+                              onChange={(e) => setLineField(it.product_id, "price", Number(e.target.value))}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5">{tSale("discount")}</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className={`${input} text-right text-[12px]`}
+                              value={it.discount}
+                              onChange={(e) => setLineField(it.product_id, "discount", Number(e.target.value))}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center text-[12px]">
+                          <span className="text-slate-500 dark:text-slate-400">{tSale("total")}:</span>
+                          <span className="font-mono font-semibold">{fmt(it.quantity * it.price - it.discount)}</span>
+                        </div>
+
+                        {hasBom && (
+                          <button
+                            type="button"
+                            onClick={() => toggleBom(it.product_id)}
+                            className="flex items-center gap-1 text-[11px] text-brand-600 hover:text-brand-700 dark:text-brand-400"
+                          >
+                            {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                            {isExpanded ? tSale("hide_bom") : tSale("show_bom")}
+                          </button>
+                        )}
+
+                        {isExpanded && hasBom && (
+                          <div className="bg-violet-50 dark:bg-violet-900/10 rounded-md p-2 space-y-1">
+                            <p className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">{tSale("bom_preview_title")}</p>
+                            {bom.components.map((c) => (
+                              <div key={c.component_id} className="flex items-center justify-between text-[12px]">
+                                <span className="text-ink-800 dark:text-ink-200">{c.component_name}</span>
+                                <span className="font-mono text-slate-500 dark:text-slate-400">{c.qty} {c.unit_name ?? ""}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+
+                  <div className="flex justify-between items-center px-1 py-1 font-semibold text-[13px]">
+                    <span>{t("ui__итого_edcf3920")}</span>
+                    <span className="font-mono">{fmt(total)}</span>
+                  </div>
+                </ul>
+              </>
+            )}
+          </div>
 
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
             <button
+              type="button"
               onClick={() => setOpen(false)}
               className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
             >
               {t("ui__отмена_987b33c6")}
             </button>
             <button
+              type="button"
               onClick={save}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
+              disabled={saving || hasInvalidQty || form.items.length === 0}
+              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {t("ui__провести_продажу_3564388d")}
+              {saving ? "..." : tSale("save_btn")}
             </button>
           </div>
         </div>

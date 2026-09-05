@@ -13,6 +13,7 @@ from app.modules.audit.logger import log_action
 from app.modules.integration.telegram import notify_sale
 from app.modules.sale.pdf import render_sale_pdf, render_return_pdf
 from app.modules.tools.xlsx import make_sheet, new_workbook, workbook_to_bytes
+from app.modules.warehouse.service import explode_bom
 
 
 
@@ -158,12 +159,14 @@ async def create_sale(
     )
 
     for it in p.items:
-        await db.execute(
+        item_res = await db.execute(
             text("INSERT INTO sale_items (sale_id, product_id, quantity, price, discount) "
-                 "VALUES (:s, :p, :q, :pr, :d)"),
+                 "VALUES (:s, :p, :q, :pr, :d) RETURNING id"),
             {"s": str(sale_id), "p": str(it.product_id), "q": it.quantity,
              "pr": it.price, "d": it.discount},
         )
+        sale_item_id = item_res.scalar()
+
         await db.execute(
             text("INSERT INTO stock_balances (warehouse_id, product_id, quantity, avg_cost) "
                  "VALUES (:wh, :p, :neg, 0) "
@@ -171,6 +174,56 @@ async def create_sale(
                  "SET quantity = stock_balances.quantity + :neg, updated_at = NOW()"),
             {"wh": p.warehouse_id, "p": str(it.product_id), "neg": -it.quantity},
         )
+
+        # Pick workflow bootstrap: create pending pick items.
+        # BOM products → one pick_item per leaf component (parent_product_id = sold product).
+        # Non-BOM products → one pick_item for the product itself (parent_product_id NULL).
+        leaves = await explode_bom(db, org_id, str(it.product_id), Decimal(str(it.quantity)))
+        if leaves:
+            for leaf in leaves:
+                await db.execute(
+                    text(
+                        "INSERT INTO order_pick_items "
+                        "  (organization_id, order_id, item_id, parent_product_id,"
+                        "   product_id, quantity, unit_id, status) "
+                        "VALUES (:o, :oid, :iid, :parent, :cpid, :q, :u, 'pending') "
+                        "ON CONFLICT (organization_id, order_id, item_id, product_id) DO NOTHING"
+                    ),
+                    {
+                        "o": org_id,
+                        "oid": str(sale_id),
+                        "iid": sale_item_id,
+                        "parent": str(it.product_id),
+                        "cpid": leaf["component_id"],
+                        "q": leaf["quantity"],
+                        "u": leaf["unit_id"],
+                    },
+                )
+        else:
+            # Resolve unit_id from product table for individual items
+            unit_res = await db.execute(
+                text("SELECT unit_id FROM products WHERE id = :pid"),
+                {"pid": str(it.product_id)},
+            )
+            unit_row = unit_res.first()
+            unit_id = unit_row.unit_id if unit_row else None
+            await db.execute(
+                text(
+                    "INSERT INTO order_pick_items "
+                    "  (organization_id, order_id, item_id, parent_product_id,"
+                    "   product_id, quantity, unit_id, status) "
+                    "VALUES (:o, :oid, :iid, NULL, :pid, :q, :u, 'pending') "
+                    "ON CONFLICT (organization_id, order_id, item_id, product_id) DO NOTHING"
+                ),
+                {
+                    "o": org_id,
+                    "oid": str(sale_id),
+                    "iid": sale_item_id,
+                    "pid": str(it.product_id),
+                    "q": it.quantity,
+                    "u": unit_id,
+                },
+            )
 
     await db.commit()
 
@@ -506,6 +559,57 @@ async def cancel_sale(
     return {"ok": True}
 
 
+async def _bootstrap_pick_items(
+    db: AsyncSession,
+    org_id: str,
+    sale_id: str,
+    items: list[dict],
+) -> None:
+    """Insert order_pick_items for each sale_item, exploding BOM if applicable."""
+    for it in items:
+        leaves = await explode_bom(
+            db, org_id, str(it["product_id"]), Decimal(str(it["quantity"]))
+        )
+        if leaves:
+            for leaf in leaves:
+                await db.execute(
+                    text(
+                        "INSERT INTO order_pick_items "
+                        "  (organization_id, order_id, item_id, parent_product_id,"
+                        "   product_id, quantity, unit_id, status) "
+                        "VALUES (:o, :oid, :iid, :parent, :cpid, :q, :u, 'pending') "
+                        "ON CONFLICT (organization_id, order_id, item_id, product_id) DO NOTHING"
+                    ),
+                    {
+                        "o": org_id,
+                        "oid": sale_id,
+                        "iid": it["sale_item_id"],
+                        "parent": str(it["product_id"]),
+                        "cpid": leaf["component_id"],
+                        "q": leaf["quantity"],
+                        "u": leaf["unit_id"],
+                    },
+                )
+        else:
+            await db.execute(
+                text(
+                    "INSERT INTO order_pick_items "
+                    "  (organization_id, order_id, item_id, parent_product_id,"
+                    "   product_id, quantity, unit_id, status) "
+                    "VALUES (:o, :oid, :iid, NULL, :pid, :q, :u, 'pending') "
+                    "ON CONFLICT (organization_id, order_id, item_id, product_id) DO NOTHING"
+                ),
+                {
+                    "o": org_id,
+                    "oid": sale_id,
+                    "iid": it["sale_item_id"],
+                    "pid": str(it["product_id"]),
+                    "q": it["quantity"],
+                    "u": it["unit_id"],
+                },
+            )
+
+
 @router.post("/sales/{sale_id}/duplicate", status_code=status.HTTP_201_CREATED)
 async def duplicate_sale(
     sale_id: UUID,
@@ -542,14 +646,37 @@ async def duplicate_sale(
     )
     nid = new_id.scalar()
 
-    await db.execute(
+    new_items_res = await db.execute(
         text("""
             INSERT INTO sale_items (sale_id, product_id, quantity, price, discount)
             SELECT :nid, product_id, quantity, price, discount
             FROM sale_items WHERE sale_id = :src
+            RETURNING id, product_id, quantity
         """),
         {"nid": str(nid), "src": str(sale_id)},
     )
+    new_items = [dict(r._mapping) for r in new_items_res]
+
+    # Resolve unit_id for each new item from products table
+    unit_map: dict[str, int | None] = {}
+    if new_items:
+        prod_ids = list({str(r["product_id"]) for r in new_items})
+        unit_res = await db.execute(
+            text("SELECT id, unit_id FROM products WHERE id = ANY(CAST(:ids AS uuid[]))"),
+            {"ids": prod_ids},
+        )
+        unit_map = {str(r.id): r.unit_id for r in unit_res}
+
+    bootstrap_items = [
+        {
+            "sale_item_id": r["id"],
+            "product_id": r["product_id"],
+            "quantity": r["quantity"],
+            "unit_id": unit_map.get(str(r["product_id"])),
+        }
+        for r in new_items
+    ]
+    await _bootstrap_pick_items(db, org_id, str(nid), bootstrap_items)
     await db.commit()
 
     await log_action(
