@@ -44,6 +44,14 @@ async def test_create_and_pay_sale(client):
     currencies = cur_resp.json() if cur_resp.status_code == 200 else []
     cur_id = currencies[0]["id"] if currencies else 1
 
+    # Ensure stock exists before selling (guard is now enforced)
+    inv_r = await client.post("/api/v1/warehouse/inventories",
+                              json={"warehouse_id": wh_id,
+                                    "items": [{"product_id": p_id, "actual_qty": "10"}]})
+    assert inv_r.status_code in (200, 201), f"inventory: {inv_r.text}"
+    fin_r = await client.post(f"/api/v1/warehouse/inventories/{inv_r.json()['id']}/finish")
+    assert fin_r.status_code == 200, f"finish: {fin_r.text}"
+
     # Create the sale
     create_resp = await client.post(
         "/api/v1/sale/sales",

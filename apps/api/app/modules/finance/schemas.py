@@ -12,6 +12,7 @@ class CashboxCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     currency_id: int
     responsible_id: UUID | None = None
+    warehouse_id: int | None = None
 
 
 class CashboxOut(BaseModel):
@@ -20,6 +21,8 @@ class CashboxOut(BaseModel):
     currency_id: int
     balance: Decimal
     is_active: bool
+    warehouse_id: int | None = None
+    warehouse_name: str | None = None
 
 
 # --- Cash movement (universal kassa harakati) ---

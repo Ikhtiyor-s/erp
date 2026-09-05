@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_user_id, get_current_org_id
-from app.modules.rbac.deps import require_permission
+from app.modules.rbac.deps import require_permission, get_user_permissions
 from app.modules.warehouse.service import (
     _stock_qty, _stock_apply, _next_doc_number, _bom_check_cycle,
     get_products_paginated,
@@ -206,6 +206,7 @@ class ProductIn(BaseModel):
     extra_barcodes: list[str] | None = None
     tag_ids: list[int] | None = None
     default_cell_id: UUID | None = None
+    default_supplier_id: UUID | None = None
 
 
 @router.get("/products", dependencies=[Depends(require_permission("warehouse.product.view"))])
@@ -219,6 +220,7 @@ async def list_products(
     product_type: str | None = Query(None),
     is_service: bool | None = Query(None),
     kind: str | None = Query(None),
+    include_archived: bool = Query(False),
     db: AsyncSession = Depends(get_db),
     org_id: str = Depends(get_current_org_id),
 ):
@@ -246,6 +248,8 @@ async def list_products(
 
     # Legacy flat list (backward compat — no warehouse_id)
     where = "WHERE p.organization_id = :o AND p.is_active = TRUE"
+    if not include_archived:
+        where += " AND p.is_archived = FALSE"
     params: dict = {"o": org_id, "lim": limit, "off": offset}
     if q:
         where += " AND (p.name ILIKE :q OR p.sku ILIKE :q OR p.barcode = :raw)"
@@ -272,12 +276,16 @@ async def list_products(
              f"cat.name AS category_name, "
              f"COALESCE((SELECT SUM(quantity) FROM stock_balances WHERE product_id = p.id), 0) AS total_stock, "
              f"p.default_cell_id, "
-             f"wc.code AS default_cell_code "
+             f"wc.code AS default_cell_code, "
+             f"p.is_archived, p.archived_at, "
+             f"p.default_supplier_id, "
+             f"sup.name AS default_supplier_name "
              f"FROM products p "
              f"LEFT JOIN currencies cur ON cur.id = p.currency_id "
              f"LEFT JOIN units un ON un.id = p.unit_id "
              f"LEFT JOIN product_categories cat ON cat.id = p.category_id "
              f"LEFT JOIN warehouse_cells wc ON wc.id = p.default_cell_id "
+             f"LEFT JOIN suppliers sup ON sup.id = p.default_supplier_id "
              f"{where} ORDER BY p.name LIMIT :lim OFFSET :off"),
         params,
     )
@@ -292,7 +300,8 @@ _PRODUCT_FIELDS = """
     image_url=:img, box_qty=:bq, box_barcode=:bbc,
     dim_length=:dl, dim_width=:dw, dim_height=:dh, dim_weight=:dwg,
     description=:descr, kind=COALESCE(:knd, kind), mxik=:mxik,
-    default_cell_id=:dcell, product_type=COALESCE(:ptype, product_type)
+    default_cell_id=:dcell, product_type=COALESCE(:ptype, product_type),
+    default_supplier_id=:dsup
 """
 
 def _product_params(p: ProductIn) -> dict:
@@ -307,6 +316,7 @@ def _product_params(p: ProductIn) -> dict:
         "descr": p.description, "knd": p.kind, "mxik": p.mxik,
         "dcell": str(p.default_cell_id) if p.default_cell_id else None,
         "ptype": p.product_type,
+        "dsup": str(p.default_supplier_id) if p.default_supplier_id else None,
     }
 
 
@@ -325,12 +335,19 @@ async def _validate_cell_org(db: AsyncSession, org_id: str, cell_id: UUID | None
 
 async def _sync_product_extras(db: AsyncSession, org_id: str, pid: str, p: ProductIn) -> None:
     if p.extra_barcodes is not None:
-        await db.execute(text("DELETE FROM product_barcodes WHERE product_id = :p"), {"p": pid})
+        await db.execute(
+            text("DELETE FROM product_barcodes WHERE product_id = :p AND organization_id = :o"),
+            {"p": pid, "o": org_id},
+        )
         for bc in p.extra_barcodes:
             if bc:
                 await db.execute(
-                    text("INSERT INTO product_barcodes (product_id, barcode) VALUES (:p, :b) ON CONFLICT DO NOTHING"),
-                    {"p": pid, "b": bc},
+                    text(
+                        "INSERT INTO product_barcodes "
+                        "(organization_id, product_id, barcode) "
+                        "VALUES (:o, :p, :b) ON CONFLICT DO NOTHING"
+                    ),
+                    {"o": org_id, "p": pid, "b": bc},
                 )
     if p.tag_ids is not None:
         await db.execute(
@@ -359,10 +376,10 @@ async def create_product(
              f"unit_id, purchase_price, sale_price, currency_id, is_service, is_material, "
              f"is_semi_product, is_marked, has_expiration, is_variant, parent_id, image_url, "
              f"box_qty, box_barcode, dim_length, dim_width, dim_height, dim_weight, description, kind, mxik, "
-             f"default_cell_id, product_type) "
+             f"default_cell_id, product_type, default_supplier_id) "
              f"VALUES (:id, :o, :n, :sku, :bc, :cat, :u, :pp, :sp, :cur, :svc, :mat, "
              f":semi, :mk, :exp, :var, :par, :img, :bq, :bbc, :dl, :dw, :dh, :dwg, :descr, COALESCE(:knd, 'good'), :mxik, "
-             f":dcell, :ptype)"),
+             f":dcell, :ptype, :dsup)"),
         params,
     )
     await _sync_product_extras(db, org_id, str(pid), p)
@@ -398,12 +415,14 @@ async def product_full(
     res = await db.execute(
         text("SELECT p.*, cur.code AS currency_code, un.short_name AS unit_name, "
              "cat.name AS category_name, "
-             "wc.code AS default_cell_code "
+             "wc.code AS default_cell_code, "
+             "sup.name AS default_supplier_name "
              "FROM products p "
              "LEFT JOIN currencies cur ON cur.id = p.currency_id "
              "LEFT JOIN units un ON un.id = p.unit_id "
              "LEFT JOIN product_categories cat ON cat.id = p.category_id "
              "LEFT JOIN warehouse_cells wc ON wc.id = p.default_cell_id "
+             "LEFT JOIN suppliers sup ON sup.id = p.default_supplier_id "
              "WHERE p.id = :id AND p.organization_id = :o"),
         {"id": str(pid), "o": org_id},
     )
@@ -412,8 +431,8 @@ async def product_full(
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     product = dict(row._mapping)
     bcres = await db.execute(
-        text("SELECT id, barcode, type FROM product_barcodes WHERE product_id = :p"),
-        {"p": str(pid)},
+        text("SELECT id, barcode, is_primary, is_active FROM product_barcodes WHERE product_id = :p AND organization_id = :o"),
+        {"p": str(pid), "o": org_id},
     )
     product["extra_barcodes"] = [dict(r._mapping) for r in bcres]
     tagres = await db.execute(
@@ -440,6 +459,133 @@ async def delete_product(
     await db.execute(
         text("UPDATE products SET is_active = FALSE "
              "WHERE id = :id AND organization_id = :o"),
+        {"id": str(pid), "o": org_id},
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+class ProductPatchIn(BaseModel):
+    default_supplier_id: UUID | None = None
+
+
+@router.patch(
+    "/products/{pid}",
+    dependencies=[Depends(require_permission("warehouse.product.view"))],
+)
+async def patch_product(
+    pid: UUID,
+    p: ProductPatchIn,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    res = await db.execute(
+        text(
+            "UPDATE products SET default_supplier_id = :dsup "
+            "WHERE id = :id AND organization_id = :o RETURNING id"
+        ),
+        {"id": str(pid), "o": org_id,
+         "dsup": str(p.default_supplier_id) if p.default_supplier_id else None},
+    )
+    if not res.scalar():
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/products/{pid}/archive",
+    dependencies=[Depends(require_permission("warehouse.product.archive"))],
+)
+async def archive_product(
+    pid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    check = await db.execute(
+        text("SELECT id, is_archived FROM products WHERE id = :id AND organization_id = :o"),
+        {"id": str(pid), "o": org_id},
+    )
+    row = check.first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Mahsulot topilmadi")
+    if row.is_archived:
+        return {"ok": True}
+
+    open_sale = await db.execute(
+        text(
+            "SELECT EXISTS ("
+            "  SELECT 1 FROM sale_items si "
+            "  JOIN sales s ON s.id = si.sale_id "
+            "  WHERE si.product_id = :pid "
+            "  AND s.status IN ('draft', 'confirmed') "
+            "  AND s.organization_id = :o"
+            ")"
+        ),
+        {"pid": str(pid), "o": org_id},
+    )
+    if open_sale.scalar():
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Mahsulotni arxivlab bo'lmaydi: ochiq sotuv operatsiyalari mavjud",
+        )
+
+    open_supply = await db.execute(
+        text(
+            "SELECT EXISTS ("
+            "  SELECT 1 FROM supply_items si "
+            "  JOIN supplies s ON s.id = si.supply_id "
+            "  WHERE si.product_id = :pid "
+            "  AND s.status != 'received' "
+            "  AND s.organization_id = :o"
+            ")"
+        ),
+        {"pid": str(pid), "o": org_id},
+    )
+    if open_supply.scalar():
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Mahsulotni arxivlab bo'lmaydi: ochiq xarid operatsiyalari mavjud",
+        )
+
+    await db.execute(
+        text(
+            "UPDATE products "
+            "SET is_archived = TRUE, "
+            "    archived_at = NOW(), "
+            "    archived_by = :uid "
+            "WHERE id = :id AND organization_id = :o"
+        ),
+        {"id": str(pid), "o": org_id, "uid": user_id},
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/products/{pid}/unarchive",
+    dependencies=[Depends(require_permission("warehouse.product.archive"))],
+)
+async def unarchive_product(
+    pid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    check = await db.execute(
+        text("SELECT id FROM products WHERE id = :id AND organization_id = :o"),
+        {"id": str(pid), "o": org_id},
+    )
+    if not check.scalar():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Mahsulot topilmadi")
+    await db.execute(
+        text(
+            "UPDATE products "
+            "SET is_archived = FALSE, "
+            "    archived_at = NULL, "
+            "    archived_by = NULL "
+            "WHERE id = :id AND organization_id = :o"
+        ),
         {"id": str(pid), "o": org_id},
     )
     await db.commit()
@@ -482,6 +628,7 @@ class InventoryItemIn(BaseModel):
 class InventoryIn(BaseModel):
     warehouse_id: int
     notes: str | None = None
+    blind_count: bool = False
     items: list[InventoryItemIn] = Field(default_factory=list)
 
 
@@ -510,9 +657,10 @@ async def create_inventory(
 ):
     iid = uuid4()
     await db.execute(
-        text("INSERT INTO inventories (id, organization_id, warehouse_id, status, started_at, notes) "
-             "VALUES (:id, :o, :w, 'in_progress', NOW(), :n)"),
-        {"id": str(iid), "o": org_id, "w": p.warehouse_id, "n": p.notes},
+        text("INSERT INTO inventories "
+             "(id, organization_id, warehouse_id, status, started_at, notes, blind_count) "
+             "VALUES (:id, :o, :w, 'draft', NOW(), :n, :bc)"),
+        {"id": str(iid), "o": org_id, "w": p.warehouse_id, "n": p.notes, "bc": p.blind_count},
     )
     for it in p.items:
         expected = await _stock_qty(db, p.warehouse_id, str(it.product_id))
@@ -548,10 +696,11 @@ async def get_inventory(
     return {"head": dict(h._mapping), "items": [dict(r._mapping) for r in items]}
 
 
-@router.post("/inventories/{iid}/finish")
+@router.post("/inventories/{iid}/finish", dependencies=[Depends(require_permission("warehouse.inventory"))])
 async def finish_inventory(
     iid: UUID, db: AsyncSession = Depends(get_db),
     org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
 ):
     head = await db.execute(
         text("SELECT warehouse_id, status FROM inventories "
@@ -569,8 +718,13 @@ async def finish_inventory(
         {"i": str(iid)},
     )
     for it in items:
-        await _stock_apply(db, row.warehouse_id, str(it.product_id),
-                           Decimal(str(it.diff_qty)), allow_negative=True)
+        await _stock_apply(
+            db, row.warehouse_id, str(it.product_id),
+            Decimal(str(it.diff_qty)), allow_negative=True,
+            org_id=org_id, operation_type="inventory_adjust",
+            source_type="inventory", source_id=str(iid),
+            user_id=user_id,
+        )
 
     await db.execute(
         text("UPDATE inventories SET status='completed', finished_at=NOW() WHERE id = :id"),
@@ -578,6 +732,576 @@ async def finish_inventory(
     )
     await db.commit()
     return {"ok": True}
+
+
+# =========================================================
+# INVENTORY RICH STATES — T-204
+# State machine: draft→in_progress→paused→in_progress→pending_confirmation→completed
+#                Any non-completed → cancelled
+#                pending_confirmation → in_progress (reject)
+# =========================================================
+
+class ScanEventIn(BaseModel):
+    product_id: UUID
+    quantity: Decimal = Field(gt=0)
+    barcode: str | None = None
+    device_id: str | None = None
+    notes: str | None = None
+
+
+_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+    "draft": {"in_progress", "cancelled"},
+    "in_progress": {"paused", "pending_confirmation", "cancelled"},
+    "paused": {"in_progress"},
+    "pending_confirmation": {"completed", "in_progress"},
+    "completed": set(),
+    "cancelled": set(),
+}
+
+_TRANSITION_TIMESTAMPS: dict[str, str] = {
+    "paused": "paused_at",
+    "pending_confirmation": "submitted_at",
+    "completed": "confirmed_at",
+    # in_progress is context-dependent: resume sets resumed_at, start sets started_at
+    # handled inline in transition functions that need specific columns
+}
+
+
+async def _transition_inventory(
+    db: AsyncSession,
+    iid: str,
+    org_id: str,
+    from_status: str,
+    to_status: str,
+    user_id: str | None = None,
+) -> None:
+    ts_col = _TRANSITION_TIMESTAMPS.get(to_status)
+    set_clause = f"status = :to, {ts_col} = NOW()" if ts_col else "status = :to"
+    params: dict = {"to": to_status, "id": iid, "o": org_id, "from": from_status}
+    if to_status == "completed" and user_id:
+        set_clause += ", confirmed_by = :uid"
+        params["uid"] = user_id
+    result = await db.execute(
+        text(
+            f"UPDATE inventories SET {set_clause} "
+            "WHERE id = :id AND organization_id = :o AND status = :from "
+            "RETURNING id"
+        ),
+        params,
+    )
+    if not result.first():
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid state transition: {from_status} -> {to_status} or inventory not found",
+        )
+
+
+async def _get_inventory_head(db: AsyncSession, iid: str, org_id: str):
+    res = await db.execute(
+        text("SELECT id, status, warehouse_id, blind_count FROM inventories "
+             "WHERE id = :id AND organization_id = :o"),
+        {"id": iid, "o": org_id},
+    )
+    row = res.first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Inventory not found")
+    return row
+
+
+def _validate_transition(current_status: str, target_status: str) -> None:
+    allowed = _ALLOWED_TRANSITIONS.get(current_status, set())
+    if target_status not in allowed:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid state transition: {current_status} → {target_status}",
+        )
+
+
+@router.post(
+    "/inventories/{iid}/start",
+    dependencies=[Depends(require_permission("warehouse.manage_inventory_advanced"))],
+)
+async def start_inventory(
+    iid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    row = await _get_inventory_head(db, str(iid), org_id)
+    _validate_transition(row.status, "in_progress")
+    result = await db.execute(
+        text(
+            "UPDATE inventories SET status = 'in_progress', started_at = NOW() "
+            "WHERE id = :id AND organization_id = :o AND status = :from "
+            "RETURNING id"
+        ),
+        {"id": str(iid), "o": org_id, "from": row.status},
+    )
+    if not result.first():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "State transition failed")
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/inventories/{iid}/pause",
+    dependencies=[Depends(require_permission("warehouse.manage_inventory_advanced"))],
+)
+async def pause_inventory(
+    iid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    row = await _get_inventory_head(db, str(iid), org_id)
+    _validate_transition(row.status, "paused")
+    await _transition_inventory(db, str(iid), org_id, row.status, "paused", user_id)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/inventories/{iid}/resume",
+    dependencies=[Depends(require_permission("warehouse.manage_inventory_advanced"))],
+)
+async def resume_inventory(
+    iid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    row = await _get_inventory_head(db, str(iid), org_id)
+    _validate_transition(row.status, "in_progress")
+    result = await db.execute(
+        text(
+            "UPDATE inventories SET status = 'in_progress', resumed_at = NOW() "
+            "WHERE id = :id AND organization_id = :o AND status = :from "
+            "RETURNING id"
+        ),
+        {"id": str(iid), "o": org_id, "from": row.status},
+    )
+    if not result.first():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "State transition failed")
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/inventories/{iid}/submit",
+    dependencies=[Depends(require_permission("warehouse.manage_inventory_advanced"))],
+)
+async def submit_inventory(
+    iid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    row = await _get_inventory_head(db, str(iid), org_id)
+    _validate_transition(row.status, "pending_confirmation")
+    await _transition_inventory(db, str(iid), org_id, row.status, "pending_confirmation", user_id)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/inventories/{iid}/confirm",
+    dependencies=[Depends(require_permission("warehouse.manage_inventory_advanced"))],
+)
+async def confirm_inventory(
+    iid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    row = await _get_inventory_head(db, str(iid), org_id)
+    _validate_transition(row.status, "completed")
+
+    items = await db.execute(
+        text("SELECT product_id, expected_qty, actual_qty, diff_qty "
+             "FROM inventory_items WHERE inventory_id = :i"),
+        {"i": str(iid)},
+    )
+    correlation_id = str(uuid4())
+    for it in items:
+        variance = Decimal(str(it.diff_qty))
+        if variance != 0:
+            await _stock_apply(
+                db, row.warehouse_id, str(it.product_id),
+                delta_qty=variance,
+                allow_negative=True,
+                org_id=org_id,
+                operation_type="inventory_adjust",
+                source_type="inventory",
+                source_id=str(iid),
+                correlation_id=correlation_id,
+                user_id=user_id,
+                notes=f"Inventory adjust: expected={it.expected_qty}, actual={it.actual_qty}",
+            )
+
+    await _transition_inventory(db, str(iid), org_id, row.status, "completed", user_id)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/inventories/{iid}/reject",
+    dependencies=[Depends(require_permission("warehouse.manage_inventory_advanced"))],
+)
+async def reject_inventory(
+    iid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    row = await _get_inventory_head(db, str(iid), org_id)
+    _validate_transition(row.status, "in_progress")
+    result = await db.execute(
+        text(
+            "UPDATE inventories SET status = 'in_progress', resumed_at = NOW() "
+            "WHERE id = :id AND organization_id = :o AND status = :from "
+            "RETURNING id"
+        ),
+        {"id": str(iid), "o": org_id, "from": row.status},
+    )
+    if not result.first():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "State transition failed")
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/inventories/{iid}/cancel",
+    dependencies=[Depends(require_permission("warehouse.manage_inventory_advanced"))],
+)
+async def cancel_inventory(
+    iid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    row = await _get_inventory_head(db, str(iid), org_id)
+    _validate_transition(row.status, "cancelled")
+    await _transition_inventory(db, str(iid), org_id, row.status, "cancelled", user_id)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.get(
+    "/inventories/{iid}/items",
+    dependencies=[Depends(require_permission("warehouse.manage_inventory_advanced"))],
+)
+async def get_inventory_items(
+    iid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    row = await _get_inventory_head(db, str(iid), org_id)
+
+    # Aggregate actual_qty from non-voided scan events; fall back to inventory_items if no events
+    items = await db.execute(
+        text(
+            "SELECT ii.product_id, p.name AS product_name, "
+            "       ii.expected_qty, "
+            "       COALESCE("
+            "           (SELECT SUM(se.quantity) FROM inventory_scan_events se "
+            "            WHERE se.inventory_id = :iid AND se.product_id = ii.product_id "
+            "              AND se.is_voided = FALSE), "
+            "           ii.actual_qty"
+            "       ) AS actual_qty, "
+            "       ii.version "
+            "FROM inventory_items ii "
+            "LEFT JOIN products p ON p.id = ii.product_id "
+            "WHERE ii.inventory_id = :iid"
+        ),
+        {"iid": str(iid)},
+    )
+
+    result = []
+    for it in items:
+        item = dict(it._mapping)
+        if row.blind_count:
+            item["expected_qty"] = None
+        result.append(item)
+    return result
+
+
+@router.post(
+    "/inventories/{iid}/scan-events",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("warehouse.manage_inventory_advanced"))],
+)
+async def add_scan_event(
+    iid: UUID,
+    p: ScanEventIn,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    row = await _get_inventory_head(db, str(iid), org_id)
+    if row.status not in ("in_progress", "paused"):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Cannot scan in status '{row.status}'. Inventory must be in_progress or paused.",
+        )
+
+    # Verify product belongs to org
+    prod_res = await db.execute(
+        text("SELECT id FROM products WHERE id = :pid AND organization_id = :o"),
+        {"pid": str(p.product_id), "o": org_id},
+    )
+    if not prod_res.first():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown product or product not in org")
+
+    # Ensure inventory_items row exists for this product (upsert)
+    await db.execute(
+        text(
+            "INSERT INTO inventory_items (inventory_id, product_id, expected_qty, actual_qty) "
+            "VALUES (:iid, :pid, 0, 0) "
+            "ON CONFLICT DO NOTHING"
+        ),
+        {"iid": str(iid), "pid": str(p.product_id)},
+    )
+
+    event_res = await db.execute(
+        text(
+            "INSERT INTO inventory_scan_events "
+            "(organization_id, inventory_id, product_id, quantity, barcode, user_id, device_id, notes) "
+            "VALUES (:o, :iid, :pid, :qty, :bc, :uid, :did, :notes) RETURNING id, scanned_at"
+        ),
+        {
+            "o": org_id, "iid": str(iid), "pid": str(p.product_id),
+            "qty": p.quantity, "bc": p.barcode, "uid": user_id,
+            "did": p.device_id, "notes": p.notes,
+        },
+    )
+    event_row = event_res.first()
+
+    # Recompute actual_qty from non-voided scan events and bump version
+    agg_res = await db.execute(
+        text(
+            "UPDATE inventory_items SET "
+            "actual_qty = COALESCE("
+            "    (SELECT SUM(quantity) FROM inventory_scan_events "
+            "     WHERE inventory_id = :iid AND product_id = :pid AND is_voided = FALSE), 0"
+            "), "
+            "version = version + 1 "
+            "WHERE inventory_id = :iid AND product_id = :pid "
+            "RETURNING actual_qty, version"
+        ),
+        {"iid": str(iid), "pid": str(p.product_id)},
+    )
+    updated = agg_res.first()
+
+    # Count non-voided events and get latest scanned_at for this product
+    stats_res = await db.execute(
+        text(
+            "SELECT COUNT(*) AS scan_count, MAX(scanned_at) AS last_scanned_at "
+            "FROM inventory_scan_events "
+            "WHERE inventory_id = :iid AND product_id = :pid AND is_voided = FALSE"
+        ),
+        {"iid": str(iid), "pid": str(p.product_id)},
+    )
+    stats = stats_res.first()
+
+    await db.commit()
+    return {
+        "scan_event_id": event_row.id,
+        "product_id": str(p.product_id),
+        "actual_qty": str(updated.actual_qty) if updated else str(p.quantity),
+        "scan_count": stats.scan_count if stats else 1,
+        "last_scanned_at": event_row.scanned_at.isoformat() if event_row.scanned_at else None,
+    }
+
+
+@router.get(
+    "/inventories/{iid}/scan-events",
+    dependencies=[Depends(require_permission("warehouse.manage_inventory_advanced"))],
+)
+async def list_scan_events(
+    iid: UUID,
+    product_id: UUID | None = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    await _get_inventory_head(db, str(iid), org_id)
+
+    where = "WHERE se.inventory_id = :iid AND se.organization_id = :o"
+    params: dict = {"iid": str(iid), "o": org_id, "lim": limit, "off": (page - 1) * limit}
+    if product_id is not None:
+        where += " AND se.product_id = :pid"
+        params["pid"] = str(product_id)
+
+    count_res = await db.execute(
+        text(f"SELECT COUNT(*) FROM inventory_scan_events se {where}"), params
+    )
+    total = count_res.scalar() or 0
+
+    res = await db.execute(
+        text(
+            f"SELECT se.id, se.product_id, p.name AS product_name, "
+            f"       se.quantity AS qty, se.user_id AS scanned_by, "
+            f"       u.full_name AS scanned_by_name, "
+            f"       se.scanned_at, se.device_id AS cell_id, "
+            f"       se.barcode AS barcode_raw, se.is_voided "
+            f"FROM inventory_scan_events se "
+            f"LEFT JOIN products p ON p.id = se.product_id "
+            f"LEFT JOIN users u ON u.id = se.user_id "
+            f"{where} ORDER BY se.scanned_at DESC LIMIT :lim OFFSET :off"
+        ),
+        params,
+    )
+    items = []
+    for r in res:
+        row = dict(r._mapping)
+        row["qty"] = str(row["qty"])
+        items.append(row)
+    return {"total": total, "items": items}
+
+
+@router.delete(
+    "/inventories/{iid}/scan-events/{event_id}",
+    dependencies=[Depends(require_permission("warehouse.inventory"))],
+)
+async def void_scan_event(
+    iid: UUID,
+    event_id: int,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    inv_row = await _get_inventory_head(db, str(iid), org_id)
+    if inv_row.status == "completed":
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Cannot void scan on completed inventory")
+
+    # Fetch the event — verify it belongs to this inventory+org
+    ev_res = await db.execute(
+        text(
+            "SELECT id, product_id, user_id, is_voided "
+            "FROM inventory_scan_events "
+            "WHERE id = :eid AND inventory_id = :iid AND organization_id = :o"
+        ),
+        {"eid": event_id, "iid": str(iid), "o": org_id},
+    )
+    ev = ev_res.first()
+    if not ev:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Scan event not found")
+
+    # Owner can always void their own event.
+    # Non-owner requires manage_inventory_advanced (admin/manager level).
+    is_owner = str(ev.user_id) == user_id
+    if not is_owner:
+        caller_perms = await get_user_permissions(user_id, org_id, db)
+        if "warehouse.manage_inventory_advanced" not in caller_perms:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail="Faqat o'z scan eventingizni yoki admin sifatida boshqasini bekor qilishingiz mumkin",
+            )
+
+    # Soft delete
+    await db.execute(
+        text(
+            "UPDATE inventory_scan_events SET is_voided = TRUE "
+            "WHERE id = :eid AND organization_id = :o"
+        ),
+        {"eid": event_id, "o": org_id},
+    )
+
+    # Recompute actual_qty for this product
+    agg_res = await db.execute(
+        text(
+            "UPDATE inventory_items SET "
+            "actual_qty = COALESCE("
+            "    (SELECT SUM(quantity) FROM inventory_scan_events "
+            "     WHERE inventory_id = :iid AND product_id = :pid AND is_voided = FALSE), 0"
+            "), "
+            "version = version + 1 "
+            "WHERE inventory_id = :iid AND product_id = :pid "
+            "RETURNING actual_qty"
+        ),
+        {"iid": str(iid), "pid": str(ev.product_id)},
+    )
+    updated = agg_res.first()
+
+    await db.commit()
+    return {
+        "ok": True,
+        "product_id": str(ev.product_id),
+        "actual_qty": str(updated.actual_qty) if updated else "0.000",
+    }
+
+
+@router.get(
+    "/inventories/{iid}/progress",
+    dependencies=[Depends(require_permission("warehouse.manage_inventory_advanced"))],
+)
+async def get_inventory_progress(
+    iid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    await _get_inventory_head(db, str(iid), org_id)
+
+    # Total products in inventory_items for this inventory
+    totals_res = await db.execute(
+        text(
+            "SELECT "
+            "  COUNT(DISTINCT ii.product_id) AS total_products, "
+            "  COUNT(DISTINCT CASE WHEN se_agg.scan_count > 0 THEN ii.product_id END) AS scanned_products "
+            "FROM inventory_items ii "
+            "LEFT JOIN ("
+            "    SELECT product_id, COUNT(*) AS scan_count "
+            "    FROM inventory_scan_events "
+            "    WHERE inventory_id = :iid AND is_voided = FALSE "
+            "    GROUP BY product_id"
+            ") se_agg ON se_agg.product_id = ii.product_id "
+            "WHERE ii.inventory_id = :iid"
+        ),
+        {"iid": str(iid)},
+    )
+    totals = totals_res.first()
+
+    # Total scan count + last scan time
+    events_res = await db.execute(
+        text(
+            "SELECT COUNT(*) AS total_scans, MAX(scanned_at) AS last_scan_at "
+            "FROM inventory_scan_events "
+            "WHERE inventory_id = :iid AND organization_id = :o AND is_voided = FALSE"
+        ),
+        {"iid": str(iid), "o": org_id},
+    )
+    events_agg = events_res.first()
+
+    # Per-scanner stats
+    scanners_res = await db.execute(
+        text(
+            "SELECT se.user_id, u.full_name AS name, COUNT(*) AS scan_count "
+            "FROM inventory_scan_events se "
+            "LEFT JOIN users u ON u.id = se.user_id "
+            "WHERE se.inventory_id = :iid AND se.organization_id = :o AND se.is_voided = FALSE "
+            "GROUP BY se.user_id, u.full_name "
+            "ORDER BY scan_count DESC"
+        ),
+        {"iid": str(iid), "o": org_id},
+    )
+    scanners = [
+        {
+            "user_id": str(r.user_id),
+            "name": r.name,
+            "scan_count": r.scan_count,
+        }
+        for r in scanners_res
+    ]
+
+    last_scan_at = events_agg.last_scan_at
+    return {
+        "total_products": totals.total_products if totals else 0,
+        "scanned_products": totals.scanned_products if totals else 0,
+        "total_scans": events_agg.total_scans if events_agg else 0,
+        "scanners": scanners,
+        "last_scan_at": last_scan_at.isoformat() if last_scan_at else None,
+    }
 
 
 # =========================================================
@@ -783,6 +1507,8 @@ async def send_internal_transfer(
                 detail=f"{it.product_name}: mavjud {on_hand}, kerak {it.qty}",
             )
 
+    transfer_correlation_id = str(uuid4())
+
     # Apply deductions and capture avg_cost for receive step
     for it in item_rows:
         cost_res = await db.execute(
@@ -796,13 +1522,21 @@ async def send_internal_transfer(
                  "WHERE transfer_id = :t AND product_id = :p"),
             {"c": avg_cost, "t": str(tid), "p": str(it.product_id)},
         )
-        await _stock_apply(db, row.from_warehouse, str(it.product_id),
-                           -Decimal(str(it.qty)), allow_negative=False)
+        await _stock_apply(
+            db, row.from_warehouse, str(it.product_id),
+            -Decimal(str(it.qty)), avg_cost, allow_negative=False,
+            org_id=org_id, operation_type="transfer_out",
+            source_type="internal_transfer", source_id=str(tid),
+            correlation_id=transfer_correlation_id, user_id=user_id,
+        )
 
     await db.execute(
-        text("UPDATE internal_transfers SET status='sent', sent_at=NOW(), sent_by=:u "
-             "WHERE id = :id"),
-        {"u": user_id, "id": str(tid)},
+        text(
+            "UPDATE internal_transfers "
+            "SET status='sent', sent_at=NOW(), sent_by=:u, correlation_id=:cid "
+            "WHERE id = :id"
+        ),
+        {"u": user_id, "id": str(tid), "cid": transfer_correlation_id},
     )
     await db.commit()
     return {"ok": True}
@@ -818,7 +1552,7 @@ async def receive_internal_transfer(
 ):
     head = await db.execute(
         text(
-            "SELECT id, status, to_warehouse FROM internal_transfers "
+            "SELECT id, status, to_warehouse, correlation_id FROM internal_transfers "
             "WHERE id = :id AND organization_id = :o FOR UPDATE"
         ),
         {"id": str(tid), "o": org_id},
@@ -830,6 +1564,8 @@ async def receive_internal_transfer(
         raise HTTPException(status.HTTP_409_CONFLICT,
                             detail="Faqat sent holat qabul qilinishi mumkin")
 
+    recv_correlation_id = str(row.correlation_id) if row.correlation_id else None
+
     items = await db.execute(
         text("SELECT product_id, qty, cost FROM internal_transfer_items WHERE transfer_id = :id"),
         {"id": str(tid)},
@@ -838,6 +1574,9 @@ async def receive_internal_transfer(
         await _stock_apply(
             db, row.to_warehouse, str(it.product_id),
             Decimal(str(it.qty)), cost=Decimal(str(it.cost)),
+            org_id=org_id, operation_type="transfer_in",
+            source_type="internal_transfer", source_id=str(tid),
+            correlation_id=recv_correlation_id, user_id=user_id,
         )
 
     await db.execute(
@@ -879,8 +1618,14 @@ async def cancel_internal_transfer(
             {"id": str(tid)},
         )
         for it in items.fetchall():
-            await _stock_apply(db, row.from_warehouse, str(it.product_id),
-                               Decimal(str(it.qty)), allow_negative=False)
+            await _stock_apply(
+                db, row.from_warehouse, str(it.product_id),
+                Decimal(str(it.qty)), allow_negative=False,
+                org_id=org_id, operation_type="transfer_out",
+                source_type="internal_transfer", source_id=str(tid),
+                user_id=user_id,
+                notes="cancel rollback",
+            )
 
     await db.execute(
         text("UPDATE internal_transfers SET status='cancelled' WHERE id = :id"),
@@ -1022,7 +1767,12 @@ async def create_write_off(
                  "VALUES (:w, :p, :q, :c)"),
             {"w": str(wid), "p": str(product_id), "q": qty, "c": cost},
         )
-        await _stock_apply(db, p.warehouse_id, str(product_id), -qty, allow_negative=True)
+        await _stock_apply(
+            db, p.warehouse_id, str(product_id), -qty, allow_negative=True,
+            org_id=org_id, operation_type="write_off",
+            source_type="write_off", source_id=str(wid),
+            user_id=user_id,
+        )
 
     await db.commit()
     return {"id": str(wid), "total_amount": float(total)}
@@ -2166,7 +2916,11 @@ async def import_products(
                     current_qty = await _stock_qty(db, wh_id, str(pid))
                     if current_qty == 0:
                         cost = opening_cost if opening_cost > 0 else purchase_price
-                        await _stock_apply(db, wh_id, str(pid), opening_qty, cost or None)
+                        await _stock_apply(
+                            db, wh_id, str(pid), opening_qty, cost or None,
+                            org_id=org_id, operation_type="opening_balance",
+                            source_type="import",
+                        )
                     else:
                         skipped += 1
 
@@ -2242,6 +2996,121 @@ async def export_products(
             "Content-Disposition": f'attachment; filename="products-export-{today}.xlsx"'
         },
     )
+
+
+# =========================================================
+# STOCK MOVEMENTS JOURNAL — T-200
+# =========================================================
+
+_VALID_OPERATION_TYPES = frozenset({
+    "sale", "sale_return", "supply", "supply_return",
+    "transfer_out", "transfer_in", "write_off", "posting",
+    "inventory_adjust", "opening_balance", "manufacturing_in",
+    "manufacturing_out", "manual",
+    "oprihodovanie",
+    "purchase_return", "purchase_return_cancel",
+})
+
+
+@router.get(
+    "/movements",
+    dependencies=[Depends(require_permission("warehouse.movements.view"))],
+)
+async def list_stock_movements(
+    warehouse_id: int | None = Query(None),
+    product_id: UUID | None = Query(None),
+    operation_type: str | None = Query(None),
+    source_type: str | None = Query(None),
+    source_id: UUID | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    if operation_type and operation_type not in _VALID_OPERATION_TYPES:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid operation_type. Allowed: {sorted(_VALID_OPERATION_TYPES)}",
+        )
+
+    where_parts = ["sm.organization_id = :o"]
+    params: dict = {"o": org_id, "lim": limit, "off": (page - 1) * limit}
+
+    if warehouse_id is not None:
+        where_parts.append("sm.warehouse_id = :wh")
+        params["wh"] = warehouse_id
+
+    if product_id is not None:
+        where_parts.append("sm.product_id = :pid")
+        params["pid"] = str(product_id)
+
+    if operation_type is not None:
+        where_parts.append("sm.operation_type = :ot")
+        params["ot"] = operation_type
+
+    if source_type is not None:
+        where_parts.append("sm.source_type = :st")
+        params["st"] = source_type
+
+    if source_id is not None:
+        where_parts.append("sm.source_id = :sid")
+        params["sid"] = str(source_id)
+
+    if date_from is not None:
+        where_parts.append("sm.created_at >= :df")
+        params["df"] = date_from
+
+    if date_to is not None:
+        where_parts.append("sm.created_at < (:dt::date + INTERVAL '1 day')")
+        params["dt"] = date_to
+
+    where_sql = " AND ".join(where_parts)
+
+    count_res = await db.execute(
+        text(f"SELECT COUNT(*) FROM stock_movements sm WHERE {where_sql}"),
+        params,
+    )
+    total: int = count_res.scalar() or 0
+
+    rows_res = await db.execute(
+        text(
+            f"SELECT sm.id, sm.organization_id, sm.warehouse_id, "
+            f"w.name AS warehouse_name, "
+            f"sm.product_id, p.name AS product_name, "
+            f"sm.before_qty, sm.change_qty, sm.after_qty, sm.unit_cost, "
+            f"sm.operation_type, sm.source_type, sm.source_id, "
+            f"sm.correlation_id, sm.user_id, "
+            f"COALESCE(u.full_name, u.username) AS user_name, "
+            f"sm.notes, sm.created_at "
+            f"FROM stock_movements sm "
+            f"LEFT JOIN warehouses w ON w.id = sm.warehouse_id "
+            f"LEFT JOIN products p ON p.id = sm.product_id "
+            f"LEFT JOIN users u ON u.id = sm.user_id "
+            f"WHERE {where_sql} "
+            f"ORDER BY sm.created_at DESC "
+            f"LIMIT :lim OFFSET :off"
+        ),
+        params,
+    )
+
+    items = []
+    for r in rows_res:
+        m = dict(r._mapping)
+        for f in ("organization_id", "product_id", "source_id", "correlation_id", "user_id"):
+            if m.get(f) is not None:
+                m[f] = str(m[f])
+        for f in ("before_qty", "change_qty", "after_qty"):
+            if m.get(f) is not None:
+                m[f] = str(m[f])
+        if m.get("unit_cost") is not None:
+            m["unit_cost"] = str(m["unit_cost"])
+        if m.get("created_at") is not None:
+            m["created_at"] = m["created_at"].isoformat()
+        items.append(m)
+
+    return {"total": total, "page": page, "limit": limit, "items": items}
 
 
 # =========================================================
@@ -2426,3 +3295,1183 @@ async def delete_bom_component(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Mahsulot topilmadi")
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# =========================================================
+# PRODUCT BARCODES (T-203)
+# =========================================================
+
+class BarcodeIn(BaseModel):
+    barcode: str = Field(min_length=1, max_length=64)
+    is_primary: bool = False
+    notes: str | None = None
+
+
+async def _assert_product_in_org(db: AsyncSession, pid: str, org_id: str) -> None:
+    res = await db.execute(
+        text("SELECT id FROM products WHERE id = :pid AND organization_id = :o"),
+        {"pid": pid, "o": org_id},
+    )
+    if not res.scalar():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Mahsulot topilmadi")
+
+
+@router.get(
+    "/products/{pid}/barcodes",
+    dependencies=[Depends(require_permission("warehouse.product.barcode_view"))],
+)
+async def list_product_barcodes(
+    pid: UUID,
+    is_active: bool | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    await _assert_product_in_org(db, str(pid), org_id)
+    where = "WHERE pb.product_id = :pid AND pb.organization_id = :o"
+    params: dict = {"pid": str(pid), "o": org_id}
+    if is_active is not None:
+        where += " AND pb.is_active = :active"
+        params["active"] = is_active
+    res = await db.execute(
+        text(
+            "SELECT pb.id, pb.barcode, pb.is_primary, pb.is_active, "
+            "pb.created_at, pb.created_by, pb.deactivated_at, pb.deactivated_by, pb.notes "
+            f"FROM product_barcodes pb {where} ORDER BY pb.is_primary DESC, pb.created_at"
+        ),
+        params,
+    )
+    return [dict(r._mapping) for r in res]
+
+
+@router.post(
+    "/products/{pid}/barcodes",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("warehouse.product.barcode_manage"))],
+)
+async def add_product_barcode(
+    pid: UUID,
+    p: BarcodeIn,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    await _assert_product_in_org(db, str(pid), org_id)
+
+    dup = await db.execute(
+        text(
+            "SELECT id FROM product_barcodes "
+            "WHERE organization_id = :o AND barcode = :bc AND is_active = TRUE"
+        ),
+        {"o": org_id, "bc": p.barcode},
+    )
+    if dup.scalar():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"{p.barcode!r} barcode ushbu tashkilotda allaqachon faol",
+        )
+
+    if p.is_primary:
+        await db.execute(
+            text(
+                "UPDATE product_barcodes SET is_primary = FALSE "
+                "WHERE product_id = :pid AND is_primary = TRUE AND is_active = TRUE"
+            ),
+            {"pid": str(pid)},
+        )
+
+    res = await db.execute(
+        text(
+            "INSERT INTO product_barcodes "
+            "(organization_id, product_id, barcode, is_primary, is_active, created_by, notes) "
+            "VALUES (:o, :pid, :bc, :ip, TRUE, :u, :notes) RETURNING id"
+        ),
+        {
+            "o": org_id, "pid": str(pid), "bc": p.barcode,
+            "ip": p.is_primary, "u": user_id, "notes": p.notes,
+        },
+    )
+    new_id = res.scalar()
+    await db.commit()
+    return {"id": new_id}
+
+
+@router.post(
+    "/products/{pid}/barcodes/{bid}/deactivate",
+    dependencies=[Depends(require_permission("warehouse.product.barcode_manage"))],
+)
+async def deactivate_product_barcode(
+    pid: UUID,
+    bid: int,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    await _assert_product_in_org(db, str(pid), org_id)
+    res = await db.execute(
+        text(
+            "UPDATE product_barcodes "
+            "SET is_active = FALSE, is_primary = FALSE, "
+            "deactivated_at = NOW(), deactivated_by = :u "
+            "WHERE id = :bid AND product_id = :pid AND organization_id = :o "
+            "AND is_active = TRUE RETURNING id"
+        ),
+        {"bid": bid, "pid": str(pid), "o": org_id, "u": user_id},
+    )
+    if not res.scalar():
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="Barcode topilmadi yoki allaqachon deaktivatsiya qilingan",
+        )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/products/{pid}/barcodes/{bid}/reactivate",
+    dependencies=[Depends(require_permission("warehouse.product.barcode_manage"))],
+)
+async def reactivate_product_barcode(
+    pid: UUID,
+    bid: int,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    await _assert_product_in_org(db, str(pid), org_id)
+
+    row = await db.execute(
+        text(
+            "SELECT barcode FROM product_barcodes "
+            "WHERE id = :bid AND product_id = :pid AND organization_id = :o AND is_active = FALSE"
+        ),
+        {"bid": bid, "pid": str(pid), "o": org_id},
+    )
+    bc_row = row.first()
+    if not bc_row:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="Barcode topilmadi yoki allaqachon faol",
+        )
+
+    conflict = await db.execute(
+        text(
+            "SELECT id FROM product_barcodes "
+            "WHERE organization_id = :o AND barcode = :bc AND is_active = TRUE"
+        ),
+        {"o": org_id, "bc": bc_row.barcode},
+    )
+    if conflict.scalar():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"{bc_row.barcode!r} boshqa mahsulotda allaqachon faol",
+        )
+
+    await db.execute(
+        text(
+            "UPDATE product_barcodes "
+            "SET is_active = TRUE, deactivated_at = NULL, deactivated_by = NULL "
+            "WHERE id = :bid AND product_id = :pid AND organization_id = :o"
+        ),
+        {"bid": bid, "pid": str(pid), "o": org_id},
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/products/{pid}/barcodes/{bid}/set-primary",
+    dependencies=[Depends(require_permission("warehouse.product.barcode_manage"))],
+)
+async def set_primary_barcode(
+    pid: UUID,
+    bid: int,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    await _assert_product_in_org(db, str(pid), org_id)
+
+    check = await db.execute(
+        text(
+            "SELECT id FROM product_barcodes "
+            "WHERE id = :bid AND product_id = :pid AND organization_id = :o AND is_active = TRUE"
+        ),
+        {"bid": bid, "pid": str(pid), "o": org_id},
+    )
+    if not check.scalar():
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="Barcode topilmadi yoki faol emas",
+        )
+
+    await db.execute(
+        text(
+            "UPDATE product_barcodes SET is_primary = FALSE "
+            "WHERE product_id = :pid AND is_primary = TRUE AND is_active = TRUE"
+        ),
+        {"pid": str(pid)},
+    )
+    await db.execute(
+        text("UPDATE product_barcodes SET is_primary = TRUE WHERE id = :bid"),
+        {"bid": bid},
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+# =========================================================
+# BARCODE LOOKUP (POS)
+# =========================================================
+
+@router.get(
+    "/barcode-lookup",
+    dependencies=[Depends(require_permission("warehouse.product.barcode_view"))],
+)
+async def barcode_lookup(
+    q: str = Query(..., min_length=1, description="Barcode qiymati"),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    res = await db.execute(
+        text(
+            "SELECT p.id, p.name, p.sku, p.barcode, p.sale_price, p.purchase_price, "
+            "p.unit_id, u.name AS unit_name "
+            "FROM products p "
+            "JOIN product_barcodes pb ON pb.product_id = p.id "
+            "LEFT JOIN units u ON u.id = p.unit_id "
+            "WHERE pb.barcode = :bc AND pb.is_active = TRUE AND pb.organization_id = :o "
+            "AND p.is_active = TRUE LIMIT 1"
+        ),
+        {"bc": q, "o": org_id},
+    )
+    row = res.first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Mahsulot topilmadi")
+    return dict(row._mapping)
+
+
+# =========================================================
+# STOCK-INS (oprihodovanie — kirim tuzatish)
+# T-210: separate table, positive delta, status machine
+# Permission: warehouse.manage_stock_ins (manager + admin)
+# =========================================================
+
+class StockInItemIn(BaseModel):
+    product_id: UUID
+    quantity: Decimal = Field(gt=0)
+    unit_cost: Decimal | None = None
+
+
+class StockInIn(BaseModel):
+    warehouse_id: int
+    reason: str | None = None
+    notes: str | None = None
+    items: list[StockInItemIn] = Field(min_length=1)
+
+
+class StockInPatchIn(BaseModel):
+    warehouse_id: int | None = None
+    reason: str | None = None
+    notes: str | None = None
+    items: list[StockInItemIn] | None = None
+
+
+@router.get(
+    "/stock-ins",
+    dependencies=[Depends(require_permission("warehouse.manage_stock_ins"))],
+)
+async def list_stock_ins(
+    warehouse_id: int | None = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    page: int = Query(1, ge=1),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    where_parts = ["si.organization_id = :o"]
+    params: dict = {"o": org_id, "limit": limit, "offset": (page - 1) * limit}
+    if warehouse_id is not None:
+        where_parts.append("si.warehouse_id = :w")
+        params["w"] = warehouse_id
+    if status_filter is not None:
+        where_parts.append("si.status = :s")
+        params["s"] = status_filter
+    if date_from is not None:
+        where_parts.append("si.created_at >= :df")
+        params["df"] = date_from
+    if date_to is not None:
+        where_parts.append("si.created_at < (:dt::date + INTERVAL '1 day')")
+        params["dt"] = date_to
+    where_sql = " AND ".join(where_parts)
+    count_res = await db.execute(
+        text(f"SELECT COUNT(*) FROM stock_ins si WHERE {where_sql}"),
+        params,
+    )
+    total = count_res.scalar()
+    res = await db.execute(
+        text(
+            f"SELECT si.id, si.doc_number, si.warehouse_id, w.name AS warehouse_name, "
+            f"si.reason, si.status, si.created_at, si.confirmed_at, "
+            f"COALESCE((SELECT SUM(sii.quantity * COALESCE(sii.unit_cost, 0)) "
+            f"          FROM stock_in_items sii WHERE sii.stock_in_id = si.id), 0) AS total_amount "
+            f"FROM stock_ins si "
+            f"LEFT JOIN warehouses w ON w.id = si.warehouse_id "
+            f"WHERE {where_sql} "
+            f"ORDER BY si.created_at DESC "
+            f"LIMIT :limit OFFSET :offset"
+        ),
+        params,
+    )
+    return {
+        "items": [dict(r._mapping) for r in res],
+        "total": total,
+        "page": page,
+        "limit": limit,
+    }
+
+
+@router.post(
+    "/stock-ins",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("warehouse.manage_stock_ins"))],
+)
+async def create_stock_in(
+    p: StockInIn,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    wh_check = await db.execute(
+        text("SELECT id FROM warehouses WHERE id = :w AND organization_id = :o AND is_active = TRUE"),
+        {"w": p.warehouse_id, "o": org_id},
+    )
+    if not wh_check.scalar():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Ombor topilmadi")
+
+    doc_number = await _next_doc_number(db, org_id, "stock_in", "SI")
+    sid = uuid4()
+    await db.execute(
+        text(
+            "INSERT INTO stock_ins "
+            "(id, organization_id, doc_number, warehouse_id, reason, notes, status, created_by) "
+            "VALUES (:id, :o, :dn, :w, :r, :n, 'draft', :u)"
+        ),
+        {
+            "id": str(sid), "o": org_id, "dn": doc_number,
+            "w": p.warehouse_id, "r": p.reason, "n": p.notes, "u": user_id,
+        },
+    )
+    for it in p.items:
+        await db.execute(
+            text(
+                "INSERT INTO stock_in_items (stock_in_id, product_id, quantity, unit_cost) "
+                "VALUES (:si, :p, :q, :c)"
+            ),
+            {
+                "si": str(sid), "p": str(it.product_id),
+                "q": it.quantity,
+                "c": it.unit_cost if it.unit_cost is not None else Decimal("0"),
+            },
+        )
+    await db.commit()
+    return {"id": str(sid), "doc_number": doc_number}
+
+
+@router.get(
+    "/stock-ins/{sid}",
+    dependencies=[Depends(require_permission("warehouse.manage_stock_ins"))],
+)
+async def get_stock_in(
+    sid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    head = await db.execute(
+        text(
+            "SELECT si.*, w.name AS warehouse_name "
+            "FROM stock_ins si "
+            "LEFT JOIN warehouses w ON w.id = si.warehouse_id "
+            "WHERE si.id = :id AND si.organization_id = :o"
+        ),
+        {"id": str(sid), "o": org_id},
+    )
+    h = head.first()
+    if not h:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    items = await db.execute(
+        text(
+            "SELECT sii.id, sii.product_id, p.name AS product_name, "
+            "sii.quantity, sii.unit_cost, sii.amount "
+            "FROM stock_in_items sii "
+            "LEFT JOIN products p ON p.id = sii.product_id "
+            "WHERE sii.stock_in_id = :id"
+        ),
+        {"id": str(sid)},
+    )
+    return {"head": dict(h._mapping), "items": [dict(r._mapping) for r in items]}
+
+
+@router.patch(
+    "/stock-ins/{sid}",
+    dependencies=[Depends(require_permission("warehouse.manage_stock_ins"))],
+)
+async def patch_stock_in(
+    sid: UUID,
+    p: StockInPatchIn,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    check = await db.execute(
+        text("SELECT status FROM stock_ins WHERE id = :id AND organization_id = :o"),
+        {"id": str(sid), "o": org_id},
+    )
+    row = check.first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if row.status != "draft":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Faqat 'draft' holati tahrirlash mumkin",
+        )
+    if p.warehouse_id is not None or p.reason is not None or p.notes is not None:
+        await db.execute(
+            text(
+                "UPDATE stock_ins SET "
+                "warehouse_id = COALESCE(:w, warehouse_id), "
+                "reason = COALESCE(:r, reason), "
+                "notes = COALESCE(:n, notes) "
+                "WHERE id = :id AND organization_id = :o"
+            ),
+            {"w": p.warehouse_id, "r": p.reason, "n": p.notes, "id": str(sid), "o": org_id},
+        )
+    if p.items is not None:
+        await db.execute(
+            text("DELETE FROM stock_in_items WHERE stock_in_id = :id"),
+            {"id": str(sid)},
+        )
+        for it in p.items:
+            await db.execute(
+                text(
+                    "INSERT INTO stock_in_items (stock_in_id, product_id, quantity, unit_cost) "
+                    "VALUES (:si, :p, :q, :c)"
+                ),
+                {
+                    "si": str(sid), "p": str(it.product_id),
+                    "q": it.quantity,
+                    "c": it.unit_cost if it.unit_cost is not None else Decimal("0"),
+                },
+            )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/stock-ins/{sid}/confirm",
+    dependencies=[Depends(require_permission("warehouse.manage_stock_ins"))],
+)
+async def confirm_stock_in(
+    sid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    head = await db.execute(
+        text(
+            "SELECT id, status, warehouse_id FROM stock_ins "
+            "WHERE id = :id AND organization_id = :o FOR UPDATE"
+        ),
+        {"id": str(sid), "o": org_id},
+    )
+    row = head.first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if row.status != "draft":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Faqat 'draft' holati tasdiqlanishi mumkin",
+        )
+
+    items = await db.execute(
+        text(
+            "SELECT sii.product_id, sii.quantity, sii.unit_cost "
+            "FROM stock_in_items sii "
+            "WHERE sii.stock_in_id = :id"
+        ),
+        {"id": str(sid)},
+    )
+    item_rows = items.fetchall()
+    if not item_rows:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Kirim hujjati bo'sh — mahsulot qo'shing",
+        )
+
+    correlation_id = str(uuid4())
+    for it in item_rows:
+        await _stock_apply(
+            db,
+            row.warehouse_id,
+            str(it.product_id),
+            Decimal(str(it.quantity)),
+            Decimal(str(it.unit_cost)) if it.unit_cost else None,
+            allow_negative=True,
+            org_id=org_id,
+            operation_type="oprihodovanie",
+            source_type="stock_in",
+            source_id=str(sid),
+            correlation_id=correlation_id,
+            user_id=user_id,
+        )
+
+    await db.execute(
+        text(
+            "UPDATE stock_ins SET status = 'confirmed', confirmed_at = NOW(), confirmed_by = :u "
+            "WHERE id = :id"
+        ),
+        {"u": user_id, "id": str(sid)},
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/stock-ins/{sid}/cancel",
+    dependencies=[Depends(require_permission("warehouse.manage_stock_ins"))],
+)
+async def cancel_stock_in(
+    sid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    head = await db.execute(
+        text(
+            "SELECT id, status, warehouse_id FROM stock_ins "
+            "WHERE id = :id AND organization_id = :o FOR UPDATE"
+        ),
+        {"id": str(sid), "o": org_id},
+    )
+    row = head.first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if row.status == "cancelled":
+        return {"ok": True}
+    if row.status == "confirmed":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Tasdiqlangan kirim hujjatini bekor qilib bo'lmaydi",
+        )
+    await db.execute(
+        text("UPDATE stock_ins SET status = 'cancelled' WHERE id = :id"),
+        {"id": str(sid)},
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete(
+    "/stock-ins/{sid}",
+    dependencies=[Depends(require_permission("warehouse.manage_stock_ins"))],
+)
+async def delete_stock_in(
+    sid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    check = await db.execute(
+        text("SELECT status FROM stock_ins WHERE id = :id AND organization_id = :o"),
+        {"id": str(sid), "o": org_id},
+    )
+    row = check.first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if row.status != "draft":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Faqat 'draft' holati o'chirilishi mumkin",
+        )
+    await db.execute(
+        text("DELETE FROM stock_ins WHERE id = :id AND organization_id = :o"),
+        {"id": str(sid), "o": org_id},
+    )
+    await db.commit()
+    return {"ok": True}
+
+# =========================================================
+# SUPPLIER RETURNS — T-202
+# =========================================================
+
+class SupplierReturnItemIn(BaseModel):
+    product_id: UUID
+    quantity: Decimal = Field(gt=0)
+    unit_cost: Decimal | None = None
+    notes: str | None = None
+
+
+class SupplierReturnIn(BaseModel):
+    supplier_id: UUID
+    warehouse_id: int
+    original_purchase_id: UUID | None = None
+    reason: str | None = Field(None, max_length=500)
+    notes: str | None = None
+    refund_method: str | None = Field(None, pattern=r"^(cash_refund|supplier_balance|replacement)$")
+    items: list[SupplierReturnItemIn] = Field(min_length=1)
+
+
+class SupplierReturnPatchIn(BaseModel):
+    reason: str | None = Field(None, max_length=500)
+    notes: str | None = None
+    refund_method: str | None = Field(None, pattern=r"^(cash_refund|supplier_balance|replacement)$")
+
+
+@router.get(
+    "/supplier-returns",
+    dependencies=[Depends(require_permission("supplier.return.view"))],
+)
+async def list_supplier_returns(
+    supplier_id: UUID | None = Query(None),
+    warehouse_id: int | None = Query(None),
+    return_status: str | None = Query(None, alias="status"),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    where_parts = ["sr.organization_id = :o"]
+    params: dict = {"o": org_id, "lim": limit, "off": (page - 1) * limit}
+
+    if supplier_id is not None:
+        where_parts.append("sr.supplier_id = :sid")
+        params["sid"] = str(supplier_id)
+    if warehouse_id is not None:
+        where_parts.append("sr.warehouse_id = :wid")
+        params["wid"] = warehouse_id
+    if return_status is not None:
+        where_parts.append("sr.status = :st")
+        params["st"] = return_status
+    if date_from is not None:
+        where_parts.append("sr.created_at >= :df")
+        params["df"] = date_from
+    if date_to is not None:
+        where_parts.append("sr.created_at < (:dt::date + INTERVAL '1 day')")
+        params["dt"] = date_to
+
+    where_sql = " AND ".join(where_parts)
+
+    count_res = await db.execute(
+        text(f"SELECT COUNT(*) FROM supplier_returns sr WHERE {where_sql}"), params
+    )
+    total: int = count_res.scalar() or 0
+
+    rows_res = await db.execute(
+        text(
+            f"SELECT sr.id, sr.doc_number, sr.supplier_id, s.name AS supplier_name, "
+            f"sr.warehouse_id, w.name AS warehouse_name, "
+            f"sr.status, sr.refund_method, sr.refund_amount, sr.created_at, "
+            f"(SELECT COUNT(*) FROM supplier_return_items WHERE supplier_return_id = sr.id) AS item_count "
+            f"FROM supplier_returns sr "
+            f"LEFT JOIN suppliers s ON s.id = sr.supplier_id "
+            f"LEFT JOIN warehouses w ON w.id = sr.warehouse_id "
+            f"WHERE {where_sql} "
+            f"ORDER BY sr.created_at DESC LIMIT :lim OFFSET :off"
+        ),
+        params,
+    )
+    items = []
+    for r in rows_res:
+        m = dict(r._mapping)
+        m["id"] = str(m["id"])
+        m["supplier_id"] = str(m["supplier_id"])
+        if m.get("refund_amount") is not None:
+            m["refund_amount"] = str(m["refund_amount"])
+        items.append(m)
+
+    return {"items": items, "total": total, "page": page, "limit": limit}
+
+
+@router.post(
+    "/supplier-returns",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("supplier.return.create"))],
+)
+async def create_supplier_return(
+    p: SupplierReturnIn,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    sup_check = await db.execute(
+        text("SELECT id FROM suppliers WHERE id = :sid AND organization_id = :o"),
+        {"sid": str(p.supplier_id), "o": org_id},
+    )
+    if not sup_check.scalar():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="supplier_id bu tashkilotga tegishli emas")
+
+    wh_check = await db.execute(
+        text("SELECT id FROM warehouses WHERE id = :wid AND organization_id = :o AND is_active = TRUE"),
+        {"wid": p.warehouse_id, "o": org_id},
+    )
+    if not wh_check.scalar():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="warehouse_id bu tashkilotga tegishli emas")
+
+    if p.original_purchase_id is not None:
+        pur_check = await db.execute(
+            text("SELECT id FROM supplies WHERE id = :pid AND organization_id = :o"),
+            {"pid": str(p.original_purchase_id), "o": org_id},
+        )
+        if not pur_check.scalar():
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                detail="original_purchase_id bu tashkilotga tegishli emas")
+
+    doc_number = await _next_doc_number(db, org_id, "supplier_return", "SR")
+
+    ret_res = await db.execute(
+        text(
+            "INSERT INTO supplier_returns "
+            "(organization_id, doc_number, supplier_id, warehouse_id, original_purchase_id, "
+            " reason, notes, status, refund_method, created_by) "
+            "VALUES (:o, :dn, :sid, :wid, :pid, :reason, :notes, 'draft', :rm, :uid) "
+            "RETURNING id"
+        ),
+        {
+            "o": org_id, "dn": doc_number,
+            "sid": str(p.supplier_id), "wid": p.warehouse_id,
+            "pid": str(p.original_purchase_id) if p.original_purchase_id else None,
+            "reason": p.reason, "notes": p.notes, "rm": p.refund_method, "uid": user_id,
+        },
+    )
+    return_id = ret_res.scalar()
+
+    for item in p.items:
+        await db.execute(
+            text(
+                "INSERT INTO supplier_return_items "
+                "(supplier_return_id, product_id, quantity, unit_cost, notes) "
+                "VALUES (:rid, :pid, :qty, :uc, :n)"
+            ),
+            {
+                "rid": str(return_id), "pid": str(item.product_id),
+                "qty": item.quantity, "uc": item.unit_cost, "n": item.notes,
+            },
+        )
+
+    await db.commit()
+    return {"id": str(return_id), "doc_number": doc_number}
+
+
+@router.get(
+    "/supplier-returns/{rid}",
+    dependencies=[Depends(require_permission("supplier.return.view"))],
+)
+async def get_supplier_return(
+    rid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    head = await db.execute(
+        text(
+            "SELECT sr.id, sr.doc_number, sr.supplier_id, s.name AS supplier_name, "
+            "sr.warehouse_id, w.name AS warehouse_name, "
+            "sr.original_purchase_id, sr.reason, sr.notes, sr.status, "
+            "sr.refund_method, sr.refund_amount, "
+            "sr.created_by, sr.created_at, sr.confirmed_at, sr.confirmed_by "
+            "FROM supplier_returns sr "
+            "LEFT JOIN suppliers s ON s.id = sr.supplier_id "
+            "LEFT JOIN warehouses w ON w.id = sr.warehouse_id "
+            "WHERE sr.id = :id AND sr.organization_id = :o"
+        ),
+        {"id": str(rid), "o": org_id},
+    )
+    h = head.first()
+    if not h:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+
+    items_res = await db.execute(
+        text(
+            "SELECT sri.id, sri.product_id, p.name AS product_name, "
+            "sri.quantity, sri.unit_cost, sri.total_amount, sri.notes "
+            "FROM supplier_return_items sri "
+            "LEFT JOIN products p ON p.id = sri.product_id "
+            "WHERE sri.supplier_return_id = :rid"
+        ),
+        {"rid": str(rid)},
+    )
+    items = []
+    for r in items_res:
+        m = dict(r._mapping)
+        m["product_id"] = str(m["product_id"])
+        for f in ("quantity", "unit_cost", "total_amount"):
+            if m.get(f) is not None:
+                m[f] = str(m[f])
+        items.append(m)
+
+    result = dict(h._mapping)
+    result["id"] = str(result["id"])
+    result["supplier_id"] = str(result["supplier_id"])
+    if result.get("original_purchase_id"):
+        result["original_purchase_id"] = str(result["original_purchase_id"])
+    if result.get("refund_amount") is not None:
+        result["refund_amount"] = str(result["refund_amount"])
+    result["items"] = items
+    return result
+
+
+@router.patch(
+    "/supplier-returns/{rid}",
+    dependencies=[Depends(require_permission("supplier.return.create"))],
+)
+async def update_supplier_return(
+    rid: UUID,
+    p: SupplierReturnPatchIn,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    row = await db.execute(
+        text("SELECT id, status FROM supplier_returns "
+             "WHERE id = :id AND organization_id = :o FOR UPDATE"),
+        {"id": str(rid), "o": org_id},
+    )
+    r = row.first()
+    if not r:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if r.status != "draft":
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            detail="Faqat draft holat tahrirlash mumkin")
+
+    await db.execute(
+        text(
+            "UPDATE supplier_returns SET reason=:reason, notes=:notes, refund_method=:rm "
+            "WHERE id = :id AND organization_id = :o"
+        ),
+        {"reason": p.reason, "notes": p.notes, "rm": p.refund_method,
+         "id": str(rid), "o": org_id},
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/supplier-returns/{rid}/confirm",
+    dependencies=[Depends(require_permission("supplier.return.confirm"))],
+)
+async def confirm_supplier_return(
+    rid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    # Lock the row first without JOIN (FOR UPDATE + LEFT JOIN not allowed in PostgreSQL)
+    head = await db.execute(
+        text(
+            "SELECT id, status, warehouse_id, refund_method, supplier_id "
+            "FROM supplier_returns "
+            "WHERE id = :id AND organization_id = :o FOR UPDATE"
+        ),
+        {"id": str(rid), "o": org_id},
+    )
+    row = head.first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if row.status != "draft":
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            detail="Faqat draft holat tasdiqlanishi mumkin")
+
+    sup_res = await db.execute(
+        text("SELECT name FROM suppliers WHERE id = :sid"),
+        {"sid": str(row.supplier_id)},
+    )
+    supplier_name = (sup_res.scalar() or "")
+
+    items_res = await db.execute(
+        text(
+            "SELECT sri.product_id, p.name AS product_name, sri.quantity, sri.unit_cost "
+            "FROM supplier_return_items sri "
+            "LEFT JOIN products p ON p.id = sri.product_id "
+            "WHERE sri.supplier_return_id = :rid"
+        ),
+        {"rid": str(rid)},
+    )
+    item_rows = items_res.fetchall()
+    if not item_rows:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="Qaytarish elementlari yo'q")
+
+    correlation_id = str(uuid4())
+    total_refund = Decimal("0")
+
+    for item in item_rows:
+        qty = Decimal(str(item.quantity))
+        uc = Decimal(str(item.unit_cost)) if item.unit_cost is not None else None
+
+        await _stock_apply(
+            db, row.warehouse_id, str(item.product_id),
+            -qty, allow_negative=False,
+            org_id=org_id, operation_type="purchase_return",
+            source_type="supplier_return", source_id=str(rid),
+            correlation_id=correlation_id, user_id=user_id,
+            notes=f"Return to supplier {supplier_name}",
+        )
+
+        if uc is not None:
+            total_refund += qty * uc
+
+    refund_method = row.refund_method
+
+    if refund_method == "cash_refund":
+        await db.execute(
+            text(
+                "INSERT INTO cash_movements "
+                "(organization_id, cashbox_id, direction, amount, supplier_id, "
+                " description, created_by) "
+                "VALUES (:o, NULL, 'in', :amt, :sup, :note, :uid)"
+            ),
+            {
+                "o": org_id, "amt": total_refund,
+                "sup": str(row.supplier_id),
+                "note": f"Refund from supplier {supplier_name} (SR {rid})",
+                "uid": user_id,
+            },
+        )
+    elif refund_method == "supplier_balance":
+        # Supplier balance is derived from cash_movements where supplier_id is set.
+        # direction='in' means the supplier owes us money (our receivable increases).
+        await db.execute(
+            text(
+                "INSERT INTO cash_movements "
+                "(organization_id, cashbox_id, direction, amount, supplier_id, "
+                " description, created_by) "
+                "VALUES (:o, NULL, 'in', :amt, :sup, :note, :uid)"
+            ),
+            {
+                "o": org_id, "amt": total_refund,
+                "sup": str(row.supplier_id),
+                "note": f"Supplier balance credit from return (SR {rid})",
+                "uid": user_id,
+            },
+        )
+    # refund_method == "replacement" or None: stock deducted, no finance movement
+
+    await db.execute(
+        text(
+            "UPDATE supplier_returns "
+            "SET status='confirmed', refund_amount=:amt, confirmed_at=NOW(), confirmed_by=:uid "
+            "WHERE id = :id AND organization_id = :o"
+        ),
+        {"amt": total_refund, "uid": user_id, "id": str(rid), "o": org_id},
+    )
+    await db.commit()
+    return {"ok": True, "refund_amount": str(total_refund)}
+
+
+@router.post(
+    "/supplier-returns/{rid}/cancel",
+    dependencies=[Depends(require_permission("supplier.return.cancel"))],
+)
+async def cancel_supplier_return(
+    rid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    head = await db.execute(
+        text(
+            "SELECT id, status, warehouse_id FROM supplier_returns "
+            "WHERE id = :id AND organization_id = :o FOR UPDATE"
+        ),
+        {"id": str(rid), "o": org_id},
+    )
+    row = head.first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if row.status == "cancelled":
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Allaqachon bekor qilingan")
+    if row.status not in ("draft", "confirmed"):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            detail="Faqat draft yoki confirmed holat bekor qilish mumkin")
+
+    if row.status == "confirmed":
+        items_res = await db.execute(
+            text(
+                "SELECT product_id, quantity, unit_cost "
+                "FROM supplier_return_items WHERE supplier_return_id = :rid"
+            ),
+            {"rid": str(rid)},
+        )
+        rollback_correlation_id = str(uuid4())
+        for item in items_res.fetchall():
+            qty = Decimal(str(item.quantity))
+            uc = Decimal(str(item.unit_cost)) if item.unit_cost is not None else None
+            await _stock_apply(
+                db, row.warehouse_id, str(item.product_id),
+                qty, uc, allow_negative=False,
+                org_id=org_id, operation_type="purchase_return_cancel",
+                source_type="supplier_return", source_id=str(rid),
+                correlation_id=rollback_correlation_id, user_id=user_id,
+                notes="cancel rollback",
+            )
+
+    await db.execute(
+        text("UPDATE supplier_returns SET status='cancelled' WHERE id = :id AND organization_id = :o"),
+        {"id": str(rid), "o": org_id},
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete(
+    "/supplier-returns/{rid}",
+    dependencies=[Depends(require_permission("supplier.return.cancel"))],
+)
+async def delete_supplier_return(
+    rid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    row = await db.execute(
+        text("SELECT id, status FROM supplier_returns "
+             "WHERE id = :id AND organization_id = :o FOR UPDATE"),
+        {"id": str(rid), "o": org_id},
+    )
+    r = row.first()
+    if not r:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if r.status != "draft":
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            detail="Faqat draft holat o'chirish mumkin")
+
+    await db.execute(
+        text("DELETE FROM supplier_return_items WHERE supplier_return_id = :rid"),
+        {"rid": str(rid)},
+    )
+    await db.execute(
+        text("DELETE FROM supplier_returns WHERE id = :id AND organization_id = :o"),
+        {"id": str(rid), "o": org_id},
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+# =========================================================
+# STOCK IN REASONS — Sprint 5 QA fix M1
+# =========================================================
+
+class StockInReasonIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    code: str | None = Field(None, max_length=50)
+    is_active: bool = True
+
+
+class StockInReasonPatch(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=200)
+    code: str | None = Field(None, max_length=50)
+    is_active: bool | None = None
+
+
+@router.get(
+    "/stock-in-reasons",
+    dependencies=[Depends(require_permission("warehouse.manage_stock_ins"))],
+)
+async def list_stock_in_reasons(
+    is_active: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    res = await db.execute(
+        text(
+            "SELECT id, name, code, is_active, created_at "
+            "FROM stock_in_reasons "
+            "WHERE organization_id = :o AND is_active = :a "
+            "ORDER BY name"
+        ),
+        {"o": org_id, "a": is_active},
+    )
+    return [dict(r._mapping) for r in res]
+
+
+@router.post(
+    "/stock-in-reasons",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("warehouse.manage_stock_ins"))],
+)
+async def create_stock_in_reason(
+    body: StockInReasonIn,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    try:
+        res = await db.execute(
+            text(
+                "INSERT INTO stock_in_reasons (organization_id, name, code, is_active) "
+                "VALUES (:o, :n, :c, :a) RETURNING id"
+            ),
+            {"o": org_id, "n": body.name, "c": body.code, "a": body.is_active},
+        )
+        new_id = res.scalar_one()
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        if "uq_stock_in_reasons_org_name" in str(exc):
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="Bu nomli sabab allaqachon mavjud")
+        raise
+    return {"id": new_id}
+
+
+@router.patch(
+    "/stock-in-reasons/{rid}",
+    dependencies=[Depends(require_permission("warehouse.manage_stock_ins"))],
+)
+async def update_stock_in_reason(
+    rid: int,
+    body: StockInReasonPatch,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    updates = {}
+    if body.name is not None:
+        updates["name"] = body.name
+    if body.code is not None:
+        updates["code"] = body.code
+    if body.is_active is not None:
+        updates["is_active"] = body.is_active
+    if not updates:
+        return {"ok": True}
+
+    set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+    params = {"id": rid, "o": org_id, **updates}
+    res = await db.execute(
+        text(
+            f"UPDATE stock_in_reasons SET {set_clause} "
+            "WHERE id = :id AND organization_id = :o RETURNING id"
+        ),
+        params,
+    )
+    if not res.scalar():
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete(
+    "/stock-in-reasons/{rid}",
+    dependencies=[Depends(require_permission("warehouse.manage_stock_ins"))],
+)
+async def delete_stock_in_reason(
+    rid: int,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    res = await db.execute(
+        text(
+            "UPDATE stock_in_reasons SET is_active = FALSE "
+            "WHERE id = :id AND organization_id = :o RETURNING id"
+        ),
+        {"id": rid, "o": org_id},
+    )
+    if not res.scalar():
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    await db.commit()
+    return {"ok": True}

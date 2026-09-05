@@ -11,9 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_user_id, get_current_org_id
 from app.modules.audit.logger import log_action
 from app.modules.integration.telegram import notify_sale
+from app.modules.rbac.deps import get_user_permissions
 from app.modules.sale.pdf import render_sale_pdf, render_return_pdf
 from app.modules.tools.xlsx import make_sheet, new_workbook, workbook_to_bytes
-from app.modules.warehouse.service import explode_bom
+from app.modules.warehouse.service import explode_bom, _stock_apply
 
 
 
@@ -29,18 +30,22 @@ async def _verify_warehouse_in_org(db, warehouse_id, org_id):
         raise HTTPException(422, "warehouse_id does not belong to your organization")
 
 async def _verify_products_in_org(db, product_ids, org_id):
-    """HI-1: ensure ALL product_ids belong to caller org (one query)."""
+    """HI-1: ensure ALL product_ids belong to caller org and are not archived (one query)."""
     from sqlalchemy import text as _text
     if not product_ids:
         return
     res = await db.execute(
-        _text("SELECT id FROM products WHERE id = ANY(CAST(:ids AS uuid[])) AND organization_id = :o"),
+        _text("SELECT id, is_archived FROM products WHERE id = ANY(CAST(:ids AS uuid[])) AND organization_id = :o"),
         {"ids": [str(x) for x in product_ids], "o": org_id},
     )
-    found = {str(r.id) for r in res}
+    rows = list(res)
+    found = {str(r.id) for r in rows}
     missing = [str(pid) for pid in product_ids if str(pid) not in found]
     if missing:
         raise HTTPException(422, f"product_id does not belong to your organization: {missing[0]}")
+    archived = [str(r.id) for r in rows if r.is_archived]
+    if archived:
+        raise HTTPException(422, "Mahsulot arxivda: yangi operatsiyaga qo'shib bo'lmaydi")
 
 async def _verify_cashbox_in_org(db, cashbox_id, org_id):
     """HI-2/HI-3: ensure cashbox belongs to caller org."""
@@ -70,7 +75,8 @@ class SaleItemIn(BaseModel):
 
 class SaleCreate(BaseModel):
     customer_id: UUID | None = None
-    warehouse_id: int
+    warehouse_id: int | None = None
+    cashbox_id: int | None = None
     currency_id: int
     rate: Decimal = Decimal("1")
     items: list[SaleItemIn] = Field(min_length=1)
@@ -139,8 +145,36 @@ async def create_sale(
     org_id: str = Depends(get_current_org_id),
     user_id: str = Depends(get_current_user_id),
 ):
-    # HI-1: verify warehouse + all product_ids belong to caller org
-    await _verify_warehouse_in_org(db, p.warehouse_id, org_id)
+    # T-206: warehouse_id resolution
+    # Case 1: no warehouse_id and no cashbox_id → 422
+    if p.warehouse_id is None and p.cashbox_id is None:
+        raise HTTPException(422, "warehouse_id yoki cashbox_id majburiy")
+
+    resolved_warehouse_id: int
+    if p.warehouse_id is not None and p.cashbox_id is not None:
+        # Case 2: both provided → caller must have sale.change_warehouse
+        perms = await get_user_permissions(user_id, org_id, db)
+        if "sale.change_warehouse" not in perms:
+            raise HTTPException(403, "Ombor almashtirish uchun ruxsat yo'q")
+        resolved_warehouse_id = p.warehouse_id
+    elif p.warehouse_id is None:
+        # Case 3: only cashbox_id → resolve warehouse from cashbox
+        cb_res = await db.execute(
+            text("SELECT warehouse_id FROM cashboxes WHERE id = :cid AND organization_id = :o"),
+            {"cid": p.cashbox_id, "o": org_id},
+        )
+        cb_row = cb_res.first()
+        if not cb_row:
+            raise HTTPException(422, "cashbox_id does not belong to your organization")
+        if cb_row.warehouse_id is None:
+            raise HTTPException(422, "Kassa omborga bog'lanmagan")
+        resolved_warehouse_id = cb_row.warehouse_id
+    else:
+        # Case 4: only warehouse_id provided (legacy / direct)
+        resolved_warehouse_id = p.warehouse_id
+
+    # HI-1: verify resolved warehouse + all product_ids belong to caller org
+    await _verify_warehouse_in_org(db, resolved_warehouse_id, org_id)
     await _verify_products_in_org(db, [it.product_id for it in p.items], org_id)
 
     sale_id = uuid4()
@@ -154,7 +188,7 @@ async def create_sale(
         ),
         {"id": str(sale_id), "o": org_id,
          "cu": str(p.customer_id) if p.customer_id else None,
-         "wh": p.warehouse_id, "cur": p.currency_id, "r": p.rate,
+         "wh": resolved_warehouse_id, "cur": p.currency_id, "r": p.rate,
          "t": total, "n": p.notes, "u": user_id},
     )
 
@@ -167,12 +201,38 @@ async def create_sale(
         )
         sale_item_id = item_res.scalar()
 
+        # Snapshot avg_cost before stock is deducted (FOR UPDATE locks the balance row).
+        # Falls back to products.avg_cost if no balance row exists yet.
+        cost_row = await db.execute(
+            text("SELECT COALESCE(avg_cost, 0) FROM stock_balances "
+                 "WHERE warehouse_id = :w AND product_id = :p FOR UPDATE"),
+            {"w": resolved_warehouse_id, "p": str(it.product_id)},
+        )
+        cost_snapshot = Decimal(str(cost_row.scalar() or 0))
+        if cost_snapshot == 0:
+            fallback = await db.execute(
+                text("SELECT COALESCE(purchase_price, 0) FROM products WHERE id = :p"),
+                {"p": str(it.product_id)},
+            )
+            cost_snapshot = Decimal(str(fallback.scalar() or 0))
+
         await db.execute(
-            text("INSERT INTO stock_balances (warehouse_id, product_id, quantity, avg_cost) "
-                 "VALUES (:wh, :p, :neg, 0) "
-                 "ON CONFLICT (warehouse_id, product_id) DO UPDATE "
-                 "SET quantity = stock_balances.quantity + :neg, updated_at = NOW()"),
-            {"wh": p.warehouse_id, "p": str(it.product_id), "neg": -it.quantity},
+            text("UPDATE sale_items SET unit_cost = :c WHERE id = :sid"),
+            {"c": cost_snapshot, "sid": sale_item_id},
+        )
+
+        await _stock_apply(
+            db,
+            warehouse_id=resolved_warehouse_id,
+            product_id=str(it.product_id),
+            delta_qty=Decimal(str(-it.quantity)),
+            cost=cost_snapshot,
+            org_id=org_id,
+            allow_negative=False,
+            operation_type="sale",
+            source_type="sale",
+            source_id=str(sale_id),
+            user_id=user_id,
         )
 
         # Pick workflow bootstrap: create pending pick items.
@@ -230,7 +290,7 @@ async def create_sale(
     await log_action(
         db, org_id, user_id, "create", "sales", str(sale_id),
         diff={"new": {"total_amount": float(total), "items": len(p.items),
-                      "warehouse_id": p.warehouse_id,
+                      "warehouse_id": resolved_warehouse_id,
                       "customer_id": str(p.customer_id) if p.customer_id else None}},
         request=request,
     )
@@ -282,8 +342,8 @@ async def get_sale(
     if not h:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Sale not found")
     items = await db.execute(
-        text("SELECT si.product_id, p.name AS product_name, si.quantity, si.price, "
-             "si.discount, si.amount "
+        text("SELECT si.id, si.product_id, p.name AS product_name, si.quantity, si.price, "
+             "si.discount, si.amount, si.unit_cost "
              "FROM sale_items si LEFT JOIN products p ON p.id = si.product_id "
              "WHERE si.sale_id = :id"),
         {"id": str(sale_id)},
@@ -531,17 +591,22 @@ async def cancel_sale(
     if row.status == "cancelled":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Уже отменено")
 
-    items = await db.execute(
+    items_res = await db.execute(
         text("SELECT product_id, quantity FROM sale_items WHERE sale_id = :id"),
         {"id": str(sale_id)},
     )
-    for it in items:
-        await db.execute(
-            text("INSERT INTO stock_balances (warehouse_id, product_id, quantity, avg_cost) "
-                 "VALUES (:wh, :p, :q, 0) "
-                 "ON CONFLICT (warehouse_id, product_id) DO UPDATE "
-                 "SET quantity = stock_balances.quantity + :q, updated_at = NOW()"),
-            {"wh": row.warehouse_id, "p": str(it.product_id), "q": it.quantity},
+    for it in items_res:
+        await _stock_apply(
+            db,
+            warehouse_id=row.warehouse_id,
+            product_id=str(it.product_id),
+            delta_qty=Decimal(str(it.quantity)),
+            org_id=org_id,
+            allow_negative=True,
+            operation_type="sale_cancel",
+            source_type="sale",
+            source_id=str(sale_id),
+            user_id=user_id,
         )
 
     await db.execute(
@@ -937,14 +1002,19 @@ async def create_return(
              "ep": it.extra_price, "dpu": it.discount_per_unit,
              "n": it.notes},
         )
-        # Stock += qty (return to warehouse)
+        # Stock += qty (return to warehouse); allow_negative=True because positive delta cannot go negative
         wh = it.warehouse_id or p.warehouse_id
-        await db.execute(
-            text("INSERT INTO stock_balances (warehouse_id, product_id, quantity, avg_cost) "
-                 "VALUES (:w, :p, :q, 0) "
-                 "ON CONFLICT (warehouse_id, product_id) DO UPDATE "
-                 "SET quantity = stock_balances.quantity + :q, updated_at = NOW()"),
-            {"w": wh, "p": str(it.product_id), "q": it.quantity},
+        await _stock_apply(
+            db,
+            warehouse_id=wh,
+            product_id=str(it.product_id),
+            delta_qty=Decimal(str(it.quantity)),
+            org_id=org_id,
+            allow_negative=True,
+            operation_type="sale_return",
+            source_type="sale_return",
+            source_id=str(rid),
+            user_id=user_id,
         )
     await db.commit()
     return {"id": str(rid), "total_amount": float(total_amount),

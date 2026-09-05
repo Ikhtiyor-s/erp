@@ -1,6 +1,7 @@
 import csv
 import io
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -8,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_org_id
+from app.modules.rbac.deps import require_permission
 
 
 router = APIRouter(prefix="/statistics", tags=["statistics"])
@@ -397,6 +399,152 @@ async def recommended_production(
 
 
 # =========================================================
+# COGS REPORT
+# =========================================================
+
+@router.get("/cogs", dependencies=[Depends(require_permission("statistics.cogs.view"))])
+async def cogs_report(
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    warehouse_id: int | None = Query(None),
+    category_id: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    """COGS (Cost of Goods Sold) + gross profit report by product and category."""
+    where = (
+        "s.organization_id = :o "
+        "AND s.status IN ('confirmed', 'paid', 'partial') "
+        "AND s.sale_date >= :df "
+        "AND s.sale_date < (CAST(:dt AS date) + INTERVAL '1 day')"
+    )
+    params: dict = {"o": org_id, "df": date_from, "dt": date_to}
+
+    if warehouse_id is not None:
+        where += " AND s.warehouse_id = :wh"
+        params["wh"] = warehouse_id
+
+    category_join = ""
+    if category_id is not None:
+        category_join = "JOIN products p2 ON p2.id = si.product_id AND p2.category_id = :cat"
+        params["cat"] = category_id
+
+    by_product_sql = f"""
+        SELECT
+            p.id::text AS product_id,
+            p.name AS product_name,
+            SUM(si.quantity) AS sold_qty,
+            SUM(si.quantity * si.price) AS revenue,
+            SUM(si.quantity * COALESCE(si.unit_cost, 0)) AS cogs,
+            SUM(si.quantity * si.price - si.quantity * COALESCE(si.unit_cost, 0)) AS profit
+        FROM sale_items si
+        JOIN sales s ON s.id = si.sale_id
+        JOIN products p ON p.id = si.product_id
+        {category_join}
+        WHERE {where}
+        GROUP BY p.id, p.name
+        ORDER BY profit DESC
+    """
+
+    by_category_sql = f"""
+        SELECT
+            pc.id AS category_id,
+            COALESCE(pc.name, '— kategoriyasiz —') AS category_name,
+            SUM(si.quantity * si.price) AS revenue,
+            SUM(si.quantity * COALESCE(si.unit_cost, 0)) AS cogs,
+            SUM(si.quantity * si.price - si.quantity * COALESCE(si.unit_cost, 0)) AS profit
+        FROM sale_items si
+        JOIN sales s ON s.id = si.sale_id
+        JOIN products p ON p.id = si.product_id
+        LEFT JOIN product_categories pc ON pc.id = p.category_id
+        WHERE {where}
+        GROUP BY pc.id, pc.name
+        ORDER BY profit DESC
+    """
+
+    by_warehouse_sql = f"""
+        SELECT
+            w.id AS warehouse_id,
+            w.name AS warehouse_name,
+            SUM(si.quantity * si.price) AS revenue,
+            SUM(si.quantity * COALESCE(si.unit_cost, 0)) AS cogs,
+            SUM(si.quantity * si.price - si.quantity * COALESCE(si.unit_cost, 0)) AS profit
+        FROM sale_items si
+        JOIN sales s ON s.id = si.sale_id
+        JOIN warehouses w ON w.id = s.warehouse_id
+        WHERE {where}
+        GROUP BY w.id, w.name
+        ORDER BY profit DESC
+    """
+
+    prod_res = await db.execute(text(by_product_sql), params)
+    cat_res = await db.execute(text(by_category_sql), params)
+    wh_res = await db.execute(text(by_warehouse_sql), params)
+
+    by_product = []
+    total_revenue = Decimal("0")
+    total_cogs = Decimal("0")
+    for r in prod_res:
+        rev = Decimal(str(r.revenue or 0))
+        cogs = Decimal(str(r.cogs or 0))
+        profit = Decimal(str(r.profit or 0))
+        margin = float(round(profit / rev * 100, 2)) if rev else 0.0
+        total_revenue += rev
+        total_cogs += cogs
+        by_product.append({
+            "product_id": r.product_id,
+            "product_name": r.product_name,
+            "sold_qty": float(r.sold_qty or 0),
+            "revenue": str(rev),
+            "cogs": str(cogs),
+            "profit": str(profit),
+            "margin_pct": margin,
+        })
+
+    total_gross_profit = total_revenue - total_cogs
+    gross_margin_pct = float(round(total_gross_profit / total_revenue * 100, 2)) if total_revenue else 0.0
+
+    by_category = []
+    for r in cat_res:
+        rev = Decimal(str(r.revenue or 0))
+        cogs = Decimal(str(r.cogs or 0))
+        profit = Decimal(str(r.profit or 0))
+        by_category.append({
+            "category_id": r.category_id,
+            "category_name": r.category_name,
+            "revenue": str(rev),
+            "cogs": str(cogs),
+            "profit": str(profit),
+            "margin_pct": float(round(profit / rev * 100, 2)) if rev else 0.0,
+        })
+
+    by_warehouse = []
+    for r in wh_res:
+        rev = Decimal(str(r.revenue or 0))
+        cogs = Decimal(str(r.cogs or 0))
+        profit = Decimal(str(r.profit or 0))
+        by_warehouse.append({
+            "warehouse_id": r.warehouse_id,
+            "warehouse_name": r.warehouse_name,
+            "revenue": str(rev),
+            "cogs": str(cogs),
+            "profit": str(profit),
+            "margin_pct": float(round(profit / rev * 100, 2)) if rev else 0.0,
+        })
+
+    return {
+        "period": {"from": str(date_from), "to": str(date_to)},
+        "total_revenue": str(total_revenue),
+        "total_cogs": str(total_cogs),
+        "gross_profit": str(total_gross_profit),
+        "gross_margin_pct": gross_margin_pct,
+        "by_product": by_product,
+        "by_category": by_category,
+        "by_warehouse": by_warehouse,
+    }
+
+
+# =========================================================
 # CSV EXPORT
 # =========================================================
 
@@ -404,6 +552,7 @@ VALID_REPORTS = {
     "products", "sale-by-category", "sale-by-employee",
     "sale-by-customer", "sale-by-payment-type",
     "customer-activity", "unsold-goods", "recommended-production",
+    "cogs",
 }
 
 
@@ -481,6 +630,21 @@ async def export_report(
                  HAVING COALESCE(SUM(sb.quantity), 0) > 0
                  ORDER BY last_sale ASC NULLS FIRST"""
         params = {"o": org_id}
+    elif report == "cogs":
+        sql = """SELECT p.name AS product_name, p.sku,
+                        SUM(si.quantity) AS sold_qty,
+                        SUM(si.quantity * si.price) AS revenue,
+                        SUM(si.quantity * COALESCE(si.unit_cost, 0)) AS cogs,
+                        SUM(si.quantity * si.price - si.quantity * COALESCE(si.unit_cost, 0)) AS profit
+                 FROM sale_items si
+                 JOIN sales s ON s.id = si.sale_id
+                 JOIN products p ON p.id = si.product_id
+                 WHERE s.organization_id = :o
+                   AND s.status IN ('confirmed', 'paid', 'partial')
+                   AND s.sale_date >= :df AND s.sale_date < (CAST(:dt AS date) + INTERVAL '1 day')
+                 GROUP BY p.id, p.name, p.sku
+                 ORDER BY profit DESC"""
+        params = {"o": org_id, "df": date_from, "dt": date_to}
     else:  # recommended-production
         sql = """SELECT p.name, p.sku,
                         COALESCE(SUM(sb.quantity), 0) AS current_qty,

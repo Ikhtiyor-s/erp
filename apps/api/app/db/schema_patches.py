@@ -1355,10 +1355,484 @@ END $$
         ALTER TABLE sms_debt_reminders ALTER COLUMN user_id DROP NOT NULL;
     EXCEPTION WHEN others THEN NULL; END $$
     """,
+
+    # ============================================================
+    # Sprint 5 — T-200: stock_movements immutable journal (FOUNDATION)
+    # Append-only: DB trigger blocks UPDATE/DELETE at row level.
+    # Rollback (manual):
+    #   DROP TRIGGER IF EXISTS trg_stock_movements_immutable ON stock_movements;
+    #   DROP FUNCTION IF EXISTS stock_movements_immutable();
+    #   DROP TABLE IF EXISTS stock_movements;
+    #   DROP INDEX IF EXISTS idx_internal_transfers_correlation;
+    #   ALTER TABLE internal_transfers DROP COLUMN IF EXISTS correlation_id;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS stock_movements (
+        id               BIGSERIAL PRIMARY KEY,
+        organization_id  UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        warehouse_id     INT  NOT NULL REFERENCES warehouses(id),
+        product_id       UUID NOT NULL REFERENCES products(id),
+        before_qty       NUMERIC(20,3) NOT NULL,
+        change_qty       NUMERIC(20,3) NOT NULL,
+        after_qty        NUMERIC(20,3) NOT NULL,
+        unit_cost        NUMERIC(20,4),
+        operation_type   VARCHAR(30) NOT NULL,
+        source_type      VARCHAR(30),
+        source_id        UUID,
+        correlation_id   UUID,
+        user_id          UUID REFERENCES users(id),
+        external_id      VARCHAR(100),
+        notes            TEXT,
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_sm_org_wh_product
+       ON stock_movements (organization_id, warehouse_id, product_id)""",
+    """CREATE INDEX IF NOT EXISTS idx_sm_org_created
+       ON stock_movements (organization_id, created_at DESC)""",
+    """CREATE INDEX IF NOT EXISTS idx_sm_source
+       ON stock_movements (source_type, source_id)
+       WHERE source_id IS NOT NULL""",
+    """CREATE INDEX IF NOT EXISTS idx_sm_correlation
+       ON stock_movements (correlation_id)
+       WHERE correlation_id IS NOT NULL""",
+    """CREATE INDEX IF NOT EXISTS idx_sm_operation_type
+       ON stock_movements (organization_id, operation_type)""",
+
+    """
+    CREATE OR REPLACE FUNCTION stock_movements_immutable()
+    RETURNS TRIGGER LANGUAGE plpgsql AS $$
+    BEGIN
+        RAISE EXCEPTION 'stock_movements is append-only: UPDATE and DELETE are forbidden';
+    END;
+    $$
+    """,
+
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_trigger
+            WHERE tgname = 'trg_stock_movements_immutable'
+              AND tgrelid = 'stock_movements'::regclass
+        ) THEN
+            CREATE TRIGGER trg_stock_movements_immutable
+                BEFORE UPDATE OR DELETE ON stock_movements
+                FOR EACH ROW EXECUTE FUNCTION stock_movements_immutable();
+        END IF;
+    END $$
+    """,
+
+    # correlation_id on internal_transfers — links transfer_out + transfer_in movements
+    """ALTER TABLE internal_transfers ADD COLUMN IF NOT EXISTS correlation_id UUID""",
+    """CREATE INDEX IF NOT EXISTS idx_internal_transfers_correlation
+       ON internal_transfers (correlation_id) WHERE correlation_id IS NOT NULL""",
+
+    # ============================================================
+    # Sprint 5 — T-207: sale_items.unit_cost (COGS snapshot)
+    # Stores avg_cost from stock_balances at the moment of sale confirm.
+    # NULL = sale created before this patch (historical; COGS = 0 for those rows).
+    # Rollback:
+    #   DROP INDEX IF EXISTS idx_sale_items_cost;
+    #   ALTER TABLE sale_items DROP COLUMN IF EXISTS unit_cost;
+    # ============================================================
+    """ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS unit_cost NUMERIC(20,4)""",
+    """CREATE INDEX IF NOT EXISTS idx_sale_items_cost
+       ON sale_items(sale_id) WHERE unit_cost IS NOT NULL""",
+
+    # ============================================================
+    # Sprint 5 — T-206: cashboxes.warehouse_id (POS↔warehouse binding)
+    # Each POS cashbox has a default warehouse. Sales auto-resolve
+    # warehouse_id from cashbox_id when the client doesn't send one.
+    # Nullable — existing cashboxes are migrated gradually.
+    # Rollback:
+    #   DROP INDEX IF EXISTS idx_cashboxes_warehouse;
+    #   ALTER TABLE cashboxes DROP COLUMN IF EXISTS warehouse_id;
+    # ============================================================
+    """ALTER TABLE cashboxes ADD COLUMN IF NOT EXISTS warehouse_id INT REFERENCES warehouses(id)""",
+    """CREATE INDEX IF NOT EXISTS idx_cashboxes_warehouse
+       ON cashboxes(organization_id, warehouse_id) WHERE warehouse_id IS NOT NULL""",
+
+    # ============================================================
+    # Sprint 5 — T-203: product_barcodes alohida jadval
+    # Multi-barcode per product: is_primary + is_active + history.
+    # Rollback:
+    #   DROP INDEX IF EXISTS idx_product_barcodes_org_product;
+    #   DROP INDEX IF EXISTS uq_product_barcodes_primary;
+    #   DROP INDEX IF EXISTS uq_product_barcodes_org_active;
+    #   DROP TABLE IF EXISTS product_barcodes;
+    # ============================================================
+
+    # Faza 13 created a minimal product_barcodes (no org/is_primary/is_active).
+    # ADD COLUMN IF NOT EXISTS upgrades it safely.
+    """ALTER TABLE product_barcodes ADD COLUMN IF NOT EXISTS organization_id UUID
+       REFERENCES organizations(id) ON DELETE CASCADE""",
+    """ALTER TABLE product_barcodes ADD COLUMN IF NOT EXISTS is_primary BOOLEAN NOT NULL DEFAULT FALSE""",
+    """ALTER TABLE product_barcodes ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE""",
+    """ALTER TABLE product_barcodes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()""",
+    """ALTER TABLE product_barcodes ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id)""",
+    """ALTER TABLE product_barcodes ADD COLUMN IF NOT EXISTS deactivated_at TIMESTAMPTZ""",
+    """ALTER TABLE product_barcodes ADD COLUMN IF NOT EXISTS deactivated_by UUID REFERENCES users(id)""",
+    """ALTER TABLE product_barcodes ADD COLUMN IF NOT EXISTS notes TEXT""",
+
+    # Backfill organization_id for rows created before this patch
+    """
+    UPDATE product_barcodes pb
+    SET organization_id = p.organization_id
+    FROM products p
+    WHERE pb.product_id = p.id AND pb.organization_id IS NULL
+    """,
+
+    # Partial unique: one active barcode per org (deactivated can be reused)
+    """CREATE UNIQUE INDEX IF NOT EXISTS uq_product_barcodes_org_active
+       ON product_barcodes(organization_id, barcode) WHERE is_active = TRUE""",
+
+    # Partial unique: one primary per product at a time
+    """CREATE UNIQUE INDEX IF NOT EXISTS uq_product_barcodes_primary
+       ON product_barcodes(product_id) WHERE is_primary = TRUE AND is_active = TRUE""",
+
+    # Composite index for org+product lookups
+    """CREATE INDEX IF NOT EXISTS idx_product_barcodes_org_product
+       ON product_barcodes(organization_id, product_id)""",
+
+    # Migrate primary barcodes from products.barcode (idempotent: ON CONFLICT DO NOTHING)
+    """
+    INSERT INTO product_barcodes (organization_id, product_id, barcode, is_primary, is_active, created_at)
+    SELECT organization_id, id, barcode, TRUE, TRUE, created_at
+    FROM products
+    WHERE barcode IS NOT NULL AND barcode != ''
+    ON CONFLICT DO NOTHING
+    """,
+
+    # Migrate extra_barcodes JSONB array — EXECUTE makes it truly dynamic so
+    # PostgreSQL does not validate column references at parse time.
+    """
+    DO $$
+    BEGIN
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'products' AND column_name = 'extra_barcodes'
+        ) THEN
+            EXECUTE '
+                INSERT INTO product_barcodes
+                    (organization_id, product_id, barcode, is_primary, is_active, created_at)
+                SELECT p.organization_id, p.id,
+                       jsonb_array_elements_text(p.extra_barcodes),
+                       FALSE, TRUE, p.created_at
+                FROM products p
+                WHERE p.extra_barcodes IS NOT NULL
+                  AND jsonb_typeof(p.extra_barcodes) = ''array''
+                  AND jsonb_array_length(p.extra_barcodes) > 0
+                ON CONFLICT DO NOTHING
+            ';
+        END IF;
+    END $$
+    """,
+
+    # ============================================================
+    # Sprint 5 — T-208: Idempotency-Key middleware storage
+    # Stores first 2xx response per (idempotency_key, organization_id) for 24h.
+    # Lazy cleanup: middleware deletes expired rows probabilistically (1% chance).
+    # Rollback:
+    #   DROP INDEX IF EXISTS idx_idempotency_expires;
+    #   DROP INDEX IF EXISTS idx_idempotency_org_key;
+    #   DROP TABLE IF EXISTS idempotency_keys;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+        id              BIGSERIAL PRIMARY KEY,
+        idempotency_key VARCHAR(128) NOT NULL,
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        user_id         UUID REFERENCES users(id) ON DELETE SET NULL,
+        method          VARCHAR(10) NOT NULL,
+        path            VARCHAR(255) NOT NULL,
+        request_hash    VARCHAR(64) NOT NULL,
+        response_status INT NOT NULL,
+        response_body   JSONB NOT NULL,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at      TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '24 hours'),
+        UNIQUE (idempotency_key, organization_id)
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_idempotency_org_key
+       ON idempotency_keys (organization_id, idempotency_key)""",
+    """CREATE INDEX IF NOT EXISTS idx_idempotency_expires
+       ON idempotency_keys (expires_at)""",
+
+    # ============================================================
+    # Sprint 5 — T-209: products.is_archived + default_supplier_id
+    # TZ-03: soft-archive products without deleting history.
+    # TZ-05: per-product default supplier for purchase pre-select.
+    # Rollback:
+    #   DROP INDEX IF EXISTS idx_products_default_supplier;
+    #   DROP INDEX IF EXISTS idx_products_active_archived;
+    #   ALTER TABLE products DROP COLUMN IF EXISTS default_supplier_id;
+    #   ALTER TABLE products DROP COLUMN IF EXISTS archived_by;
+    #   ALTER TABLE products DROP COLUMN IF EXISTS archived_at;
+    #   ALTER TABLE products DROP COLUMN IF EXISTS is_archived;
+    # ============================================================
+    """ALTER TABLE products ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE""",
+    """ALTER TABLE products ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ""",
+    """ALTER TABLE products ADD COLUMN IF NOT EXISTS archived_by UUID REFERENCES users(id)""",
+    """ALTER TABLE products ADD COLUMN IF NOT EXISTS default_supplier_id UUID
+       REFERENCES suppliers(id) ON DELETE SET NULL""",
+    """CREATE INDEX IF NOT EXISTS idx_products_active_archived
+       ON products(organization_id, is_archived) WHERE is_archived = FALSE""",
+    """CREATE INDEX IF NOT EXISTS idx_products_default_supplier
+       ON products(default_supplier_id) WHERE default_supplier_id IS NOT NULL""",
+
+    # ============================================================
+    # Sprint 5 — T-202: supplier_returns + supplier_return_items
+    # Rollback (reverse FK order):
+    #   DROP INDEX IF EXISTS idx_supplier_return_items_return;
+    #   DROP INDEX IF EXISTS idx_supplier_returns_status;
+    #   DROP INDEX IF EXISTS idx_supplier_returns_org_warehouse;
+    #   DROP INDEX IF EXISTS idx_supplier_returns_org_supplier;
+    #   DROP TABLE IF EXISTS supplier_return_items;
+    #   DROP TABLE IF EXISTS supplier_returns;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS supplier_returns (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id     UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        doc_number          VARCHAR(30),
+        supplier_id         UUID NOT NULL REFERENCES suppliers(id),
+        warehouse_id        INT  NOT NULL REFERENCES warehouses(id),
+        original_purchase_id UUID REFERENCES supplies(id),
+        reason              VARCHAR(500),
+        notes               TEXT,
+        status              VARCHAR(20) NOT NULL DEFAULT 'draft',
+        refund_method       VARCHAR(20),
+        refund_amount       NUMERIC(20,2) DEFAULT 0,
+        created_by          UUID REFERENCES users(id),
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        confirmed_at        TIMESTAMPTZ,
+        confirmed_by        UUID REFERENCES users(id)
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_supplier_returns_org_supplier
+       ON supplier_returns(organization_id, supplier_id, created_at DESC)""",
+    """CREATE INDEX IF NOT EXISTS idx_supplier_returns_org_warehouse
+       ON supplier_returns(organization_id, warehouse_id)""",
+    """CREATE INDEX IF NOT EXISTS idx_supplier_returns_status
+       ON supplier_returns(organization_id, status)""",
+
+    """
+    CREATE TABLE IF NOT EXISTS supplier_return_items (
+        id                  BIGSERIAL PRIMARY KEY,
+        supplier_return_id  UUID NOT NULL REFERENCES supplier_returns(id) ON DELETE CASCADE,
+        product_id          UUID NOT NULL REFERENCES products(id),
+        quantity            NUMERIC(20,4) NOT NULL CHECK (quantity > 0),
+        unit_cost           NUMERIC(20,4),
+        total_amount        NUMERIC(20,2) GENERATED ALWAYS AS (quantity * unit_cost) STORED,
+        notes               TEXT
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_supplier_return_items_return
+       ON supplier_return_items(supplier_return_id)""",
+
+    # ============================================================
+    # Sprint 5 — T-204: Inventory rich states + state machine
+    # Rollback:
+    #   DROP INDEX IF EXISTS idx_scan_events_inv_product;
+    #   DROP INDEX IF EXISTS idx_scan_events_org_inv;
+    #   DROP TABLE IF EXISTS inventory_scan_events;
+    #   ALTER TABLE inventory_items DROP COLUMN IF EXISTS version;
+    #   ALTER TABLE inventories DROP COLUMN IF EXISTS confirmed_by;
+    #   ALTER TABLE inventories DROP COLUMN IF EXISTS confirmed_at;
+    #   ALTER TABLE inventories DROP COLUMN IF EXISTS submitted_at;
+    #   ALTER TABLE inventories DROP COLUMN IF EXISTS resumed_at;
+    #   ALTER TABLE inventories DROP COLUMN IF EXISTS paused_at;
+    #   ALTER TABLE inventories DROP COLUMN IF EXISTS lock_mode;
+    #   ALTER TABLE inventories DROP COLUMN IF EXISTS blind_count;
+    #   -- Drop new CHECK constraint if applied; enum rollback not possible without data migration
+    # ============================================================
+
+    # Extend CHECK constraint on inventories.status (DROP old, ADD new with extra values).
+    # The column type is inventory_status ENUM; we cannot alter the ENUM inside a transaction
+    # (handled via ENUM_PATCHES with AUTOCOMMIT). Here we only add extra columns.
+    """ALTER TABLE inventories ADD COLUMN IF NOT EXISTS blind_count BOOLEAN NOT NULL DEFAULT FALSE""",
+    """ALTER TABLE inventories ADD COLUMN IF NOT EXISTS lock_mode VARCHAR(20) NOT NULL DEFAULT 'none'""",
+    """ALTER TABLE inventories ADD COLUMN IF NOT EXISTS paused_at TIMESTAMPTZ""",
+    """ALTER TABLE inventories ADD COLUMN IF NOT EXISTS resumed_at TIMESTAMPTZ""",
+    """ALTER TABLE inventories ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ""",
+    """ALTER TABLE inventories ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ""",
+    """ALTER TABLE inventories ADD COLUMN IF NOT EXISTS confirmed_by UUID REFERENCES users(id)""",
+
+    """ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 0""",
+
+    """
+    CREATE TABLE IF NOT EXISTS inventory_scan_events (
+        id              BIGSERIAL PRIMARY KEY,
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        inventory_id    UUID NOT NULL REFERENCES inventories(id) ON DELETE CASCADE,
+        product_id      UUID NOT NULL REFERENCES products(id),
+        quantity        NUMERIC(20,4) NOT NULL,
+        barcode         VARCHAR(64),
+        user_id         UUID NOT NULL REFERENCES users(id),
+        device_id       VARCHAR(100),
+        scanned_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        notes           TEXT
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_scan_events_org_inv
+       ON inventory_scan_events(organization_id, inventory_id, scanned_at)""",
+    """CREATE INDEX IF NOT EXISTS idx_scan_events_inv_product
+       ON inventory_scan_events(inventory_id, product_id)""",
+
+    # ============================================================
+    # Sprint 5 — T-205: is_voided for scan event rollback (soft delete)
+    # Rollback:
+    #   ALTER TABLE inventory_scan_events DROP COLUMN IF EXISTS is_voided;
+    #   DROP INDEX IF EXISTS idx_scan_events_inv_product_active;
+    # ============================================================
+    """ALTER TABLE inventory_scan_events ADD COLUMN IF NOT EXISTS is_voided BOOLEAN NOT NULL DEFAULT FALSE""",
+    """CREATE INDEX IF NOT EXISTS idx_scan_events_inv_product_active
+       ON inventory_scan_events(inventory_id, product_id)
+       WHERE is_voided = FALSE""",
+
+    # ============================================================
+    # Sprint 5 — T-210: stock_ins (oprihodovanie / stock-in posting)
+    # Separate table from write_offs — different reasons, different sign.
+    # Rollback (reverse FK order):
+    #   DROP INDEX IF EXISTS idx_stock_in_items_si;
+    #   DROP INDEX IF EXISTS idx_stock_ins_status;
+    #   DROP INDEX IF EXISTS idx_stock_ins_org_wh;
+    #   DROP TABLE IF EXISTS stock_in_items;
+    #   DROP TABLE IF EXISTS stock_ins;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS stock_ins (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        doc_number      VARCHAR(50),
+        warehouse_id    INT  NOT NULL REFERENCES warehouses(id),
+        reason          VARCHAR(500),
+        notes           TEXT,
+        status          VARCHAR(20) NOT NULL DEFAULT 'draft',
+        created_by      UUID REFERENCES users(id),
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        confirmed_at    TIMESTAMPTZ,
+        confirmed_by    UUID REFERENCES users(id)
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_stock_ins_org_wh
+       ON stock_ins(organization_id, warehouse_id, created_at DESC)""",
+    """CREATE INDEX IF NOT EXISTS idx_stock_ins_status
+       ON stock_ins(organization_id, status)""",
+
+    """
+    CREATE TABLE IF NOT EXISTS stock_in_items (
+        id           BIGSERIAL PRIMARY KEY,
+        stock_in_id  UUID          NOT NULL REFERENCES stock_ins(id) ON DELETE CASCADE,
+        product_id   UUID          NOT NULL REFERENCES products(id),
+        quantity     NUMERIC(20,3) NOT NULL CHECK (quantity > 0),
+        unit_cost    NUMERIC(20,4) DEFAULT 0,
+        amount       NUMERIC(20,2) GENERATED ALWAYS AS (quantity * unit_cost) STORED
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_stock_in_items_si
+       ON stock_in_items(stock_in_id)""",
+
+    # T-211: source_legacy_id tracking column for legacy transfers migration
+    # Rollback: ALTER TABLE internal_transfers DROP COLUMN IF EXISTS source_legacy_id;
+    """
+    ALTER TABLE internal_transfers
+        ADD COLUMN IF NOT EXISTS source_legacy_id UUID
+    """,
+
+    # T-211: One-time idempotent migration of legacy transfers → internal_transfers.
+    # Runs on every startup but is a no-op if legacy table is empty or all rows are
+    # already migrated (guarded by source_legacy_id NOT NULL check).
+    # transfer_items.cost maps to internal_transfer_items.cost (both NUMERIC).
+    # transfer_items has no unit_id — inserted as NULL.
+    # Legacy transfers.status uses transfer_status enum; values match internal_transfers
+    # VARCHAR(20) status: draft/sent/received/cancelled.
+    # Rollback (removes only migrated rows):
+    #   DELETE FROM internal_transfers WHERE source_legacy_id IS NOT NULL;
+    """
+    DO $$
+    DECLARE
+        leg RECORD;
+        new_id UUID;
+        new_doc VARCHAR(50);
+    BEGIN
+        IF EXISTS (SELECT 1 FROM transfers LIMIT 1) THEN
+            FOR leg IN SELECT * FROM transfers LOOP
+                IF NOT EXISTS (
+                    SELECT 1 FROM internal_transfers
+                    WHERE source_legacy_id = leg.id
+                ) THEN
+                    new_doc := COALESCE(leg.doc_number, 'MIGRATED-' || leg.id::text);
+                    INSERT INTO internal_transfers (
+                        organization_id, doc_number, from_warehouse, to_warehouse,
+                        status, notes, created_by, created_at, source_legacy_id
+                    ) VALUES (
+                        leg.organization_id, new_doc, leg.from_warehouse_id, leg.to_warehouse_id,
+                        CASE leg.status::text
+                            WHEN 'draft'      THEN 'draft'
+                            WHEN 'sent'       THEN 'sent'
+                            WHEN 'received'   THEN 'received'
+                            WHEN 'cancelled'  THEN 'cancelled'
+                            ELSE 'draft'
+                        END,
+                        leg.notes, leg.created_by, leg.created_at, leg.id
+                    )
+                    RETURNING id INTO new_id;
+
+                    INSERT INTO internal_transfer_items (transfer_id, product_id, qty, unit_id, cost)
+                    SELECT new_id, ti.product_id, ti.quantity, NULL, COALESCE(ti.cost, 0)
+                    FROM transfer_items ti
+                    WHERE ti.transfer_id = leg.id;
+                END IF;
+            END LOOP;
+        END IF;
+    END $$
+    """,
+
+    # Sprint 5 QA fix M1: stock_in_reasons table
+    # Rollback: DROP TABLE IF EXISTS stock_in_reasons CASCADE;
+    """
+    CREATE TABLE IF NOT EXISTS stock_in_reasons (
+        id              SERIAL PRIMARY KEY,
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        name            VARCHAR(200) NOT NULL,
+        code            VARCHAR(50),
+        is_active       BOOLEAN DEFAULT TRUE,
+        created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_stock_in_reasons_org_name
+        ON stock_in_reasons(organization_id, name)
+    """,
+
+    # Sprint 5 QA fix M1: link stock_ins to stock_in_reasons (backward-compat; reason_text stays)
+    # Rollback: ALTER TABLE stock_ins DROP COLUMN IF EXISTS reason_id;
+    """
+    ALTER TABLE stock_ins
+        ADD COLUMN IF NOT EXISTS reason_id INT REFERENCES stock_in_reasons(id)
+    """,
+]
+
+# Enum value additions — must run outside a transaction (AUTOCOMMIT).
+# PG16 still forbids ALTER TYPE ... ADD VALUE inside an explicit transaction.
+ENUM_PATCHES = [
+    "ALTER TYPE inventory_status ADD VALUE IF NOT EXISTS 'paused'",
+    "ALTER TYPE inventory_status ADD VALUE IF NOT EXISTS 'pending_confirmation'",
 ]
 
 
 async def apply_patches() -> None:
+    # Run enum patches first in AUTOCOMMIT (cannot be in a transaction)
+    async with engine.connect() as conn:
+        await conn.execution_options(isolation_level="AUTOCOMMIT")
+        for ddl in ENUM_PATCHES:
+            try:
+                await conn.execute(text(ddl))
+            except Exception:
+                pass  # already added — safe to ignore
+
     async with engine.begin() as conn:
         for ddl in PATCHES:
             await conn.execute(text(ddl))

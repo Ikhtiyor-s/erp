@@ -18,6 +18,18 @@ Test matrix:
 import pytest
 import httpx
 
+
+async def _seed_stock(client: httpx.AsyncClient, wh_id: int, product_id: str, qty: str = "100") -> None:
+    """Set stock level via inventory adjust so negative-guard tests pass."""
+    r = await client.post("/api/v1/warehouse/inventories", json={
+        "warehouse_id": wh_id,
+        "items": [{"product_id": product_id, "actual_qty": qty}],
+    })
+    assert r.status_code in (200, 201), f"inventory create: {r.text}"
+    iid = r.json()["id"]
+    r = await client.post(f"/api/v1/warehouse/inventories/{iid}/finish")
+    assert r.status_code == 200, f"inventory finish: {r.text}"
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -97,6 +109,7 @@ async def test_non_bom_product_creates_single_pick_item(client, org_id):
     wh_id, cur_id = await _get_seed(client)
 
     prod_id = await _create_product(client, "Test-NoBOM-Product", org_id)
+    await _seed_stock(client, wh_id, prod_id, "50")
 
     sale_id = await _create_sale(
         client, wh_id, cur_id,
@@ -121,6 +134,7 @@ async def test_bom_product_explodes_into_leaf_components(client, org_id):
 
     await _create_bom_entry(client, parent_id, wood_id, 4)
     await _create_bom_entry(client, parent_id, bolt_id, 20)
+    await _seed_stock(client, wh_id, parent_id, "50")
 
     sale_id = await _create_sale(
         client, wh_id, cur_id,
@@ -150,6 +164,8 @@ async def test_mixed_sale_creates_correct_pick_items(client, org_id):
 
     await _create_bom_entry(client, bom_parent, comp1, 3)
     await _create_bom_entry(client, bom_parent, comp2, 7)
+    await _seed_stock(client, wh_id, bom_parent, "50")
+    await _seed_stock(client, wh_id, individual, "50")
 
     sale_id = await _create_sale(
         client, wh_id, cur_id,
@@ -180,6 +196,7 @@ async def test_nested_bom_returns_only_leaf(client, org_id):
     # A → B (qty=3), B → C (qty=5)  → selling A×2 should give C×(3×5×2)=30
     await _create_bom_entry(client, prod_a, prod_b, 3)
     await _create_bom_entry(client, prod_b, prod_c, 5)
+    await _seed_stock(client, wh_id, prod_a, "50")
 
     sale_id = await _create_sale(
         client, wh_id, cur_id,
@@ -203,6 +220,7 @@ async def test_pick_list_returns_parent_fields(client, org_id):
     parent_id = await _create_product(client, "Test-BOM-Fields-Parent", org_id)
     comp_id = await _create_product(client, "Test-BOM-Fields-Comp", org_id)
     await _create_bom_entry(client, parent_id, comp_id, 2)
+    await _seed_stock(client, wh_id, parent_id, "50")
 
     sale_id = await _create_sale(
         client, wh_id, cur_id,
@@ -238,6 +256,7 @@ async def test_totals_correct_for_bom_order(client, org_id):
 
     await _create_bom_entry(client, stol_id, yogoch_id, 4)
     await _create_bom_entry(client, stol_id, bolt_id, 20)
+    await _seed_stock(client, wh_id, stol_id, "50")
 
     sale_id = await _create_sale(
         client, wh_id, cur_id,

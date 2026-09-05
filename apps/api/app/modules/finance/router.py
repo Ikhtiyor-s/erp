@@ -42,12 +42,14 @@ async def list_cashboxes(
     res = await db.execute(
         text(
             "SELECT cb.id, cb.name, cb.currency_id, cb.balance, cb.is_active, "
-            "cb.responsible_id, "
+            "cb.responsible_id, cb.warehouse_id, "
             "cur.code AS currency_code, "
-            "e.full_name AS responsible_name "
+            "e.full_name AS responsible_name, "
+            "w.name AS warehouse_name "
             "FROM cashboxes cb "
             "LEFT JOIN currencies cur ON cur.id = cb.currency_id "
             "LEFT JOIN employees e ON e.id = cb.responsible_id "
+            "LEFT JOIN warehouses w ON w.id = cb.warehouse_id "
             "WHERE cb.organization_id = :o ORDER BY cb.id"
         ),
         {"o": org_id},
@@ -62,16 +64,25 @@ async def create_cashbox(
     org_id: str = Depends(get_current_org_id),
     _: str = Depends(get_current_user_id),
 ):
+    if payload.warehouse_id is not None:
+        wh_check = await db.execute(
+            text("SELECT 1 FROM warehouses WHERE id = :w AND organization_id = :o"),
+            {"w": payload.warehouse_id, "o": org_id},
+        )
+        if not wh_check.first():
+            raise HTTPException(422, "warehouse_id does not belong to your organization")
     res = await db.execute(
-        text("INSERT INTO cashboxes (organization_id, name, currency_id, responsible_id) "
-             "VALUES (:o, :n, :c, :r) RETURNING id, balance, is_active"),
+        text("INSERT INTO cashboxes (organization_id, name, currency_id, responsible_id, warehouse_id) "
+             "VALUES (:o, :n, :c, :r, :w) RETURNING id, balance, is_active"),
         {"o": org_id, "n": payload.name, "c": payload.currency_id,
-         "r": str(payload.responsible_id) if payload.responsible_id else None},
+         "r": str(payload.responsible_id) if payload.responsible_id else None,
+         "w": payload.warehouse_id},
     )
     row = res.first()
     await db.commit()
     return CashboxOut(id=row.id, name=payload.name, currency_id=payload.currency_id,
-                      balance=row.balance, is_active=row.is_active)
+                      balance=row.balance, is_active=row.is_active,
+                      warehouse_id=payload.warehouse_id)
 
 
 @router.put("/cashboxes/{cid}")
@@ -80,11 +91,19 @@ async def update_cashbox(
     db: AsyncSession = Depends(get_db),
     org_id: str = Depends(get_current_org_id),
 ):
+    if payload.warehouse_id is not None:
+        wh_check = await db.execute(
+            text("SELECT 1 FROM warehouses WHERE id = :w AND organization_id = :o"),
+            {"w": payload.warehouse_id, "o": org_id},
+        )
+        if not wh_check.first():
+            raise HTTPException(422, "warehouse_id does not belong to your organization")
     res = await db.execute(
-        text("UPDATE cashboxes SET name=:n, currency_id=:c, responsible_id=:r "
+        text("UPDATE cashboxes SET name=:n, currency_id=:c, responsible_id=:r, warehouse_id=:w "
              "WHERE id = :id AND organization_id = :o RETURNING id"),
         {"id": cid, "o": org_id, "n": payload.name, "c": payload.currency_id,
-         "r": str(payload.responsible_id) if payload.responsible_id else None},
+         "r": str(payload.responsible_id) if payload.responsible_id else None,
+         "w": payload.warehouse_id},
     )
     if not res.scalar():
         raise HTTPException(status.HTTP_404_NOT_FOUND)

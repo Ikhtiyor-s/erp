@@ -39,24 +39,44 @@ async def _stock_apply(
     cost: Decimal | None = None,
     *,
     allow_negative: bool = False,
-) -> None:
+    org_id: str | None = None,
+    operation_type: str = "manual",
+    source_type: str | None = None,
+    source_id: str | None = None,
+    correlation_id: str | None = None,
+    user_id: str | None = None,
+    notes: str | None = None,
+) -> Decimal:
     """
-    Apply +/- delta to stock_balances within the caller's transaction.
+    Apply +/- delta to stock_balances and write a stock_movements journal row.
+    Returns the new quantity_after.
     Raises HTTPException(422) if allow_negative=False and resulting qty < 0.
     Callers MUST NOT commit inside this function; commit belongs to the caller.
     """
     if delta_qty == 0:
-        return
-    if not allow_negative and delta_qty < 0:
-        current = await _stock_qty(db, warehouse_id, product_id)
-        if current + delta_qty < 0:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(
-                    f"Insufficient stock: warehouse={warehouse_id} "
-                    f"product={product_id} on_hand={current} requested={-delta_qty}"
-                ),
-            )
+        return Decimal("0")
+
+    lock_res = await db.execute(
+        text(
+            "SELECT COALESCE(quantity, 0) AS quantity, COALESCE(avg_cost, 0) AS avg_cost "
+            "FROM stock_balances "
+            "WHERE warehouse_id = :w AND product_id = :p FOR UPDATE"
+        ),
+        {"w": warehouse_id, "p": product_id},
+    )
+    lock_row = lock_res.first()
+    before_qty = Decimal(str(lock_row.quantity)) if lock_row else Decimal("0")
+    after_qty = before_qty + delta_qty
+
+    if not allow_negative and after_qty < 0:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Insufficient stock: warehouse={warehouse_id} "
+                f"product={product_id} on_hand={before_qty} requested={-delta_qty}"
+            ),
+        )
+
     if delta_qty > 0 and cost is not None:
         await db.execute(
             text(
@@ -80,6 +100,27 @@ async def _stock_apply(
             ),
             {"w": warehouse_id, "p": product_id, "q": delta_qty},
         )
+
+    if org_id is not None:
+        await db.execute(
+            text(
+                "INSERT INTO stock_movements "
+                "(organization_id, warehouse_id, product_id, "
+                " before_qty, change_qty, after_qty, unit_cost, "
+                " operation_type, source_type, source_id, correlation_id, "
+                " user_id, notes) "
+                "VALUES (:o, :w, :p, :bq, :dq, :aq, :uc, :ot, :st, :si, :ci, :u, :n)"
+            ),
+            {
+                "o": org_id, "w": warehouse_id, "p": product_id,
+                "bq": before_qty, "dq": delta_qty, "aq": after_qty,
+                "uc": cost, "ot": operation_type,
+                "st": source_type, "si": source_id, "ci": correlation_id,
+                "u": user_id, "n": notes,
+            },
+        )
+
+    return after_qty
 
 
 async def get_on_hand_batch(

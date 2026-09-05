@@ -36,6 +36,7 @@ ALL_PERMISSIONS: list[Permission] = [
     p("sale", "view"), p("sale", "create"), p("sale", "update"),
     p("sale", "delete"), p("sale", "cancel"), p("sale", "pay"),
     p("sale", "refund"), p("sale", "export"), p("sale", "discount"),
+    p("sale", "change_warehouse"),  # override cashbox default warehouse at sale time
 
     # Warehouse (broad, legacy)
     p("warehouse", "view"), p("warehouse", "create"), p("warehouse", "update"),
@@ -52,6 +53,8 @@ ALL_PERMISSIONS: list[Permission] = [
     p3("warehouse", "request", "approve"),
     p3("warehouse", "product", "view"),
     p3("warehouse", "product", "import"), p3("warehouse", "product", "export"),
+    p3("warehouse", "product", "barcode_view"), p3("warehouse", "product", "barcode_manage"),
+    p3("warehouse", "product", "archive"),
 
     # Warehouse — BOM and cells (T-021)
     p3("warehouse", "bom", "view"), p3("warehouse", "bom", "manage"),
@@ -111,6 +114,8 @@ ALL_PERMISSIONS: list[Permission] = [
 
     # Statistics / reports
     p("statistics", "view"),
+    p3("statistics", "cogs", "view"),    # GET /statistics/cogs — finance-sensitive
+    p3("statistics", "cogs", "export"),  # CSV export of COGS report
 
     # Integration Hub (T-100, DESIGN-3 §11)
     # Names match RBAC middleware derivation: GET→view, PUT→update, POST→create
@@ -121,6 +126,21 @@ ALL_PERMISSIONS: list[Permission] = [
     # Sprint 4 QA M2 — MXIK catalog search and 1C export
     p("mxik", "view"),          # GET /reference/mxik/search
     p("finance", "export_1c"),  # GET /finance/export/1c-csv, /finance/export/1c-xml
+
+    # Sprint 5 — T-200: stock movements immutable journal
+    p3("warehouse", "movements", "view"),   # GET /warehouse/movements
+
+    # Sprint 5 — T-202: supplier returns workflow
+    p3("supplier", "return", "view"),
+    p3("supplier", "return", "create"),
+    p3("supplier", "return", "confirm"),
+    p3("supplier", "return", "cancel"),
+
+    # Sprint 5 — T-204: inventory rich states + state machine
+    p("warehouse", "manage_inventory_advanced"),
+
+    # Sprint 5 — T-210: oprihodovanie (stock-in posting)
+    p("warehouse", "manage_stock_ins"),
 ]
 
 
@@ -137,6 +157,7 @@ ROLE_GRANTS: dict[str, list[str]] = {
     "manager": [
         "sale.view", "sale.create", "sale.update", "sale.cancel",
         "sale.pay", "sale.refund", "sale.export", "sale.discount",
+        "sale.change_warehouse",
         "warehouse.view", "warehouse.create", "warehouse.update",
         "warehouse.inventory", "warehouse.transfer", "warehouse.income",
         "warehouse.export",
@@ -147,6 +168,8 @@ ROLE_GRANTS: dict[str, list[str]] = {
         "warehouse.transfer.view", "warehouse.transfer.send", "warehouse.transfer.receive",
         "warehouse.request.view", "warehouse.request.create", "warehouse.request.approve",
         "warehouse.product.view", "warehouse.product.import", "warehouse.product.export",
+        "warehouse.product.barcode_view", "warehouse.product.barcode_manage",
+        "warehouse.product.archive",
         "warehouse.bom.view", "warehouse.bom.manage",
         "warehouse.cell.view", "warehouse.cell.manage",
         "order.pick.view", "order.pick.execute", "order.pick.contact",
@@ -162,10 +185,16 @@ ROLE_GRANTS: dict[str, list[str]] = {
         "reference.view", "reference.create", "reference.update",
         "tools.view", "tools.export", "tools.price_bulk",
         "statistics.view", "audit.view",
+        "statistics.cogs.view",
         "settings.integration",
         "integrations.view",
         "integrations.update",
         "integrations.create",
+        "warehouse.movements.view",
+        "supplier.return.view", "supplier.return.create", "supplier.return.confirm",
+        "supplier.return.cancel",
+        "warehouse.manage_inventory_advanced",
+        "warehouse.manage_stock_ins",
     ],
 
     # Accountant — finance focus, read-only on others
@@ -174,6 +203,7 @@ ROLE_GRANTS: dict[str, list[str]] = {
         "warehouse.view", "warehouse.export",
         "warehouse.transfer.view", "warehouse.request.view",
         "warehouse.product.view", "warehouse.product.export",
+        "warehouse.product.barcode_view",
         "finance.view", "finance.create", "finance.update",
         "finance.cashbox_manage", "finance.set_balance", "finance.export",
         "finance.export_1c", "finance.bill_payment",
@@ -183,7 +213,9 @@ ROLE_GRANTS: dict[str, list[str]] = {
         "hr.view", "hr.salary",
         "reference.view",
         "tools.view", "tools.export",
-        "statistics.view", "audit.view",
+        "statistics.view", "statistics.cogs.view", "statistics.cogs.export", "audit.view",
+        "warehouse.movements.view",
+        "supplier.return.view",
     ],
 
     # Cashier — POS + create sale + pay only
@@ -191,7 +223,7 @@ ROLE_GRANTS: dict[str, list[str]] = {
         "sale.view", "sale.create", "sale.pay",
         "warehouse.view",
         "warehouse.transfer.view", "warehouse.request.view", "warehouse.request.create",
-        "warehouse.product.view",
+        "warehouse.product.view", "warehouse.product.barcode_view",
         "customer.view", "customer.create",
         "reference.view",
         "order.pick.view", "order.pick.contact",

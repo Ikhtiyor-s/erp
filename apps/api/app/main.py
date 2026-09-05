@@ -50,6 +50,7 @@ from app.modules.tasks.router import router as tasks_router
 from app.modules.audit.router import router as audit_router
 from app.modules.audit.middleware import AuditMiddleware
 from app.modules.rbac.middleware import PermissionMiddleware
+from app.modules.idempotency.middleware import IdempotencyMiddleware
 from app.modules.rbac.router import router as rbac_router
 from app.modules.rbac.seed import seed_all as seed_rbac
 from app.modules.integration.router import router as integration_router
@@ -89,6 +90,7 @@ app.add_middleware(
 )
 
 app.add_middleware(AuditMiddleware)
+app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(PermissionMiddleware)
 
 
