@@ -439,3 +439,35 @@ _Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartir
 ## 2026-09-05T10:59:59Z — sessiya tugadi
 
 _Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## 2026-09-05T11:15:27Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## 2026-09-05T11:21:02Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## 2026-09-05T11:44:52Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## 2026-09-05T11:49:47Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## 2026-09-05T11:51:04Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## Sprint 5: Legacy transfers deprecation (2026-09-05) — T-211
+
+`transfers`/`transfer_items` jadvallari `init.sql` da qolgan (Sprint 0 pattern). Sprint 2'da yangi `internal_transfers` + `internal_transfer_items` (schema_patches.py) yaratildi va butun frontend + backend logic yangi jadvalga ko'chdi. Sprint 5'da:
+
+1. `internal_transfers.source_legacy_id UUID` ustun qo'shildi (migration tracking uchun).
+2. Idempotent DO $$ block `schema_patches.py` da: `transfers` jadvalidagi har bir qatorni `internal_transfers`'ga ko'chiradi, `transfer_items` → `internal_transfer_items` (unit_id=NULL, cost mapped). source_legacy_id guardi tufayli ikkinchi ishga tushirishda hech narsa qilmaydi.
+3. Legacy `/warehouse/transfers` endpointlari Sprint 2'danoq `internal_transfers` jadvalini ishlatadi — alohida legacy router mavjud emas, 410 qo'yish shart emas (buzilmaydi).
+4. `transfers` table is empty in production (0 rows) — migration runs but inserts nothing. Data-safe.
+5. Legacy jadvallarni (`transfers`, `transfer_items`) DROP QILMANG hozircha — Sprint 6+ da backup verify qilingandan keyin.
+
+Frontend grep: `grep -rn "/warehouse/transfers" apps/web/` — faqat `internal-transfers` mavjud, legacy `/api/warehouse/transfers` chaqiruv 0 ta.
