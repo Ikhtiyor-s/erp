@@ -7,34 +7,57 @@ import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { BarcodeScanner } from "@/components/barcode/scanner";
+import { usePermissions } from "@/lib/permissions";
 
 type Product = { id: string; name: string; sku?: string; barcode?: string; sale_price: string; total_stock?: string };
 type CartItem = { product: Product; quantity: number; price: number };
+type CashboxItem = { id: number; name: string; warehouse_id?: number | null; warehouse_name?: string | null };
+type WarehouseItem = { id: number; name: string };
 
 const fmt = (v: any) => Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 
 export default function MobilePOS() {
   const ts = useTranslations("barcode.scan");
+  const tSale = useTranslations("sale.contract");
+  const { can } = usePermissions();
   const [q, setQ] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [scanOpen, setScanOpen] = useState(false);
   const [showCart, setShowCart] = useState(false);
-  const [boxes, setBoxes] = useState<any[]>([]);
-  const [whs, setWhs] = useState<any[]>([]);
+  const [boxes, setBoxes] = useState<CashboxItem[]>([]);
+  const [whs, setWhs] = useState<WarehouseItem[]>([]);
   const [cashboxId, setCashboxId] = useState<number | null>(null);
   const [whId, setWhId] = useState<number | null>(null);
+  const [whOverridden, setWhOverridden] = useState(false);
+  const [showWhOverride, setShowWhOverride] = useState(false);
   const [paying, setPaying] = useState(false);
   const [activeSession, setActiveSession] = useState<any>(null);
 
+  const canChangeWarehouse = can("sale.change_warehouse");
+
+  function selectCashbox(cid: number) {
+    setCashboxId(cid);
+    const cb = boxes.find((c) => c.id === cid);
+    if (cb?.warehouse_id) {
+      setWhId(cb.warehouse_id);
+      setWhOverridden(false);
+    }
+  }
+
   useEffect(() => {
-    api.get<any[]>("/finance/cashboxes").then((r) => {
-      setBoxes(r.data || []);
-      if (r.data?.[0]) setCashboxId(r.data[0].id);
+    api.get<CashboxItem[]>("/finance/cashboxes").then((r) => {
+      const data = r.data || [];
+      setBoxes(data);
+      if (data[0]) {
+        setCashboxId(data[0].id);
+        if (data[0].warehouse_id) {
+          setWhId(data[0].warehouse_id);
+        }
+      }
     }).catch(() => {});
-    api.get<any[]>("/warehouse/warehouses").then((r) => {
+    api.get<WarehouseItem[]>("/warehouse/warehouses").then((r) => {
       setWhs(r.data || []);
-      if (r.data?.[0]) setWhId(r.data[0].id);
     }).catch(() => {});
   }, []);
 
@@ -97,18 +120,21 @@ export default function MobilePOS() {
   const itemCount = cart.reduce((s, it) => s + it.quantity, 0);
 
   async function checkout(paymentMethod: "cash" | "card") {
-    if (cart.length === 0 || !cashboxId || !whId) return;
+    if (cart.length === 0 || !cashboxId) return;
     setPaying(true);
     try {
-      const r = await api.post<{ id: string }>("/sale/sales", {
+      const payload: Record<string, unknown> = {
         cashbox_id: cashboxId,
-        warehouse_id: whId,
         cashbox_session_id: activeSession?.id || null,
         items: cart.map((it) => ({
           product_id: it.product.id, quantity: it.quantity, price: it.price,
         })),
         payments: [{ method: paymentMethod, amount: total }],
-      });
+      };
+      if (whOverridden && whId) {
+        payload.warehouse_id = whId;
+      }
+      await api.post<{ id: string }>("/sale/sales", payload);
       toast.success("Sotuv ro'yxatga olindi!");
       setCart([]);
       setShowCart(false);
@@ -134,6 +160,62 @@ export default function MobilePOS() {
           className="min-h-[44px] min-w-[44px] flex items-center justify-center bg-brand-600 text-white rounded-md">
           <ScanLine size={20} />
         </button>
+      </div>
+
+      {/* Cashbox + warehouse selector */}
+      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1.5">
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-slate-500 dark:text-slate-400 w-16 shrink-0">Kassa</label>
+          <select
+            className="flex-1 text-xs bg-slate-100 dark:bg-slate-900 rounded px-2 py-1.5 border-0 focus:ring-1 focus:ring-brand-500"
+            value={cashboxId || ""}
+            onChange={(e) => {
+              const cid = e.target.value ? Number(e.target.value) : null;
+              if (cid) selectCashbox(cid);
+            }}
+          >
+            <option value="">— tanlang —</option>
+            {boxes.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-slate-500 dark:text-slate-400 w-16 shrink-0">Sklad</label>
+          {showWhOverride && canChangeWarehouse ? (
+            <select
+              className="flex-1 text-xs bg-slate-100 dark:bg-slate-900 rounded px-2 py-1.5 border-0 focus:ring-1 focus:ring-brand-500"
+              value={whId || ""}
+              onChange={(e) => {
+                const wid = e.target.value ? Number(e.target.value) : null;
+                setWhId(wid);
+                setWhOverridden(true);
+              }}
+            >
+              <option value="">— tanlang —</option>
+              {whs.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          ) : (
+            <div className="flex-1 flex items-center justify-between gap-2">
+              <span className="text-xs text-slate-700 dark:text-slate-300 truncate">
+                {cashboxId
+                  ? (boxes.find((b) => b.id === cashboxId)?.warehouse_name || whs.find((w) => w.id === whId)?.name || "—")
+                  : "—"}
+              </span>
+              {canChangeWarehouse && cashboxId && (
+                <button
+                  onClick={() => setShowWhOverride(true)}
+                  className="text-xs text-brand-600 dark:text-brand-400 underline shrink-0"
+                >
+                  {tSale("warehouse_change_btn")}
+                </button>
+              )}
+              {!canChangeWarehouse && cashboxId && (
+                <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0 italic">
+                  {tSale("warehouse_auto_hint")}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Cashbox status */}
@@ -231,11 +313,11 @@ export default function MobilePOS() {
                 <span className="font-mono text-lg">{fmt(total)}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => checkout("cash")} disabled={paying || !activeSession}
+                <button onClick={() => checkout("cash")} disabled={paying || !activeSession || !cashboxId}
                   className="min-h-[44px] py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-medium">
                   Naqd
                 </button>
-                <button onClick={() => checkout("card")} disabled={paying || !activeSession}
+                <button onClick={() => checkout("card")} disabled={paying || !activeSession || !cashboxId}
                   className="min-h-[44px] py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-lg font-medium">
                   Karta
                 </button>

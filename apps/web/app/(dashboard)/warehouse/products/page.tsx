@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Download, Search, Upload, ClipboardList, Printer } from "lucide-react";
+import { Download, Search, Upload, ClipboardList, Printer, Archive, ArchiveRestore, Barcode } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -50,8 +50,23 @@ type Product = {
   rack_name?: string | null;
   default_cell_id?: string | null;
   default_cell_code?: string | null;
+  is_archived?: boolean;
+  default_supplier_id?: string | null;
+  default_supplier_name?: string | null;
+  primary_barcode?: string | null;
+  active_barcode_count?: number;
 };
 
+type ProductBarcode = {
+  id: string;
+  barcode: string;
+  is_primary: boolean;
+  is_active: boolean;
+  created_at?: string;
+  deactivated_at?: string | null;
+};
+
+type Supplier = { id: string; name: string };
 type Ref = { id: number; name: string; code?: string };
 type ImportError = { row: number; message: string };
 type ImportResult = { created: number; updated: number; errors: ImportError[] };
@@ -84,11 +99,11 @@ const empty = {
   dim_height: "",
   dim_weight: "",
   description: "",
-  extra_barcodes: [] as string[],
   tag_ids: [] as number[],
   product_type: "",
   default_rack_id: null as number | null,
   default_cell_id: null as string | null,
+  default_supplier_id: null as string | null,
 };
 
 const fmt = (v: unknown) =>
@@ -409,6 +424,225 @@ function ImportModal({
   );
 }
 
+function BarcodesModal({
+  open,
+  onClose,
+  productId,
+  productName,
+}: {
+  open: boolean;
+  onClose: () => void;
+  productId: string;
+  productName: string;
+}) {
+  const tw = useTranslations("warehouse.products");
+  const [barcodes, setBarcodes] = useState<ProductBarcode[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
+  const [newBarcode, setNewBarcode] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState<ProductBarcode | null>(null);
+
+  async function loadBarcodes() {
+    if (!productId) return;
+    setLoading(true);
+    try {
+      const res = await api.get<ProductBarcode[]>(
+        `/warehouse/products/${productId}/barcodes`
+      );
+      setBarcodes(res.data);
+    } catch (e) {
+      toast.error(getErrorMessage(e, tw("barcode_loading")));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (open && productId) {
+      loadBarcodes();
+      setNewBarcode("");
+      setShowInactive(false);
+    }
+  }, [open, productId]);
+
+  async function handleAdd() {
+    const val = newBarcode.trim();
+    if (!val) return;
+    setAdding(true);
+    try {
+      await api.post(`/warehouse/products/${productId}/barcodes`, {
+        barcode: val,
+      });
+      setNewBarcode("");
+      await loadBarcodes();
+      toast.success(tw("barcode_add"));
+    } catch (e) {
+      toast.error(getErrorMessage(e, tw("barcode_add")));
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function handleSetPrimary(bid: string) {
+    try {
+      await api.post(`/warehouse/products/${productId}/barcodes/${bid}/set-primary`);
+      await loadBarcodes();
+    } catch (e) {
+      toast.error(getErrorMessage(e, tw("barcode_set_primary")));
+    }
+  }
+
+  async function handleDeactivate() {
+    if (!deactivateTarget) return;
+    try {
+      await api.post(
+        `/warehouse/products/${productId}/barcodes/${deactivateTarget.id}/deactivate`
+      );
+      setDeactivateTarget(null);
+      await loadBarcodes();
+    } catch (e) {
+      toast.error(getErrorMessage(e, tw("barcode_deactivate")));
+    }
+  }
+
+  async function handleReactivate(bid: string) {
+    try {
+      await api.post(
+        `/warehouse/products/${productId}/barcodes/${bid}/reactivate`
+      );
+      await loadBarcodes();
+    } catch (e) {
+      toast.error(getErrorMessage(e, tw("barcode_reactivate")));
+    }
+  }
+
+  const visible = showInactive
+    ? barcodes
+    : barcodes.filter((b) => b.is_active);
+
+  return (
+    <>
+      <Modal
+        open={open}
+        onClose={onClose}
+        title={`${tw("barcodes_title")} — ${productName}`}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <input
+              className={`${input} flex-1`}
+              placeholder={tw("barcode_placeholder")}
+              value={newBarcode}
+              onChange={(e) => setNewBarcode(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+            />
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={adding || !newBarcode.trim()}
+              className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-sm font-medium px-3 py-2 rounded-md transition-colors whitespace-nowrap"
+            >
+              {tw("barcode_add")}
+            </button>
+          </div>
+
+          {loading ? (
+            <p className="text-sm text-slate-400 py-4 text-center">{tw("barcode_loading")}</p>
+          ) : barcodes.length === 0 ? (
+            <p className="text-sm text-slate-400 py-4 text-center">{tw("barcode_empty")}</p>
+          ) : (
+            <>
+              <div className="space-y-2">
+                {visible.map((b) => (
+                  <div
+                    key={b.id}
+                    className={`flex items-center gap-2 p-2 rounded border ${
+                      b.is_active
+                        ? "border-ink-200 dark:border-ink-700 bg-white dark:bg-ink-900"
+                        : "border-ink-100 dark:border-ink-800 bg-slate-50 dark:bg-ink-950 opacity-60"
+                    }`}
+                  >
+                    <span
+                      className={`font-mono text-sm flex-1 ${
+                        !b.is_active ? "line-through text-ink-400" : ""
+                      }`}
+                    >
+                      {b.barcode}
+                    </span>
+                    {b.is_primary && b.is_active && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-300">
+                        {tw("barcode_primary_badge")}
+                      </span>
+                    )}
+                    {b.is_active && !b.is_primary && (
+                      <button
+                        type="button"
+                        onClick={() => handleSetPrimary(b.id)}
+                        className="text-xs text-brand-600 hover:text-brand-700 whitespace-nowrap"
+                      >
+                        {tw("barcode_set_primary")}
+                      </button>
+                    )}
+                    {b.is_active ? (
+                      <button
+                        type="button"
+                        onClick={() => setDeactivateTarget(b)}
+                        className="text-xs text-rose-600 hover:text-rose-700 whitespace-nowrap"
+                      >
+                        {tw("barcode_deactivate")}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleReactivate(b.id)}
+                        className="text-xs text-emerald-600 hover:text-emerald-700 whitespace-nowrap"
+                      >
+                        {tw("barcode_reactivate")}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {barcodes.some((b) => !b.is_active) && (
+                <button
+                  type="button"
+                  onClick={() => setShowInactive((v) => !v)}
+                  className="text-xs text-ink-500 hover:text-ink-700 underline"
+                >
+                  {showInactive ? tw("barcode_hide_inactive") : tw("barcode_show_inactive")}
+                </button>
+              )}
+            </>
+          )}
+
+          <div className="flex justify-end pt-3 border-t border-ink-200 dark:border-ink-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm rounded-md border border-ink-300 dark:border-ink-600 hover:bg-ink-50 dark:hover:bg-ink-800"
+            >
+              {tw("close")}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!deactivateTarget}
+        onClose={() => setDeactivateTarget(null)}
+        onConfirm={handleDeactivate}
+        title={tw("barcode_deactivate_title")}
+        message={tw("barcode_deactivate_message", {
+          barcode: deactivateTarget?.barcode ?? "",
+        })}
+      />
+    </>
+  );
+}
+
 export default function ProductsPage() {
   const t = useTranslations("ui");
   const tw = useTranslations("warehouse.products");
@@ -419,8 +653,14 @@ export default function ProductsPage() {
   const [units, setUnits] = useState<Ref[]>([]);
   const [currencies, setCurrencies] = useState<Ref[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ q: "", category_id: "", is_service: "" });
+  const [filters, setFilters] = useState({
+    q: "",
+    category_id: "",
+    is_service: "",
+    include_archived: false,
+  });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<typeof empty>(empty);
   const [editId, setEditId] = useState<string | null>(null);
@@ -431,6 +671,10 @@ export default function ProductsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [printTarget, setPrintTarget] = useState<Product | null>(null);
   const [bulkPrintOpen, setBulkPrintOpen] = useState(false);
+  const [barcodesTarget, setBarcodesTarget] = useState<Product | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<{ product: Product; action: "archive" | "unarchive" } | null>(null);
+  const [bulkArchiveOpen, setBulkArchiveOpen] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -440,6 +684,7 @@ export default function ProductsPage() {
       if (filters.q) p.set("q", filters.q);
       if (filters.category_id) p.set("category_id", filters.category_id);
       if (filters.is_service) p.set("is_service", filters.is_service);
+      if (filters.include_archived) p.set("include_archived", "true");
       setRows((await api.get<Product[]>(`/warehouse/products?${p}`)).data);
     } catch (e) {
       toast.error(getErrorMessage(e, t("ui__ошибка_c6fd3c6a")));
@@ -456,6 +701,10 @@ export default function ProductsPage() {
       api
         .get<Warehouse[]>("/warehouse/warehouses")
         .then((r) => setWarehouses(r.data))
+        .catch(() => {}),
+      api
+        .get<Supplier[]>("/supplier/suppliers")
+        .then((r) => setSuppliers(r.data))
         .catch(() => {}),
     ]);
     load();
@@ -478,11 +727,11 @@ export default function ProductsPage() {
         dim_width: toNum(form.dim_width),
         dim_height: toNum(form.dim_height),
         dim_weight: toNum(form.dim_weight),
-        extra_barcodes: form.extra_barcodes?.filter(Boolean) || [],
         tag_ids: form.tag_ids || [],
         product_type: form.product_type?.trim() || null,
         default_rack_id: form.default_rack_id || null,
         default_cell_id: form.default_cell_id || null,
+        default_supplier_id: form.default_supplier_id || null,
       };
       if (editId) await api.put(`/warehouse/products/${editId}`, payload);
       else await api.post("/warehouse/products", payload);
@@ -565,13 +814,11 @@ export default function ProductsPage() {
         dim_height: String(d.dim_height ?? ""),
         dim_weight: String(d.dim_weight ?? ""),
         description: String(d.description ?? ""),
-        extra_barcodes: ((d.extra_barcodes as Array<{ barcode: string }>) || []).map(
-          (b) => b.barcode
-        ),
         tag_ids: ((d.tags as Array<{ id: number }>) || []).map((tg) => tg.id),
         product_type: String(d.product_type ?? ""),
         default_rack_id: (d.default_rack_id as number) || null,
         default_cell_id: (d.default_cell_id as string) || null,
+        default_supplier_id: (d.default_supplier_id as string) || null,
       });
     } catch {
       setForm({
@@ -588,10 +835,48 @@ export default function ProductsPage() {
         product_type: r.product_type || "",
         default_rack_id: r.default_rack_id || null,
         default_cell_id: r.default_cell_id || null,
+        default_supplier_id: r.default_supplier_id || null,
       });
     }
     setEditId(r.id);
     setOpen(true);
+  }
+
+  async function handleArchiveAction() {
+    if (!archiveTarget) return;
+    const { product, action } = archiveTarget;
+    setArchiving(true);
+    try {
+      await api.post(`/warehouse/products/${product.id}/${action}`);
+      toast.success(
+        action === "archive" ? tw("action_archive") : tw("action_unarchive")
+      );
+      setArchiveTarget(null);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, t("ui__ошибка_c6fd3c6a")));
+    } finally {
+      setArchiving(false);
+    }
+  }
+
+  async function handleBulkArchive() {
+    setArchiving(true);
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          api.post(`/warehouse/products/${id}/archive`)
+        )
+      );
+      toast.success(tw("bulk_archive"));
+      setSelectedIds(new Set());
+      setBulkArchiveOpen(false);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, t("ui__ошибка_c6fd3c6a")));
+    } finally {
+      setArchiving(false);
+    }
   }
 
   const tb = useTranslations("warehouse.bom");
@@ -651,9 +936,23 @@ export default function ProductsPage() {
     { key: "sku", header: "SKU", width: "120px", render: (r) => r.sku || "—" },
     {
       key: "barcode",
-      header: t("ui__штрих_код_067fa0f2"),
-      width: "140px",
-      render: (r) => r.barcode || "—",
+      header: tw("col_barcode"),
+      width: "160px",
+      render: (r) => {
+        const primary = r.primary_barcode || r.barcode;
+        const count = r.active_barcode_count;
+        if (!primary) return <span className="text-ink-400">—</span>;
+        return (
+          <span className="font-mono text-xs flex items-center gap-1">
+            {primary}
+            {count && count > 1 && (
+              <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-1 rounded">
+                {tw("col_barcode_count", { n: count - 1 })}
+              </span>
+            )}
+          </span>
+        );
+      },
     },
     {
       key: "mxik",
@@ -663,12 +962,31 @@ export default function ProductsPage() {
         <span className="font-mono text-xs">{r.mxik || "—"}</span>
       ),
     },
-    { key: "name", header: t("ui__название_602680ed") },
+    {
+      key: "name",
+      header: t("ui__название_602680ed"),
+      render: (r) => (
+        <span className="flex items-center gap-1.5">
+          {r.name}
+          {r.is_archived && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+              {tw("archived")}
+            </span>
+          )}
+        </span>
+      ),
+    },
     {
       key: "category_name",
       header: t("ui__категория_c95a1e2d"),
       width: "140px",
       render: (r) => r.category_name || "—",
+    },
+    {
+      key: "default_supplier_name" as keyof Product,
+      header: tw("col_supplier"),
+      width: "140px",
+      render: (r) => r.default_supplier_name || "—",
     },
     {
       key: "product_type",
@@ -773,6 +1091,61 @@ export default function ProductsPage() {
         ]
       : []),
     {
+      key: "barcode_action" as keyof Product,
+      header: "",
+      align: "center" as const,
+      width: "70px",
+      render: (r: Product) => (
+        <button
+          type="button"
+          title={tw("barcodes_title")}
+          onClick={(e) => {
+            e.stopPropagation();
+            setBarcodesTarget(r);
+          }}
+          className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-ink-300 dark:border-ink-600 text-ink-600 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-800 transition-colors"
+        >
+          <Barcode size={12} />
+        </button>
+      ),
+    },
+    ...(can("warehouse.product_archive")
+      ? [
+          {
+            key: "archive_action" as keyof Product,
+            header: "",
+            align: "center" as const,
+            width: "70px",
+            render: (r: Product) =>
+              r.is_archived ? (
+                <button
+                  type="button"
+                  title={tw("action_unarchive")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setArchiveTarget({ product: r, action: "unarchive" });
+                  }}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+                >
+                  <ArchiveRestore size={12} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  title={tw("action_archive")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setArchiveTarget({ product: r, action: "archive" });
+                  }}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <Archive size={12} />
+                </button>
+              ),
+          },
+        ]
+      : []),
+    {
       key: "print_action" as keyof Product,
       header: "",
       align: "center" as const,
@@ -800,6 +1173,16 @@ export default function ProductsPage() {
 
   const toolbarActions = (
     <div className="flex items-center gap-2 flex-wrap">
+      {selectedIds.size > 0 && can("warehouse.product_archive") && (
+        <button
+          type="button"
+          onClick={() => setBulkArchiveOpen(true)}
+          className="inline-flex items-center gap-1.5 border border-zinc-400 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-900/30 hover:bg-zinc-100 dark:hover:bg-zinc-900/50 text-zinc-700 dark:text-zinc-300 text-[clamp(12px,1.6vw,13px)] font-medium px-3 py-1.5 rounded-md transition-colors whitespace-nowrap"
+        >
+          <Archive size={14} />
+          {tw("bulk_archive")} ({selectedIds.size})
+        </button>
+      )}
       {selectedIds.size > 0 && (
         <button
           type="button"
@@ -878,22 +1261,37 @@ export default function ProductsPage() {
             ))}
           </select>
         </div>
-        <div className="flex items-end gap-2">
-          <select
-            className={input}
-            value={filters.is_service}
-            onChange={(e) => setFilters({ ...filters, is_service: e.target.value })}
-          >
-            <option value="">{t("ui__все_типы_eb6499ca")}</option>
-            <option value="false">{t("ui__товары_2ccd69a3")}</option>
-            <option value="true">{t("ui__услуги_4e1a0e95")}</option>
-          </select>
+        <div className="flex items-end gap-2 flex-col sm:flex-row">
+          <div className="flex-1 w-full">
+            <select
+              className={input}
+              value={filters.is_service}
+              onChange={(e) => setFilters({ ...filters, is_service: e.target.value })}
+            >
+              <option value="">{t("ui__все_типы_eb6499ca")}</option>
+              <option value="false">{t("ui__товары_2ccd69a3")}</option>
+              <option value="true">{t("ui__услуги_4e1a0e95")}</option>
+            </select>
+          </div>
           <button
             onClick={load}
-            className="px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
+            className="px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700 whitespace-nowrap"
           >
             {t("ui__фильтр_2f884b41")}
           </button>
+        </div>
+        <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center gap-2">
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded border-slate-300 text-brand-600 cursor-pointer"
+              checked={filters.include_archived}
+              onChange={(e) =>
+                setFilters({ ...filters, include_archived: e.target.checked })
+              }
+            />
+            {tw("filter_include_archived")}
+          </label>
         </div>
       </div>
 
@@ -923,11 +1321,18 @@ export default function ProductsPage() {
         {rows.map((r) => (
           <li
             key={r.id}
-            className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 text-sm"
+            className={`bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 text-sm ${r.is_archived ? "opacity-60" : ""}`}
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <div className="font-medium truncate">{r.name}</div>
+                <div className="font-medium truncate flex items-center gap-1.5">
+                  {r.name}
+                  {r.is_archived && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+                      {tw("archived")}
+                    </span>
+                  )}
+                </div>
                 {r.sku && (
                   <div className="text-xs text-slate-500 font-mono truncate">SKU: {r.sku}</div>
                 )}
@@ -936,13 +1341,23 @@ export default function ProductsPage() {
                     {t("mxik")}: {r.mxik}
                   </div>
                 )}
-                {r.barcode && (
+                {(r.primary_barcode || r.barcode) && (
                   <div className="text-xs text-slate-500 font-mono truncate">
-                    Barcode: {r.barcode}
+                    {tw("col_barcode")}: {r.primary_barcode || r.barcode}
+                    {r.active_barcode_count && r.active_barcode_count > 1 && (
+                      <span className="ml-1 text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 px-1 rounded">
+                        {tw("col_barcode_count", { n: r.active_barcode_count - 1 })}
+                      </span>
+                    )}
                   </div>
                 )}
                 {r.category_name && (
                   <div className="text-xs text-slate-400 truncate">{r.category_name}</div>
+                )}
+                {r.default_supplier_name && (
+                  <div className="text-xs text-slate-400 truncate">
+                    {tw("col_supplier")}: {r.default_supplier_name}
+                  </div>
                 )}
                 {r.product_type && (
                   <div className="text-xs text-slate-400 truncate">{r.product_type}</div>
@@ -970,7 +1385,7 @@ export default function ProductsPage() {
                 )}
               </div>
             </div>
-            <div className="flex gap-3 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+            <div className="flex gap-3 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 flex-wrap">
               <button
                 aria-label="Tahrirlash"
                 onClick={() => openEdit(r)}
@@ -994,6 +1409,36 @@ export default function ProductsPage() {
                   <ClipboardList size={11} />
                   BOM
                 </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setBarcodesTarget(r)}
+                className="text-xs text-ink-600 dark:text-ink-300 hover:text-ink-800 inline-flex items-center gap-1"
+                title={tw("barcodes_title")}
+              >
+                <Barcode size={11} />
+                {tw("barcodes_title")}
+              </button>
+              {can("warehouse.product_archive") && (
+                r.is_archived ? (
+                  <button
+                    type="button"
+                    onClick={() => setArchiveTarget({ product: r, action: "unarchive" })}
+                    className="text-xs text-emerald-600 hover:text-emerald-700 inline-flex items-center gap-1"
+                  >
+                    <ArchiveRestore size={11} />
+                    {tw("action_unarchive")}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setArchiveTarget({ product: r, action: "archive" })}
+                    className="text-xs text-zinc-600 hover:text-zinc-700 inline-flex items-center gap-1"
+                  >
+                    <Archive size={11} />
+                    {tw("action_archive")}
+                  </button>
+                )
               )}
               <button
                 type="button"
@@ -1118,7 +1563,28 @@ export default function ProductsPage() {
             </select>
           </Field>
 
-          {/* New field: product_type */}
+          <div className="col-span-2">
+            <Field label={tw("default_supplier")}>
+              <select
+                className={input}
+                value={form.default_supplier_id || ""}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    default_supplier_id: e.target.value || null,
+                  })
+                }
+              >
+                <option value="">{tw("default_supplier_placeholder")}</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
           <div className="col-span-2">
             <Field label={tw("product_type_label")}>
               <input
@@ -1191,25 +1657,29 @@ export default function ProductsPage() {
             </label>
           </div>
 
+          {editId && (
+            <div className="col-span-2 p-3 bg-slate-50 dark:bg-slate-900/40 rounded border border-slate-200 dark:border-slate-700">
+              <div className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                {tw("barcodes_title")}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  const product = rows.find((r) => r.id === editId);
+                  if (product) setBarcodesTarget(product);
+                }}
+                className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:text-brand-700 underline underline-offset-2"
+              >
+                <Barcode size={14} />
+                {tw("barcodes_title")}
+              </button>
+            </div>
+          )}
+
           <div className="col-span-2 grid grid-cols-2 gap-3 mt-2">
             <div className="col-span-2 text-xs font-semibold text-slate-500 uppercase">
-              Qo&apos;shimcha shtrix-kodlar
-            </div>
-            <div className="col-span-2">
-              <textarea
-                className={`${input} h-16 font-mono text-xs`}
-                placeholder="Har qatorda bitta shtrix-kod"
-                value={(form.extra_barcodes || []).join("\n")}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    extra_barcodes: e.target.value
-                      .split("\n")
-                      .map((s) => s.trim())
-                      .filter(Boolean),
-                  })
-                }
-              />
+              Qo&apos;shimcha ma&apos;lumotlar
             </div>
             <Field label="Quti shtrix-kodi">
               <input
@@ -1337,11 +1807,42 @@ export default function ProductsPage() {
         message={`«${deleteTarget?.name}» mahsulotini o'chirishni tasdiqlaysizmi?`}
       />
 
+      <ConfirmDialog
+        open={!!archiveTarget}
+        onClose={() => setArchiveTarget(null)}
+        onConfirm={handleArchiveAction}
+        title={
+          archiveTarget?.action === "archive"
+            ? tw("archive_title")
+            : tw("unarchive_title")
+        }
+        message={
+          archiveTarget?.action === "archive"
+            ? tw("archive_message", { name: archiveTarget.product.name })
+            : tw("unarchive_message", { name: archiveTarget?.product.name ?? "" })
+        }
+      />
+
+      <ConfirmDialog
+        open={bulkArchiveOpen}
+        onClose={() => setBulkArchiveOpen(false)}
+        onConfirm={handleBulkArchive}
+        title={tw("bulk_archive")}
+        message={`${selectedIds.size} ta mahsulot arxivlanadi. Davom etasizmi?`}
+      />
+
       <BomEditorModal
         open={!!bomTarget}
         onClose={() => setBomTarget(null)}
         productId={bomTarget?.id ?? ""}
         productName={bomTarget?.name ?? ""}
+      />
+
+      <BarcodesModal
+        open={!!barcodesTarget}
+        onClose={() => setBarcodesTarget(null)}
+        productId={barcodesTarget?.id ?? ""}
+        productName={barcodesTarget?.name ?? ""}
       />
 
       <LabelPrint

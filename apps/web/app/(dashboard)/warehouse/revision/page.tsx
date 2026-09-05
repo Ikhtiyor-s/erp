@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -10,125 +11,245 @@ import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { useTranslations } from "next-intl";
 
+type InventoryStatus =
+  | "draft"
+  | "in_progress"
+  | "paused"
+  | "pending_confirmation"
+  | "completed"
+  | "cancelled";
+
 type Inv = {
-  id: string; doc_number?: string; status: string;
-  started_at?: string; finished_at?: string; warehouse_name?: string;
+  id: string;
+  doc_number?: string;
+  status: InventoryStatus;
+  started_at?: string;
+  warehouse_name?: string;
+  blind_count?: boolean;
 };
+
 type Wh = { id: number; name: string };
 type Product = { id: string; name: string; sku?: string };
 
-const fmt = (v: any) => Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 3 });
+const STATUS_COLORS: Record<InventoryStatus, string> = {
+  draft: "text-zinc-500",
+  in_progress: "text-amber-600",
+  paused: "text-blue-600",
+  pending_confirmation: "text-purple-600",
+  completed: "text-emerald-600",
+  cancelled: "text-rose-500",
+};
 
 export default function RevisionPage() {
-  const t = useTranslations("ui");
+  const t = useTranslations("warehouse.inventory");
+  const router = useRouter();
+
   const [rows, setRows] = useState<Inv[]>([]);
   const [warehouses, setWarehouses] = useState<Wh[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<any | null>(null);
 
   const [whId, setWhId] = useState<number | "">("");
   const [notes, setNotes] = useState("");
+  const [blindCount, setBlindCount] = useState(false);
   const [items, setItems] = useState<{ product_id: string; product_name: string; actual_qty: string }[]>([]);
   const [productSearch, setProductSearch] = useState("");
   const [productOptions, setProductOptions] = useState<Product[]>([]);
+  const [saving, setSaving] = useState(false);
 
   async function load() {
     setLoading(true);
-    try { setRows((await api.get<Inv[]>("/warehouse/inventories")).data); }
-    finally { setLoading(false); }
+    try {
+      setRows((await api.get<Inv[]>("/warehouse/inventories")).data);
+    } catch {
+    } finally {
+      setLoading(false);
+    }
   }
+
   useEffect(() => {
-    api.get<Wh[]>("/warehouse/warehouses").then((r) => setWarehouses(r.data)).catch(() => {});
+    api
+      .get<Wh[]>("/warehouse/warehouses")
+      .then((r) => setWarehouses(r.data))
+      .catch(() => {});
     load();
   }, []);
 
   useEffect(() => {
     if (productSearch.length < 2) { setProductOptions([]); return; }
-    const t = setTimeout(() => {
-      api.get<Product[]>(`/warehouse/products?q=${encodeURIComponent(productSearch)}`)
-        .then((r) => setProductOptions(r.data.slice(0, 10))).catch(() => {});
+    const timer = setTimeout(() => {
+      api
+        .get<Product[]>(`/warehouse/products?q=${encodeURIComponent(productSearch)}`)
+        .then((r) => setProductOptions(r.data.slice(0, 10)))
+        .catch(() => {});
     }, 250);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [productSearch]);
 
   function addItem(p: Product) {
     if (items.some((i) => i.product_id === p.id)) return;
     setItems([...items, { product_id: p.id, product_name: p.name, actual_qty: "0" }]);
-    setProductSearch(""); setProductOptions([]);
+    setProductSearch("");
+    setProductOptions([]);
+  }
+
+  function openCreate() {
+    setWhId("");
+    setNotes("");
+    setBlindCount(false);
+    setItems([]);
+    setProductSearch("");
+    setProductOptions([]);
+    setOpen(true);
   }
 
   async function create() {
-    if (!whId || items.length === 0) { toast.error(t("ui__выберите_склад_и_хотя_бы_один__30cb8822")); return; }
+    if (!whId) { toast.error(t("validation_warehouse")); return; }
+    setSaving(true);
     try {
-      const payload = {
-        warehouse_id: Number(whId), notes,
-        items: items.map((i) => ({ product_id: i.product_id, actual_qty: Number(i.actual_qty) || 0 })),
+      const payload: Record<string, unknown> = {
+        warehouse_id: Number(whId),
+        notes,
+        blind_count: blindCount,
       };
-      await api.post("/warehouse/inventories", payload);
-      toast.success(t("ui__инвентаризация_создана_3ddabe63"));
-      setOpen(false); setItems([]); setWhId(""); setNotes(""); load();
-    } catch (e: any) { toast.error(getErrorMessage(e, "Xato")); }
-  }
-
-  async function openInv(r: Inv) {
-    const { data } = await api.get(`/warehouse/inventories/${r.id}`);
-    setView(data);
-  }
-
-  async function finish(id: string) {
-    if (!confirm("Inventarizatsiya yakunlansinmi? Qoldiqlar tuzatiladi.")) return;
-    try {
-      await api.post(`/warehouse/inventories/${id}/finish`);
-      toast.success(t("ui__завершено_остатки_обновлены_df82ddbe"));
-      setView(null); load();
-    } catch (e: any) { toast.error(getErrorMessage(e, "Xato")); }
+      if (items.length > 0) {
+        payload.items = items.map((i) => ({
+          product_id: i.product_id,
+          actual_qty: Number(i.actual_qty) || 0,
+        }));
+      }
+      const { data } = await api.post<{ id: string }>("/warehouse/inventories", payload);
+      toast.success(t("created_ok"));
+      setOpen(false);
+      router.push(`/warehouse/revision/${data.id}`);
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, t("load_error")));
+    } finally {
+      setSaving(false);
+    }
   }
 
   const columns: Column<Inv>[] = [
-    { key: "doc_number", header: "���", render: (r) => r.doc_number || r.id.slice(0, 8), width: "100px" },
-    { key: "warehouse_name", header: t("ui__склад_e8bf999f") },
     {
-      key: "status", header: t("ui__статус_7203f7a4"), width: "140px", render: (r) => (
-        <span className={r.status === "completed" ? "text-green-600" : "text-yellow-600"}>
-          {r.status === "completed" ? "Yakunlandi" : "Jarayonda"}
+      key: "doc_number",
+      header: t("col_doc"),
+      width: "120px",
+      render: (r) => r.doc_number || r.id.slice(0, 8),
+    },
+    { key: "warehouse_name", header: t("col_warehouse") },
+    {
+      key: "status",
+      header: t("col_status"),
+      width: "160px",
+      render: (r) => (
+        <span className={`text-sm font-medium ${STATUS_COLORS[r.status] ?? ""}`}>
+          {t(`status_${r.status}` as Parameters<typeof t>[0])}
         </span>
       ),
     },
-    { key: "started_at", header: t("ui__начато_bc2e48ae"), width: "160px",
-      render: (r) => r.started_at ? new Date(r.started_at).toLocaleString("ru-RU") : "���" },
+    {
+      key: "blind_count" as keyof Inv,
+      header: t("blind_count"),
+      width: "100px",
+      render: (r) =>
+        r.blind_count ? (
+          <span className="text-xs bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-full px-2 py-0.5">
+            {t("blind_count_badge")}
+          </span>
+        ) : null,
+    },
+    {
+      key: "started_at",
+      header: t("col_started"),
+      width: "160px",
+      render: (r) =>
+        r.started_at ? new Date(r.started_at).toLocaleString("ru-RU") : "—",
+    },
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("ui__инвентаризации_8a20523f")} description={t("ui__сверка_фактических_остатков_e9822c6d")}
-        onCreate={() => setOpen(true)} createLabel={t("ui__новая_инвентаризация_e78e9c5b")} />
-      <DataTable columns={columns} rows={rows} loading={loading}
-        onEdit={openInv} />
+      <PageHeader
+        title={t("title")}
+        description={t("description")}
+        onCreate={openCreate}
+        createLabel={t("new_btn")}
+      />
 
-      <Modal open={open} onClose={() => setOpen(false)} size="lg" title={t("ui__новая_инвентаризация_e78e9c5b")}>
+      {!loading && rows.length === 0 ? (
+        <p className="text-sm text-ink-400 dark:text-ink-500 text-center py-10">{t("empty")}</p>
+      ) : (
+        <DataTable
+          columns={columns}
+          rows={rows}
+          loading={loading}
+          onEdit={(r) => router.push(`/warehouse/revision/${r.id}`)}
+        />
+      )}
+
+      <Modal open={open} onClose={() => setOpen(false)} size="lg" title={t("new_btn")}>
         <div className="space-y-3">
-          <Field label={t("ui__склад_e8bf999f")} required>
-            <select className={input} value={whId}
-              onChange={(e) => setWhId(e.target.value ? Number(e.target.value) : "")}>
-              <option value="">{t("ui__выберите_edab92dd")}</option>
-              {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          <Field label={t("warehouse_label")} required>
+            <select
+              className={input}
+              value={whId}
+              onChange={(e) => setWhId(e.target.value ? Number(e.target.value) : "")}
+            >
+              <option value="">{t("select_warehouse")}</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
             </select>
           </Field>
-          <Field label={t("ui__примечание_686eb72b")}>
-            <input className={input} value={notes} onChange={(e) => setNotes(e.target.value)} />
+
+          <Field label={t("notes_label")}>
+            <input
+              className={input}
+              placeholder={t("notes_placeholder")}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
           </Field>
 
-          <Field label={t("ui__добавить_товары_db2bb4a6")}>
+          <div className="flex items-start gap-3 rounded-md border border-ink-200 dark:border-ink-800 bg-ink-50 dark:bg-ink-900/40 p-3">
+            <input
+              type="checkbox"
+              id="blind_count_chk"
+              checked={blindCount}
+              onChange={(e) => setBlindCount(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500"
+            />
+            <label htmlFor="blind_count_chk" className="cursor-pointer">
+              <div className="text-sm font-medium text-ink-900 dark:text-ink-100">
+                {t("blind_count")}
+              </div>
+              <div className="text-xs text-ink-500 dark:text-ink-400 mt-0.5">
+                {t("blind_count_hint")}
+              </div>
+            </label>
+          </div>
+
+          <Field label={t("product_search")}>
             <div className="relative">
-              <input className={input} placeholder={t("ui__поиск_товара_b493d1bc")}
-                value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
+              <input
+                className={input}
+                placeholder={t("product_search")}
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+              />
               {productOptions.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border rounded-md shadow-lg max-h-48 overflow-auto">
+                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-ink-900 border border-ink-200 dark:border-ink-700 rounded-md shadow-lg max-h-48 overflow-auto">
                   {productOptions.map((p) => (
-                    <button key={p.id} onClick={() => addItem(p)}
-                      className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:bg-slate-900/40">
-                      {p.name} {p.sku && <span className="text-slate-400">({p.sku})</span>}
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => addItem(p)}
+                      className="block w-full text-left px-3 py-2 text-sm hover:bg-ink-50 dark:hover:bg-ink-800"
+                    >
+                      {p.name}{" "}
+                      {p.sku && <span className="text-ink-400">({p.sku})</span>}
                     </button>
                   ))}
                 </div>
@@ -139,10 +260,10 @@ export default function RevisionPage() {
           {items.length > 0 && (
             <div className="border rounded-md max-h-64 overflow-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-900/40">
+                <thead className="bg-ink-50 dark:bg-ink-900/40">
                   <tr>
-                    <th className="px-3 py-2 text-left">{t("ui__товар_8b35db64")}</th>
-                    <th className="px-3 py-2 text-right w-32">{t("ui__факт_0a982a27")}</th>
+                    <th className="px-3 py-2 text-left">{t("col_product")}</th>
+                    <th className="px-3 py-2 text-right w-32">{t("col_actual")}</th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
@@ -151,15 +272,26 @@ export default function RevisionPage() {
                     <tr key={it.product_id} className="border-t">
                       <td className="px-3 py-2">{it.product_name}</td>
                       <td className="px-3 py-2 text-right">
-                        <input type="number" step="0.001" value={it.actual_qty}
+                        <input
+                          type="number"
+                          step="0.001"
+                          value={it.actual_qty}
                           onChange={(e) => {
-                            const next = [...items]; next[idx].actual_qty = e.target.value; setItems(next);
+                            const next = [...items];
+                            next[idx] = { ...next[idx], actual_qty: e.target.value };
+                            setItems(next);
                           }}
-                          className="w-24 border rounded px-2 py-1 text-right text-sm" />
+                          className="w-24 border border-ink-200 dark:border-ink-700 rounded px-2 py-1 text-right text-sm bg-white dark:bg-ink-950"
+                        />
                       </td>
                       <td className="text-center">
-                        <button onClick={() => setItems(items.filter((_, i) => i !== idx))}
-                          className="text-red-600 hover:bg-red-50 p-1 rounded"><Trash2 size={14} /></button>
+                        <button
+                          type="button"
+                          onClick={() => setItems(items.filter((_, i) => i !== idx))}
+                          className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 p-1 rounded"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -169,56 +301,23 @@ export default function RevisionPage() {
           )}
 
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={create} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__создать_b059f7e1")}</button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="px-4 py-2 text-sm rounded-md border border-ink-300 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800"
+            >
+              {t("action_cancel")}
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={create}
+              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
+            >
+              {saving ? "..." : t("new_btn")}
+            </button>
           </div>
         </div>
-      </Modal>
-
-      <Modal open={!!view} onClose={() => setView(null)} size="lg"
-        title={view ? `Inventarizatsiya ��� ${view.head.warehouse_name}` : ""}>
-        {view && (
-          <div className="space-y-4">
-            <div className="text-sm">
-              <span className="text-slate-500 dark:text-slate-400">{t("ui__статус_9fa7ff8e")} </span>
-              <span className={view.head.status === "completed" ? "text-green-600 font-semibold" : "text-yellow-600 font-semibold"}>
-                {view.head.status === "completed" ? "Yakunlandi" : "Jarayonda"}
-              </span>
-            </div>
-            <div className="border rounded-md max-h-72 overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-900/40">
-                  <tr>
-                    <th className="px-3 py-2 text-left">{t("ui__товар_8b35db64")}</th>
-                    <th className="px-3 py-2 text-right">{t("ui__ожид_210bf841")}</th>
-                    <th className="px-3 py-2 text-right">{t("ui__факт_0a982a27")}</th>
-                    <th className="px-3 py-2 text-right">{t("ui__разница_fdb76087")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {view.items.map((i: any) => (
-                    <tr key={i.product_id} className="border-t">
-                      <td className="px-3 py-2">{i.name}</td>
-                      <td className="px-3 py-2 text-right font-mono">{fmt(i.expected_qty)}</td>
-                      <td className="px-3 py-2 text-right font-mono">{fmt(i.actual_qty)}</td>
-                      <td className={`px-3 py-2 text-right font-mono ${Number(i.diff_qty) < 0 ? "text-red-600" : Number(i.diff_qty) > 0 ? "text-green-600" : ""}`}>
-                        {fmt(i.diff_qty)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {view.head.status !== "completed" && (
-              <div className="flex justify-end">
-                <button onClick={() => finish(view.head.id)}
-                  className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">
-                  {t("ui__завершить_и_применить_510732e2")}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
       </Modal>
     </div>
   );

@@ -19,7 +19,10 @@ type Cashbox = {
   is_active: boolean;
   responsible_id?: string;
   responsible_name?: string;
+  warehouse_id?: number | null;
+  warehouse_name?: string | null;
 };
+type Warehouse = { id: number; name: string };
 type Currency = { id: number; code: string };
 type Movement = {
   id: number;
@@ -36,7 +39,7 @@ type Movement = {
   payment_type_name?: string;
 };
 
-const emptyCB = { name: "", currency_id: null as number | null };
+const emptyCB = { name: "", currency_id: null as number | null, warehouse_id: null as number | null };
 const emptyMV = { cashbox_id: null as number | null, direction: "in" as "in" | "out", amount: 0, description: "" };
 const emptyTR = { from_cashbox_id: null as number | null, to_cashbox_id: null as number | null, amount: 0, description: "" };
 
@@ -44,9 +47,11 @@ const fmt = (v: any) => Number(v || 0).toLocaleString("ru-RU", { maximumFraction
 
 export default function CashPage() {
   const t = useTranslations("ui");
+  const tCB = useTranslations("finance.cashbox");
   const [boxes, setBoxes] = useState<Cashbox[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterCB, setFilterCB] = useState<number | null>(null);
 
@@ -68,15 +73,24 @@ export default function CashPage() {
 
   useEffect(() => {
     api.get<Currency[]>("/reference/currencies").then((r) => setCurrencies(r.data)).catch(() => {});
+    api.get<Warehouse[]>("/warehouse/warehouses").then((r) => {
+      setWarehouses(r.data || []);
+    }).catch(() => {});
     (async () => {
       setLoading(true); await loadBoxes(); await loadMovements(); setLoading(false);
     })();
   }, []);
 
   async function saveCashbox() {
+    if (!cbEditId && !cbForm.warehouse_id) {
+      toast.error(tCB("warehouse_required"));
+      return;
+    }
     try {
-      if (cbEditId) await api.put(`/finance/cashboxes/${cbEditId}`, cbForm);
-      else await api.post("/finance/cashboxes", cbForm);
+      const payload = { ...cbForm };
+      if (!payload.warehouse_id) delete payload.warehouse_id;
+      if (cbEditId) await api.put(`/finance/cashboxes/${cbEditId}`, payload);
+      else await api.post("/finance/cashboxes", payload);
       toast.success(t("ui__сохранено_54a59b19")); setCbOpen(false); setCbForm(emptyCB); setCbEditId(null); loadBoxes();
     } catch (e) { toast.error(getErrorMessage(e, "Xato")); }
   }
@@ -124,6 +138,12 @@ export default function CashPage() {
       header: t("ui__валюта_cf55d9a9"),
       width: "100px",
       render: (r) => r.currency_code || curCode(r.currency_id) || "—",
+    },
+    {
+      key: "warehouse_name" as keyof Cashbox,
+      header: tCB("warehouse_label"),
+      width: "160px",
+      render: (r) => r.warehouse_name || "—",
     },
     {
       key: "responsible_name",
@@ -241,7 +261,7 @@ export default function CashPage() {
         onCreate={() => { setCbForm(emptyCB); setCbEditId(null); setCbOpen(true); }} createLabel={t("ui__добавить_кассу_6e7a1891")} />
 
       <DataTable columns={boxCols} rows={boxes} loading={loading}
-        onEdit={(r) => { setCbForm({ name: r.name, currency_id: r.currency_id }); setCbEditId(r.id); setCbOpen(true); }}
+        onEdit={(r) => { setCbForm({ name: r.name, currency_id: r.currency_id, warehouse_id: r.warehouse_id ?? null }); setCbEditId(r.id); setCbOpen(true); }}
         onDelete={delCashbox} />
 
       <div className="flex items-center justify-between mt-8">
@@ -280,9 +300,28 @@ export default function CashPage() {
               {currencies.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}
             </select>
           </Field>
+          <Field label={tCB("warehouse_label")} required={!cbEditId}>
+            <select
+              className={`${input} ${!cbEditId && !cbForm.warehouse_id ? "border-red-300 focus:border-red-400 focus:ring-red-300/30" : ""}`}
+              value={cbForm.warehouse_id || ""}
+              onChange={(e) => setCbForm({ ...cbForm, warehouse_id: e.target.value ? Number(e.target.value) : null })}
+            >
+              <option value="">{cbEditId ? "— o'zgartirmaslik —" : t("ui__выбрать_fbbc1d13")}</option>
+              {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+            {!cbEditId && !cbForm.warehouse_id && (
+              <p className="text-xs text-red-500 mt-0.5">{tCB("warehouse_required")}</p>
+            )}
+          </Field>
           <div className="flex justify-end gap-2 pt-2">
             <button onClick={() => setCbOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={saveCashbox} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+            <button
+              onClick={saveCashbox}
+              disabled={!cbEditId && !cbForm.warehouse_id}
+              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {t("ui__сохранить_74ea58b6")}
+            </button>
           </div>
         </div>
       </Modal>

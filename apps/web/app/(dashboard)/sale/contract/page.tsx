@@ -40,6 +40,7 @@ type PickProgress = {
 type Customer = { id: string; name: string };
 type Warehouse = { id: number; name: string };
 type Currency = { id: number; code: string; is_base: boolean };
+type CashboxOption = { id: number; name: string; warehouse_id?: number | null; warehouse_name?: string | null };
 
 type BomComponent = {
   component_id: string;
@@ -61,7 +62,9 @@ type Line = {
 
 const empty = () => ({
   customer_id: "",
+  cashbox_id: null as number | null,
   warehouse_id: null as number | null,
+  warehouse_overridden: false,
   currency_id: null as number | null,
   notes: "",
   items: [] as Line[],
@@ -145,6 +148,7 @@ export default function SaleContractPage() {
   const [pickMap, setPickMap] = useState<Record<string, PickProgress>>({});
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [cashboxes, setCashboxes] = useState<CashboxOption[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -209,6 +213,7 @@ export default function SaleContractPage() {
       api.get<Customer[]>("/customer/customers?limit=200").then((r) => setCustomers(r.data)).catch(() => {}),
       api.get<Warehouse[]>("/warehouse/warehouses").then((r) => setWarehouses(r.data)).catch(() => {}),
       api.get<Currency[]>("/reference/currencies").then((r) => setCurrencies(r.data)).catch(() => {}),
+      api.get<CashboxOption[]>("/finance/cashboxes").then((r) => setCashboxes(r.data || [])).catch(() => {}),
     ]);
     load();
   }, []);
@@ -257,6 +262,24 @@ export default function SaleContractPage() {
     }));
   }
 
+  function handleCashboxChange(cid: number | null) {
+    const cb = cid ? cashboxes.find((c) => c.id === cid) : null;
+    if (cb?.warehouse_id) {
+      if (form.items.length > 0 && cb.warehouse_id !== form.warehouse_id) {
+        setWarehouseChangeTarget(cb.warehouse_id);
+        setConfirmWarehouseOpen(true);
+        setForm((f) => ({ ...f, cashbox_id: cid }));
+      } else {
+        setForm((f) => ({ ...f, cashbox_id: cid, warehouse_id: cb.warehouse_id!, warehouse_overridden: false, items: [] }));
+        bomCacheRef.current = {};
+        setBomCache({});
+        setExpandedBom({});
+      }
+    } else {
+      setForm((f) => ({ ...f, cashbox_id: cid }));
+    }
+  }
+
   function handleWarehouseChange(newWid: number | null) {
     if (form.items.length > 0 && newWid !== form.warehouse_id) {
       setWarehouseChangeTarget(newWid);
@@ -270,7 +293,7 @@ export default function SaleContractPage() {
   }
 
   function confirmWarehouseChange() {
-    setForm((f) => ({ ...f, warehouse_id: warehouseChangeTarget, items: [] }));
+    setForm((f) => ({ ...f, warehouse_id: warehouseChangeTarget, items: [], warehouse_overridden: f.cashbox_id ? false : f.warehouse_overridden }));
     bomCacheRef.current = {};
     setBomCache({});
     setExpandedBom({});
@@ -292,9 +315,8 @@ export default function SaleContractPage() {
     if (hasInvalidQty) return toast.error(tSale("qty_error"));
     setSaving(true);
     try {
-      await api.post("/sale/sales", {
+      const payload: Record<string, unknown> = {
         customer_id: form.customer_id || null,
-        warehouse_id: form.warehouse_id,
         currency_id: form.currency_id,
         notes: form.notes,
         items: form.items.map((i) => ({
@@ -303,7 +325,16 @@ export default function SaleContractPage() {
           price: i.price,
           discount: i.discount,
         })),
-      });
+      };
+      if (form.cashbox_id) {
+        payload.cashbox_id = form.cashbox_id;
+        if (form.warehouse_overridden && form.warehouse_id) {
+          payload.warehouse_id = form.warehouse_id;
+        }
+      } else {
+        payload.warehouse_id = form.warehouse_id;
+      }
+      await api.post("/sale/sales", payload);
       toast.success(t("ui__продажа_создана_4b75175b"));
       setOpen(false);
       setForm(empty());
@@ -569,17 +600,46 @@ export default function SaleContractPage() {
                 ))}
               </select>
             </Field>
+            {cashboxes.length > 0 && (
+              <Field label={tSale("cashbox_label")}>
+                <select
+                  className={input}
+                  value={form.cashbox_id || ""}
+                  onChange={(e) => handleCashboxChange(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">{tSale("cashbox_placeholder")}</option>
+                  {cashboxes.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <Field label={t("ui__склад_e8bf999f")} required>
-              <select
-                className={input}
-                value={form.warehouse_id || ""}
-                onChange={(e) => handleWarehouseChange(e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">{t("ui__выбрать_fbbc1d13")}</option>
-                {warehouses.map((w) => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
-              </select>
+              {form.cashbox_id && !can("sale.change_warehouse") ? (
+                <div className={`${input} bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-400 cursor-not-allowed`}>
+                  {cashboxes.find((c) => c.id === form.cashbox_id)?.warehouse_name
+                    || warehouses.find((w) => w.id === form.warehouse_id)?.name
+                    || t("ui__выбрать_fbbc1d13")}
+                  <span className="block text-xs text-slate-400 mt-0.5">{tSale("warehouse_auto_hint")}</span>
+                </div>
+              ) : (
+                <select
+                  className={input}
+                  value={form.warehouse_id || ""}
+                  onChange={(e) => {
+                    const wid = e.target.value ? Number(e.target.value) : null;
+                    if (form.cashbox_id) {
+                      setForm((f) => ({ ...f, warehouse_overridden: true }));
+                    }
+                    handleWarehouseChange(wid);
+                  }}
+                >
+                  <option value="">{t("ui__выбрать_fbbc1d13")}</option>
+                  {warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              )}
             </Field>
             <Field label={t("ui__валюта_cf55d9a9")} required>
               <select

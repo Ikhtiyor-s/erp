@@ -117,6 +117,8 @@ export const menuTree: MenuGroup[] = [
       { i18nKey: "warehouse_revision",            label: "Инвентаризации",        href: "/warehouse/revision",          permission: "warehouse.inventory" },
       { i18nKey: "warehouse_write_off",           label: "Списания",              href: "/warehouse/write-off",         permission: "warehouse.write_off" },
       { i18nKey: "warehouse_write_off_reason",    label: "Причины списания",      href: "/warehouse/write-off-reason",  permission: "warehouse.write_off" },
+      { i18nKey: "warehouse_stock_in",            label: "Оприходование",         href: "/warehouse/stock-in",          permission: "warehouse.manage_stock_ins" },
+      { i18nKey: "warehouse_stock_in_reason",     label: "Причины оприх.",        href: "/warehouse/stock-in-reason",   permission: "warehouse.manage_stock_ins" },
       { i18nKey: "warehouse_internal_transfers",  label: "Внутр. переводы",       href: "/warehouse/internal-transfers", permission: "warehouse.transfer.view" },
       { i18nKey: "warehouse_requests",            label: "Заявки на товар",        href: "/warehouse/requests",           permission: "warehouse.request.view" },
 
@@ -154,9 +156,10 @@ export const menuTree: MenuGroup[] = [
     icon: Truck,
     permission: "supplier.view",
     children: [
-      { i18nKey: "supply_purchases",      label: "Покупки",        href: "/supply/purchases" },
-      { i18nKey: "supply_purchase_order", label: "Заказ на закуп", href: "/supply/purchase-order" },
-      { i18nKey: "supply_suppliers",      label: "Поставщики",     href: "/supplier/suppliers" },
+      { i18nKey: "supply_purchases",      label: "Покупки",               href: "/supply/purchases" },
+      { i18nKey: "supply_purchase_order", label: "Заказ на закуп",        href: "/supply/purchase-order" },
+      { i18nKey: "supply_suppliers",      label: "Поставщики",            href: "/supplier/suppliers" },
+      { i18nKey: "supply_returns",        label: "Возвраты поставщикам",  href: "/supplier/returns", permission: "supplier.return.view" },
     ],
   },
 
@@ -237,6 +240,7 @@ export const menuTree: MenuGroup[] = [
       { i18nKey: "stats_production",           label: "Производство",           href: "/statistics/statistics-production" },
       { i18nKey: "stats_by_responsible",       label: "По ответственному",      href: "/statistics/by-responsible" },
       { i18nKey: "stats_recommended",          label: "Рекомендуемое произв-во",href: "/statistics/recommended-production-stock" },
+      { i18nKey: "stats_cogs_report",           label: "COGS va yalpi foyda",    href: "/statistics/cogs-report",                  permission: "statistics.cogs.view" },
     ],
   },
 
