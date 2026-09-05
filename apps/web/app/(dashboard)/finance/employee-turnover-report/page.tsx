@@ -1,14 +1,12 @@
 "use client";
 
-import { TurnoverReport } from "@/components/reports/TurnoverReport";
-import { useTranslations } from "next-intl";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-export default function Page() {
-  const t = useTranslations("ui");
-  return <TurnoverReport
-    title={t("ui__оборот_по_сотрудникам_decadf23")}
-    description={t("ui__денежные_операции_по_сотрудник_a83ad9fa")}
-    endpoint="/finance/employee-turnover"
-    entityLabel="Xodim"
-  />;
+export default function EmployeeTurnoverPage() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/finance/turnover?tab=employee");
+  }, [router]);
+  return null;
 }
