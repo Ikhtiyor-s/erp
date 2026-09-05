@@ -1,9 +1,34 @@
 import { api } from "./api";
 
+// Fetch user's orgs and persist the first one as active so that api.ts
+// interceptor can attach X-Organization-Id on the very first request after
+// login. Without this, PermissionsProvider races Topbar and calls
+// /rbac/me/permissions before org_id is set, returning 400 and leaving the
+// sidebar empty until a manual refresh.
+async function ensureOrgId(): Promise<void> {
+  try {
+    const { data: orgs } = await api.get<Array<{ id: string }>>("/organizations/mine");
+    if (Array.isArray(orgs) && orgs.length > 0 && !localStorage.getItem("org_id")) {
+      localStorage.setItem("org_id", orgs[0].id);
+    }
+  } catch {
+    // Non-fatal: dashboard will fetch orgs itself; user just loses sidebar
+    // until refresh (pre-fix behavior).
+  }
+}
+
 export async function login(email: string, password: string) {
   const { data } = await api.post("/auth/login", { email, password });
   localStorage.setItem("access_token", data.access_token);
   localStorage.setItem("refresh_token", data.refresh_token);
+  if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
+  await ensureOrgId();
+  if (!data.user) {
+    try {
+      const me = await fetchMe();
+      if (me) localStorage.setItem("user", JSON.stringify(me));
+    } catch {}
+  }
   return data;
 }
 
@@ -16,6 +41,14 @@ export async function register(payload: {
   const { data } = await api.post("/auth/register", payload);
   localStorage.setItem("access_token", data.access_token);
   localStorage.setItem("refresh_token", data.refresh_token);
+  if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
+  await ensureOrgId();
+  if (!data.user) {
+    try {
+      const me = await fetchMe();
+      if (me) localStorage.setItem("user", JSON.stringify(me));
+    } catch {}
+  }
   return data;
 }
 

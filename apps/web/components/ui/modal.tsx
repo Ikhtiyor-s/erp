@@ -17,7 +17,14 @@ const FOCUSABLE_SELECTOR =
 export function Modal({ open, onClose, title, children, size = "md" }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
   const titleId = useId();
+
+  // Keep latest onClose in a ref so the effect below only runs on `open` flips.
+  // Without this, callers passing `() => setOpen(false)` create a new function
+  // every render and re-fire the effect — which refocuses the first input and
+  // scrolls the modal back to top on every keystroke/checkbox toggle.
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -41,7 +48,7 @@ export function Modal({ open, onClose, title, children, size = "md" }: Props) {
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab") return;
@@ -71,7 +78,7 @@ export function Modal({ open, onClose, title, children, size = "md" }: Props) {
       // Restore focus to whatever opened the modal
       previouslyFocusedRef.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

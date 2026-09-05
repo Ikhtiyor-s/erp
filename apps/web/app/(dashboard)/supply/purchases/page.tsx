@@ -72,9 +72,9 @@ export default function PurchasesPage() {
   const total = form.items.reduce((s, i) => s + (i.quantity * i.price), 0);
 
   async function save() {
-    if (!form.supplier_id) return toast.error(t("ui__����������������_��������������������_56de5b3b"));
-    if (!form.warehouse_id) return toast.error(t("ui__����������������_����������_b9bc3ffe"));
-    if (form.items.some((i) => !i.product_id)) return toast.error(t("ui__����������������_����������_����_��������_��������������_c53b1724"));
+    if (!form.supplier_id) return toast.error(t("ui__выберите_поставщика_56de5b3b"));
+    if (!form.warehouse_id) return toast.error(t("ui__выберите_склад_b9bc3ffe"));
+    if (form.items.some((i) => !i.product_id)) return toast.error(t("ui__выберите_товар_во_всех_строках_c53b1724"));
 
     try {
       await api.post("/supplier/supplies", {
@@ -88,7 +88,7 @@ export default function PurchasesPage() {
           price: Number(i.price),
         })),
       });
-      toast.success(t("ui__����������������������_��������������_0bd13714"));
+      toast.success(t("ui__поступление_создано_0bd13714"));
       setOpen(false); setForm(empty()); load();
     } catch (e: any) { toast.error(getErrorMessage(e, "Xato")); }
   }
@@ -102,24 +102,24 @@ export default function PurchasesPage() {
     },
     {
       key: "supply_date",
-      header: t("ui__��������_8cdd8bb7"),
+      header: t("ui__дата_8cdd8bb7"),
       width: "120px",
       render: (r) => new Date(r.supply_date).toLocaleDateString("ru-RU"),
     },
     {
       key: "supplier_name",
-      header: t("ui__������������������_b8fbf748"),
+      header: t("ui__поставщик_b8fbf748"),
       render: (r) => r.supplier_name || "���",
     },
     {
       key: "warehouse_name",
-      header: t("ui__����������_e8bf999f"),
+      header: t("ui__склад_e8bf999f"),
       width: "180px",
       render: (r) => r.warehouse_name || "���",
     },
     {
       key: "total_amount",
-      header: t("ui__����������_cf59ebf9"),
+      header: t("ui__сумма_cf59ebf9"),
       align: "right",
       width: "160px",
       render: (r) => (
@@ -132,14 +132,14 @@ export default function PurchasesPage() {
     },
     {
       key: "status",
-      header: t("ui__������������_7203f7a4"),
+      header: t("ui__статус_7203f7a4"),
       align: "center",
       width: "120px",
       render: (r) =>
         r.status === "received" ? (
-          <span className="text-green-600 dark:text-green-400">{t("ui__��������������_713e9366")}</span>
+          <span className="text-green-600 dark:text-green-400">{t("ui__принято_713e9366")}</span>
         ) : r.status === "cancelled" ? (
-          <span className="text-red-600 dark:text-red-400">{t("ui__����������������_81a04dab")}</span>
+          <span className="text-red-600 dark:text-red-400">{t("ui__отменено_81a04dab")}</span>
         ) : (
           <span className="text-slate-500 dark:text-slate-400">{r.status}</span>
         ),
@@ -148,28 +148,28 @@ export default function PurchasesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("ui__��������������_����������������������_837aa685")} description={t("ui__����������_��������������_����_����������������������_a3a7f235")}
-        onCreate={() => { setForm(empty()); setOpen(true); }} createLabel={t("ui__����������_����������������������_02990846")} />
+      <PageHeader title={t("ui__покупки_поступления_837aa685")} description={t("ui__прием_товаров_от_поставщиков_a3a7f235")}
+        onCreate={() => { setForm(empty()); setOpen(true); }} createLabel={t("ui__новое_поступление_02990846")} />
       <DataTable columns={columns} rows={rows} loading={loading} />
 
-      <Modal open={open} onClose={() => setOpen(false)} title={t("ui__����������_����������������������_02990846")} size="lg">
+      <Modal open={open} onClose={() => setOpen(false)} title={t("ui__новое_поступление_02990846")} size="lg">
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            <Field label={t("ui__������������������_b8fbf748")} required>
+            <Field label={t("ui__поставщик_b8fbf748")} required>
               <select className={input} value={form.supplier_id}
                 onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}>
-                <option value="">{t("ui__��������������_fbbc1d13")}</option>
+                <option value="">{t("ui__выбрать_fbbc1d13")}</option>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </Field>
-            <Field label={t("ui__����������_e8bf999f")} required>
+            <Field label={t("ui__склад_e8bf999f")} required>
               <select className={input} value={form.warehouse_id || ""}
                 onChange={(e) => setForm({ ...form, warehouse_id: e.target.value ? Number(e.target.value) : null })}>
-                <option value="">{t("ui__��������������_fbbc1d13")}</option>
+                <option value="">{t("ui__выбрать_fbbc1d13")}</option>
                 {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             </Field>
-            <Field label={t("ui__��������_8cdd8bb7")}>
+            <Field label={t("ui__дата_8cdd8bb7")}>
               <input type="date" className={input} value={form.supply_date}
                 onChange={(e) => setForm({ ...form, supply_date: e.target.value })} />
             </Field>
@@ -179,10 +179,10 @@ export default function PurchasesPage() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-300">
                 <tr>
-                  <th className="text-left px-3 py-2">{t("ui__����������_8b35db64")}</th>
-                  <th className="text-right px-3 py-2 w-28">{t("ui__��������������������_cb8bfd4d")}</th>
-                  <th className="text-right px-3 py-2 w-32">{t("ui__��������_682fa8db")}</th>
-                  <th className="text-right px-3 py-2 w-32">{t("ui__����������_cf59ebf9")}</th>
+                  <th className="text-left px-3 py-2">{t("ui__товар_8b35db64")}</th>
+                  <th className="text-right px-3 py-2 w-28">{t("ui__количество_cb8bfd4d")}</th>
+                  <th className="text-right px-3 py-2 w-32">{t("ui__цена_682fa8db")}</th>
+                  <th className="text-right px-3 py-2 w-32">{t("ui__сумма_cf59ebf9")}</th>
                   <th className="w-10"></th>
                 </tr>
               </thead>
@@ -192,7 +192,7 @@ export default function PurchasesPage() {
                     <td className="px-3 py-2">
                       <select className={input} value={it.product_id}
                         onChange={(e) => setLine(idx, "product_id", e.target.value)}>
-                        <option value="">{t("ui__����������_8c2c36d6")}</option>
+                        <option value="">{t("ui__товар_8c2c36d6")}</option>
                         {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
                     </td>
@@ -217,7 +217,7 @@ export default function PurchasesPage() {
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50 dark:bg-slate-900/40 font-semibold">
-                  <td className="px-3 py-2" colSpan={3}>{t("ui__����������_edcf3920")}</td>
+                  <td className="px-3 py-2" colSpan={3}>{t("ui__итого_edcf3920")}</td>
                   <td className="px-3 py-2 text-right">{total.toLocaleString("ru")}</td>
                   <td></td>
                 </tr>
@@ -226,17 +226,17 @@ export default function PurchasesPage() {
           </div>
 
           <button onClick={addLine} className="flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
-            <Plus size={14} /> {t("ui__����������������_������������_d70236f2")}
+            <Plus size={14} /> {t("ui__добавить_строку_d70236f2")}
           </button>
 
-          <Field label={t("ui__��������������_c8866295")}>
+          <Field label={t("ui__заметки_c8866295")}>
             <textarea className={input} rows={2} value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </Field>
 
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__������������_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__��������������_5dc5ad80")}</button>
+            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
+            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__принять_5dc5ad80")}</button>
           </div>
         </div>
       </Modal>

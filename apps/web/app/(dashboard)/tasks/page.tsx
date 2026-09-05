@@ -99,7 +99,7 @@ export default function TasksPage() {
 
   async function save() {
     if (!form.title) {
-      toast.error(t("ui__��������������_����������������_������������_893950ea"));
+      toast.error(t("ui__введите_название_задачи_893950ea"));
       return;
     }
     try {
@@ -110,7 +110,7 @@ export default function TasksPage() {
       };
       if (editId) await api.put(`/tasks/${editId}`, payload);
       else await api.post("/tasks", payload);
-      toast.success(t("ui__������������������_54a59b19"));
+      toast.success(t("ui__сохранено_54a59b19"));
       setOpen(false);
       load();
     } catch (e: any) {
@@ -120,7 +120,7 @@ export default function TasksPage() {
   async function setStatus(r: Task, status: string) {
     try {
       await api.put(`/tasks/${r.id}/status?status=${status}`);
-      toast.success(t("ui__������������_����������������_60431b86"));
+      toast.success(t("ui__статус_обновлён_60431b86"));
       load();
     } catch (e: any) {
       toast.error(getErrorMessage(e, "Xato"));
@@ -129,7 +129,7 @@ export default function TasksPage() {
   async function del(r: Task) {
     if (!confirm(`��${r.title}�� vazifasi o'chirilsinmi?`)) return;
     await api.delete(`/tasks/${r.id}`);
-    toast.success(t("ui__��������������_0c450c40"));
+    toast.success(t("ui__удалено_0c450c40"));
     load();
   }
 
@@ -143,7 +143,7 @@ export default function TasksPage() {
   const cols: Column<Task>[] = [
     {
       key: "priority",
-      header: t("ui__����������_18774995"),
+      header: t("ui__приор_18774995"),
       width: "100px",
       render: (r) => (
         <span
@@ -155,23 +155,23 @@ export default function TasksPage() {
         </span>
       ),
     },
-    { key: "title", header: t("ui__������������_fb65f812") },
+    { key: "title", header: t("ui__задача_fb65f812") },
     {
       key: "assignee_name",
-      header: t("ui__����������������������_1d3ab78a"),
+      header: t("ui__исполнитель_1d3ab78a"),
       width: "160px",
       render: (r) => r.assignee_name || "���",
     },
     {
       key: "due_date",
-      header: t("ui__��������_bae913f6"),
+      header: t("ui__срок_bae913f6"),
       width: "120px",
       render: (r) =>
         r.due_date ? new Date(r.due_date).toLocaleDateString("ru-RU") : "���",
     },
     {
       key: "status",
-      header: t("ui__������������_7203f7a4"),
+      header: t("ui__статус_7203f7a4"),
       width: "130px",
       render: (r) => (
         <span className={statusColor(r.status)}>{statusLabel(r.status)}</span>
@@ -189,7 +189,7 @@ export default function TasksPage() {
               <button
                 onClick={() => setStatus(r, "in_progress")}
                 className="p-1 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/30 rounded"
-                title={t("ui__��_������������_e8f15a73")}
+                title={t("ui__в_работу_e8f15a73")}
               >
                 <Clock size={14} />
               </button>
@@ -197,14 +197,14 @@ export default function TasksPage() {
             <button
               onClick={() => setStatus(r, "done")}
               className="p-1 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded"
-              title={t("ui__������������������_b0e3a5e0")}
+              title={t("ui__завершить_b0e3a5e0")}
             >
               <Check size={14} />
             </button>
             <button
               onClick={() => setStatus(r, "cancelled")}
               className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
-              title={t("ui__����������������_ecdbdc8b")}
+              title={t("ui__отменить_ecdbdc8b")}
             >
               <X size={14} />
             </button>
@@ -216,8 +216,8 @@ export default function TasksPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("ui__������������_73f223a4")}
-        description={t("ui__��������������������_����������������_��_����������������_b6533e28")}
+        title={t("ui__задачи_73f223a4")}
+        description={t("ui__управление_задачами_и_поручени_b6533e28")}
         onCreate={() => {
           setForm(empty);
           setEditId(null);
@@ -226,16 +226,16 @@ export default function TasksPage() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card label={t("ui__����������_e7ffde0e")} value={String(stats.total)} color="text-slate-900 dark:text-slate-100" />
-        <Card label={t("ui__��_��������������������_cef53737")} value={String(stats.todo)} color="text-slate-700 dark:text-slate-300" />
-        <Card label={t("ui__��_������������_8c92e34f")} value={String(stats.inProgress)} color="text-yellow-700 dark:text-yellow-400" />
-        <Card label={t("ui__������������������_c665d401")} value={String(stats.done)} color="text-green-700 dark:text-green-400" />
+        <Card label={t("ui__всего_e7ffde0e")} value={String(stats.total)} color="text-slate-900 dark:text-slate-100" />
+        <Card label={t("ui__к_выполнению_cef53737")} value={String(stats.todo)} color="text-slate-700 dark:text-slate-300" />
+        <Card label={t("ui__в_работе_8c92e34f")} value={String(stats.inProgress)} color="text-yellow-700 dark:text-yellow-400" />
+        <Card label={t("ui__выполнено_c665d401")} value={String(stats.done)} color="text-green-700 dark:text-green-400" />
       </div>
 
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="sm:col-span-2 relative">
           <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__����������_����������������_����������������_3176a313")}
+            {t("ui__поиск_название_описание_3176a313")}
           </label>
           <Search
             size={14}
@@ -243,7 +243,7 @@ export default function TasksPage() {
           />
           <input
             className={`${input} pl-8`}
-            placeholder={t("ui__����������_b84a8f87")}
+            placeholder={t("ui__поиск_b84a8f87")}
             value={filters.q}
             onChange={(e) => setFilters({ ...filters, q: e.target.value })}
             onKeyDown={(e) => e.key === "Enter" && load()}
@@ -251,23 +251,23 @@ export default function TasksPage() {
         </div>
         <div>
           <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__������������_7203f7a4")}
+            {t("ui__статус_7203f7a4")}
           </label>
           <select
             className={input}
             value={filters.status}
             onChange={(e) => setFilters({ ...filters, status: e.target.value })}
           >
-            <option value="">{t("ui__������_a07b234e")}</option>
-            <option value="todo">{t("ui__��_��������������������_cef53737")}</option>
-            <option value="in_progress">{t("ui__��_������������_8c92e34f")}</option>
-            <option value="done">{t("ui__������������������_c665d401")}</option>
-            <option value="cancelled">{t("ui__����������������_81a04dab")}</option>
+            <option value="">{t("ui__все_a07b234e")}</option>
+            <option value="todo">{t("ui__к_выполнению_cef53737")}</option>
+            <option value="in_progress">{t("ui__в_работе_8c92e34f")}</option>
+            <option value="done">{t("ui__выполнено_c665d401")}</option>
+            <option value="cancelled">{t("ui__отменено_81a04dab")}</option>
           </select>
         </div>
         <div>
           <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__������������������_a0f9f1af")}
+            {t("ui__приоритет_a0f9f1af")}
           </label>
           <select
             className={input}
@@ -276,11 +276,11 @@ export default function TasksPage() {
               setFilters({ ...filters, priority: e.target.value })
             }
           >
-            <option value="">{t("ui__������_a07b234e")}</option>
-            <option value="urgent">{t("ui__������������_bb71eea6")}</option>
-            <option value="high">{t("ui__��������������_bd128910")}</option>
-            <option value="normal">{t("ui__��������������_cc13e933")}</option>
-            <option value="low">{t("ui__������������_32e31524")}</option>
+            <option value="">{t("ui__все_a07b234e")}</option>
+            <option value="urgent">{t("ui__срочно_bb71eea6")}</option>
+            <option value="high">{t("ui__высокий_bd128910")}</option>
+            <option value="normal">{t("ui__обычный_cc13e933")}</option>
+            <option value="low">{t("ui__низкий_32e31524")}</option>
           </select>
         </div>
         <div className="flex items-end">
@@ -288,7 +288,7 @@ export default function TasksPage() {
             onClick={load}
             className="w-full px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
           >
-            {t("ui__������������_2f884b41")}
+            {t("ui__фильтр_2f884b41")}
           </button>
         </div>
       </div>
@@ -319,7 +319,7 @@ export default function TasksPage() {
       >
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <Field label={t("ui__����������������_602680ed")} required>
+            <Field label={t("ui__название_602680ed")} required>
               <input
                 className={input}
                 value={form.title}
@@ -327,7 +327,7 @@ export default function TasksPage() {
               />
             </Field>
           </div>
-          <Field label={t("ui__����������������������_1d3ab78a")}>
+          <Field label={t("ui__исполнитель_1d3ab78a")}>
             <select
               className={input}
               value={form.assignee_id}
@@ -335,7 +335,7 @@ export default function TasksPage() {
                 setForm({ ...form, assignee_id: e.target.value })
               }
             >
-              <option value="">{t("ui__����_����������������_f0752b3a")}</option>
+              <option value="">{t("ui__не_назначен_f0752b3a")}</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.full_name}
@@ -343,19 +343,19 @@ export default function TasksPage() {
               ))}
             </select>
           </Field>
-          <Field label={t("ui__������������������_a0f9f1af")}>
+          <Field label={t("ui__приоритет_a0f9f1af")}>
             <select
               className={input}
               value={form.priority}
               onChange={(e) => setForm({ ...form, priority: e.target.value })}
             >
-              <option value="low">{t("ui__������������_32e31524")}</option>
-              <option value="normal">{t("ui__��������������_cc13e933")}</option>
-              <option value="high">{t("ui__��������������_bd128910")}</option>
-              <option value="urgent">{t("ui__������������_bb71eea6")}</option>
+              <option value="low">{t("ui__низкий_32e31524")}</option>
+              <option value="normal">{t("ui__обычный_cc13e933")}</option>
+              <option value="high">{t("ui__высокий_bd128910")}</option>
+              <option value="urgent">{t("ui__срочно_bb71eea6")}</option>
             </select>
           </Field>
-          <Field label={t("ui__��������_��������������������_ec430713")}>
+          <Field label={t("ui__срок_выполнения_ec430713")}>
             <input
               type="date"
               className={input}
@@ -364,7 +364,7 @@ export default function TasksPage() {
             />
           </Field>
           <div className="col-span-2">
-            <Field label={t("ui__����������������_38ca0af8")}>
+            <Field label={t("ui__описание_38ca0af8")}>
               <textarea
                 className={input}
                 rows={3}
@@ -380,13 +380,13 @@ export default function TasksPage() {
               onClick={() => setOpen(false)}
               className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
             >
-              {t("ui__������������_987b33c6")}
+              {t("ui__отмена_987b33c6")}
             </button>
             <button
               onClick={save}
               className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
             >
-              {t("ui__������������������_74ea58b6")}
+              {t("ui__сохранить_74ea58b6")}
             </button>
           </div>
         </div>

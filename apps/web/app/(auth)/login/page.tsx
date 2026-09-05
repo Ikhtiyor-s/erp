@@ -8,6 +8,7 @@ import { useTheme } from "next-themes";
 import { Moon, Sun, Languages } from "lucide-react";
 import { useLocale } from "@/i18n/locale-provider";
 import { login } from "@/lib/auth";
+import { getErrorMessage } from "@/lib/api-error";
 import { toast } from "sonner";
 
 export default function LoginPage() {
@@ -27,9 +28,9 @@ export default function LoginPage() {
     try {
       await login(email, password);
       toast.success(t("welcome"));
-      router.push("/dashboard");
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail || t("wrong_credentials"));
+      window.location.href = "/dashboard";
+    } catch (err) {
+      toast.error(getErrorMessage(err, t("wrong_credentials")));
     } finally {
       setLoading(false);
     }
@@ -47,6 +48,7 @@ export default function LoginPage() {
           <option value="uz">UZ</option>
           <option value="ru">RU</option>
           <option value="en">EN</option>
+          <option value="kaa">KAA</option>
         </select>
         <button
           onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}

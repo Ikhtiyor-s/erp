@@ -1,0 +1,8 @@
+# Local dev override: strip host port bindings for postgres/redis so this stack
+# can run alongside other projects that hold ports 5434 / 6380.
+# API and web reach postgres/redis via docker DNS (service name), no host access needed.
+services:
+  postgres:
+    ports: !override []
+  redis:
+    ports: !override []

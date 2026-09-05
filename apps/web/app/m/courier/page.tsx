@@ -21,10 +21,18 @@ export default function MobileCourierMode() {
   const [rows, setRows] = useState<Courier[]>([]);
   const [meOnline, setMeOnline] = useState(false);
   const [tracking, setTracking] = useState<number | null>(null);
+  const [loadingOnline, setLoadingOnline] = useState(false);
 
   async function loadOnline() {
-    const r = await api.get<Courier[]>("/courier/online");
-    setRows(r.data || []);
+    setLoadingOnline(true);
+    try {
+      const r = await api.get<Courier[]>("/courier/online");
+      setRows(r.data || []);
+    } catch (e: any) {
+      toast.error(getErrorMessage(e, "Kuryerlarni yuklab bo'lmadi"));
+    } finally {
+      setLoadingOnline(false);
+    }
   }
   useEffect(() => { if (tab === "online") loadOnline(); }, [tab]);
 
@@ -81,7 +89,9 @@ export default function MobileCourierMode() {
       </div>
 
       {tab === "online" ? (
-        rows.length === 0 ? (
+        loadingOnline ? (
+          <div className="py-16 text-center text-slate-400 text-sm">Yuklanmoqda...</div>
+        ) : rows.length === 0 ? (
           <div className="py-16 text-center text-slate-400">Hozir onlayn kuryerlar yo'q</div>
         ) : (
           <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">

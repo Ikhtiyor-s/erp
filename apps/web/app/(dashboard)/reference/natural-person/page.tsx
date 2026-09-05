@@ -52,13 +52,13 @@ export default function NaturalPersonPage() {
 
   async function save() {
     if (!form.full_name) {
-      toast.error(t("ui__��������������_������_58066c0f"));
+      toast.error(t("ui__введите_фио_58066c0f"));
       return;
     }
     try {
       if (editId) await api.put(`/reference/natural-persons/${editId}`, form);
       else await api.post("/reference/natural-persons", form);
-      toast.success(t("ui__������������������_54a59b19"));
+      toast.success(t("ui__сохранено_54a59b19"));
       setOpen(false);
       load();
     } catch (e: any) {
@@ -68,7 +68,7 @@ export default function NaturalPersonPage() {
   async function del(r: NP) {
     if (!confirm(`��${r.full_name}�� o'chirilsinmi?`)) return;
     await api.delete(`/reference/natural-persons/${r.id}`);
-    toast.success(t("ui__��������������_0c450c40"));
+    toast.success(t("ui__удалено_0c450c40"));
     load();
   }
 
@@ -81,18 +81,18 @@ export default function NaturalPersonPage() {
     : rows;
 
   const cols: Column<NP>[] = [
-    { key: "full_name", header: t("ui__������_72d974de") },
-    { key: "passport", header: t("ui__��������������_d25f6619"), width: "150px", render: (r) => r.passport || "���" },
-    { key: "pinfl", header: t("ui__����������_69a74a6d"), width: "150px", render: (r) => r.pinfl || "���" },
-    { key: "phone", header: t("ui__��������������_2928e19c"), width: "150px", render: (r) => r.phone || "���" },
-    { key: "address", header: t("ui__����������_80148fa5"), render: (r) => r.address || "���" },
+    { key: "full_name", header: t("ui__фио_72d974de") },
+    { key: "passport", header: t("ui__паспорт_d25f6619"), width: "150px", render: (r) => r.passport || "���" },
+    { key: "pinfl", header: t("ui__пинфл_69a74a6d"), width: "150px", render: (r) => r.pinfl || "���" },
+    { key: "phone", header: t("ui__телефон_2928e19c"), width: "150px", render: (r) => r.phone || "���" },
+    { key: "address", header: t("ui__адрес_80148fa5"), render: (r) => r.address || "���" },
   ];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("ui__��������������������_��������_2b8c8c50")}
-        description={t("ui__������������������_������_������_3e2e624a")}
+        title={t("ui__физические_лица_2b8c8c50")}
+        description={t("ui__реквизиты_физ_лиц_3e2e624a")}
         onCreate={() => {
           setForm(empty);
           setEditId(null);
@@ -103,12 +103,12 @@ export default function NaturalPersonPage() {
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 flex gap-3 items-end">
         <div className="relative flex-1 max-w-md">
           <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__����������_bfc95980")}
+            {t("ui__поиск_bfc95980")}
           </label>
           <Search size={14} className="absolute left-2.5 top-[34px] text-slate-400" />
           <input
             className={`${input} pl-8`}
-            placeholder={t("ui__������_��������������_����������_45c46e75")}
+            placeholder={t("ui__фио_паспорт_пинфл_45c46e75")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -136,7 +136,7 @@ export default function NaturalPersonPage() {
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Tahrirlash" : "Yangi jis. shaxs"}>
         <div className="space-y-3">
-          <Field label={t("ui__������_72d974de")} required>
+          <Field label={t("ui__фио_72d974de")} required>
             <input
               className={input}
               value={form.full_name}
@@ -144,25 +144,25 @@ export default function NaturalPersonPage() {
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={t("ui__��������������_d25f6619")}>
+            <Field label={t("ui__паспорт_d25f6619")}>
               <input className={input} value={form.passport} onChange={(e) => setForm({ ...form, passport: e.target.value })} />
             </Field>
-            <Field label={t("ui__����������_69a74a6d")}>
+            <Field label={t("ui__пинфл_69a74a6d")}>
               <input className={input} value={form.pinfl} onChange={(e) => setForm({ ...form, pinfl: e.target.value })} />
             </Field>
-            <Field label={t("ui__��������������_2928e19c")}>
+            <Field label={t("ui__телефон_2928e19c")}>
               <input className={input} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             </Field>
           </div>
-          <Field label={t("ui__����������_80148fa5")}>
+          <Field label={t("ui__адрес_80148fa5")}>
             <input className={input} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
           </Field>
-          <Field label={t("ui__��������������_c8866295")}>
+          <Field label={t("ui__заметки_c8866295")}>
             <textarea className={input} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </Field>
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700">{t("ui__������������_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__������������������_74ea58b6")}</button>
+            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700">{t("ui__отмена_987b33c6")}</button>
+            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
           </div>
         </div>
       </Modal>

@@ -40,13 +40,13 @@ export function SettingsForm({ title, description, settingsKey, fields }: Props)
     setSaving(true);
     try {
       await api.put(`/settings/key/${settingsKey}`, { value: data });
-      toast.success(t("ui__������������������_54a59b19"));
+      toast.success(t("ui__сохранено_54a59b19"));
     } catch (e: any) {
       toast.error(getErrorMessage(e, "Xato"));
     } finally { setSaving(false); }
   }
 
-  if (loading) return <div className="text-center text-slate-400 py-10">{t("ui__����������������_43e40d49")}</div>;
+  if (loading) return <div className="text-center text-slate-400 py-10">{t("ui__загрузка_43e40d49")}</div>;
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -68,7 +68,7 @@ export function SettingsForm({ title, description, settingsKey, fields }: Props)
             ) : f.type === "select" ? (
               <select className={input} value={data[f.key] || ""}
                 onChange={(e) => setData({ ...data, [f.key]: e.target.value })}>
-                <option value="">{t("ui__����_��������������_19bcc8f4")}</option>
+                <option value="">{t("ui__не_выбрано_19bcc8f4")}</option>
                 {f.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             ) : (

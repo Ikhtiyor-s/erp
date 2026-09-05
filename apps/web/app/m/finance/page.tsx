@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Wallet, ArrowDown, ArrowUp, Calendar, CreditCard } from "lucide-react";
+import { Wallet, ArrowDown, ArrowUp, Calendar, CreditCard, Users } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
@@ -38,9 +38,13 @@ export default function MobileFinance() {
           <Calendar size={20} className="text-brand-600" />
           <span className="text-sm font-medium">Smena</span>
         </Link>
-        <Link href="/m/finance/installments" className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+        <Link href="/m/finance" className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-2">
           <CreditCard size={20} className="text-teal-600" />
           <span className="text-sm font-medium">Bo'lib to'lash</span>
+        </Link>
+        <Link href="/m/finance/debtors" className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-rose-200 dark:border-rose-800 flex items-center gap-2">
+          <Users size={20} className="text-rose-600" />
+          <span className="text-sm font-medium">Qarzdorlar</span>
         </Link>
       </div>
 

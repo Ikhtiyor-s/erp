@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { User, Lock, Printer, Bell, Globe, Moon, Sun, LogOut } from "lucide-react";
+import { User, Lock, Printer, Bell, Globe, Moon, Sun, LogOut, Fingerprint } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
+import { isBiometricSupported, isBiometricAvailable, enrollBiometric } from "@/lib/biometric";
 
 function deviceId(): string {
   let id = localStorage.getItem("device_id");
@@ -25,12 +26,36 @@ export default function MobileSettings() {
   const [pc1, setPc1] = useState("");
   const [pc2, setPc2] = useState("");
   const [hasPasscode, setHasPasscode] = useState(false);
+  const [biometricSupported, setBiometricSupported] = useState(false);
+  const [biometricEnrolled, setBiometricEnrolled] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
 
   useEffect(() => {
     const u = localStorage.getItem("user");
     if (u) setUser(JSON.parse(u));
     setHasPasscode(!!localStorage.getItem("has_passcode"));
+    setBiometricEnrolled(!!localStorage.getItem("biometric_enrolled"));
+    if (isBiometricSupported()) {
+      isBiometricAvailable().then(setBiometricSupported);
+    }
   }, []);
+
+  async function setupBiometric() {
+    setBiometricLoading(true);
+    try {
+      const ok = await enrollBiometric();
+      if (ok) {
+        setBiometricEnrolled(true);
+        toast.success("Barmoq izi o'rnatildi");
+      } else {
+        toast.error("Barmoq izi o'rnatishda xatolik");
+      }
+    } catch (e: any) {
+      toast.error(getErrorMessage(e, "Barmoq izi xatosi"));
+    } finally {
+      setBiometricLoading(false);
+    }
+  }
 
   async function setPasscode() {
     if (pc1.length < 4 || pc1 !== pc2) return toast.error("Passcode mos kelmadi");
@@ -47,8 +72,10 @@ export default function MobileSettings() {
   }
 
   function logout() {
-    localStorage.clear();
-    router.push("/m/login");
+    ["access_token", "refresh_token", "org_id", "user", "has_passcode"].forEach((k) =>
+      localStorage.removeItem(k)
+    );
+    window.location.href = "/m/login";
   }
 
   return (
@@ -74,6 +101,18 @@ export default function MobileSettings() {
           <span className="flex-1 text-left">Passcode</span>
           <span className="text-xs text-slate-400">{hasPasscode ? "O'rnatilgan" : "Yo'q"}</span>
         </button>
+        {biometricSupported && (
+          <button
+            onClick={setupBiometric}
+            disabled={biometricLoading}
+            className="w-full px-4 py-3 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/40 disabled:opacity-50">
+            <Fingerprint size={18} className="text-slate-500" />
+            <span className="flex-1 text-left">Barmoq izi sozlash</span>
+            <span className="text-xs text-slate-400">
+              {biometricLoading ? "..." : biometricEnrolled ? "O'rnatilgan" : "Yo'q"}
+            </span>
+          </button>
+        )}
         <button onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
           className="w-full px-4 py-3 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/40">
           {resolvedTheme === "dark" ? <Sun size={18} className="text-slate-500" /> : <Moon size={18} className="text-slate-500" />}
@@ -89,7 +128,7 @@ export default function MobileSettings() {
             <div className="font-semibold text-lg">Yangi passcode</div>
             <input type="password" inputMode="numeric" maxLength={6} autoFocus
               value={pc1} onChange={(e) => setPc1(e.target.value.replace(/\D/g, ""))}
-              placeholder="4���6 raqam"
+              placeholder="4-6 raqam"
               className="w-full px-3 py-3 bg-slate-100 dark:bg-slate-900 rounded-lg text-center font-mono text-2xl tracking-widest" />
             <input type="password" inputMode="numeric" maxLength={6}
               value={pc2} onChange={(e) => setPc2(e.target.value.replace(/\D/g, ""))}

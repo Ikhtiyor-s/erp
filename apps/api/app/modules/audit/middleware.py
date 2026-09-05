@@ -62,10 +62,12 @@ def _entity_id_from_path(method: str, path: str) -> tuple[str, str | None, str |
 SENSITIVE_KEYS = frozenset({
     "password", "initial_password", "new_password", "old_password",
     "password_hash", "passcode",
-    "token", "access_token", "refresh_token", "api_key", "apikey",
+    "token", "access_token", "refresh_token", "oauth_token", "api_key", "apikey",
     "secret", "secret_key", "client_secret", "private_key",
     "eskiz_password", "playmobile_password",
     "card_number", "cvv", "pan",
+    "merchant_id", "merchant_token",
+    "developer_token", "signer_pin",
 })
 
 

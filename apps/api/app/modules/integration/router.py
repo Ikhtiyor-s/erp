@@ -1,16 +1,24 @@
-"""Integration endpoints — Telegram, online payments (Click/Payme)."""
+"""Integration endpoints — Telegram, online payments (Click/Payme), Didox."""
 from __future__ import annotations
 
 import logging
+import secrets
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_org_id, get_db
-from app.modules.integration.telegram import test_connection, send_raw
+from app.core.deps import get_current_org_id, get_current_user_id, get_db
+from app.core.rate_limit import limiter
+from app.modules.rbac.deps import require_permission
+from app.modules.integration.didox import DidoxIntegration
+from app.modules.integration.telegram import (
+    test_connection, send_raw, dispatch_command, _read_crm_settings,
+)
 from app.modules.integration.payments.click import handle_click_webhook
+from app.modules.integration.payments.multicard import MulticardService
 from app.modules.integration.payments.payme import handle_payme
+from app.modules.integration.payments.rahmat import RahmatService
 
 
 log = logging.getLogger(__name__)
@@ -92,6 +100,105 @@ async def payme_webhook(org_code: str, request: Request,
     return await handle_payme(db, str(row.id), auth, body)
 
 
+@router.post("/multicard/webhook/{org_code}")
+async def multicard_webhook(org_code: str, request: Request,
+                            db: AsyncSession = Depends(get_db)):
+    """
+    Multicard payment webhook stub.
+    Configure Multicard cabinet URL:
+      https://<your-host>/api/v1/integration/multicard/webhook/<ORG_CODE>
+    Real handling requires Multicard credentials — returns scaffold note until implemented.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    org_res = await db.execute(
+        text("SELECT id FROM organizations WHERE code = :c"),
+        {"c": org_code.upper()},
+    )
+    row = org_res.first()
+    if not row:
+        return {"ok": False, "error": "Organization not found"}
+    org_id = str(row.id)
+
+    svc = MulticardService(db=db, org_id=org_id)
+    log.info("multicard_webhook org=%s body_keys=%s", org_code, list(body.keys()))
+    return await svc.handle_webhook(body)
+
+
+@router.post("/alif/webhook/{org_code}")
+@limiter.limit("60/minute")
+async def alif_webhook(org_code: str, request: Request,
+                       db: AsyncSession = Depends(get_db)):
+    """
+    Alif Bank payment webhook stub.
+    Configure Alif cabinet URL:
+      https://<your-host>/api/v1/integration/alif/webhook/<ORG_CODE>
+    Real HMAC signature verification deferred — credentials required.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    log.info("alif_webhook org=%s body_keys=%s", org_code, list(payload.keys()))
+    # TODO: verify HMAC signature when Alif credentials are available
+    # TODO: update payment status based on payload
+    return {"status": "received", "note": "scaffold — credentials pending"}
+
+
+@router.post("/uzum/webhook/{org_code}")
+async def uzum_webhook(org_code: str, request: Request,
+                       db: AsyncSession = Depends(get_db)):
+    """
+    Uzum Bank payment webhook stub.
+    Configure Uzum cabinet URL:
+      https://<your-host>/api/v1/integration/uzum/webhook/<ORG_CODE>
+    Real handling requires Uzum credentials — returns scaffold note until implemented.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    log.info("uzum_webhook org=%s body_keys=%s", org_code, list(body.keys()))
+    return {
+        "ok": True,
+        "stubbed": True,
+        "note": "Uzum webhook scaffold — real implementation pending credentials",
+    }
+
+
+@router.post("/rahmat/webhook/{org_code}")
+async def rahmat_webhook(org_code: str, request: Request,
+                         db: AsyncSession = Depends(get_db)):
+    """
+    Rahmat loyalty/cashback webhook stub.
+    Configure Rahmat cabinet URL:
+      https://<your-host>/api/v1/integration/rahmat/webhook/<ORG_CODE>
+    Real signature verification deferred — credentials required.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    org_res = await db.execute(
+        text("SELECT id FROM organizations WHERE code = :c"),
+        {"c": org_code.upper()},
+    )
+    row = org_res.first()
+    if not row:
+        return {"ok": False, "error": "Organization not found"}
+    org_id = str(row.id)
+
+    svc = RahmatService(db=db, org_id=org_id)
+    log.info("rahmat_webhook org=%s body_keys=%s", org_code, list(body.keys()))
+    return await svc.handle_webhook(body)
+
+
 @router.post("/telegram/webhook/{org_code}")
 async def telegram_webhook(org_code: str, request: Request,
                            db: AsyncSession = Depends(get_db)):
@@ -104,7 +211,6 @@ async def telegram_webhook(org_code: str, request: Request,
     except Exception:
         return {"ok": True}  # always return 200 so Telegram doesn't retry
 
-    # Resolve org from code in URL
     org_res = await db.execute(
         text("SELECT id FROM organizations WHERE code = :c"),
         {"c": org_code.upper()},
@@ -114,83 +220,169 @@ async def telegram_webhook(org_code: str, request: Request,
         return {"ok": True}
     org_id = str(row.id)
 
-    msg = update.get("message") or update.get("edited_message") or {}
-    chat = msg.get("chat", {})
-    chat_id = chat.get("id")
-    body = (msg.get("text") or "").strip()
+    return await dispatch_command(db, org_id, update)
 
-    if not chat_id or not body:
-        return {"ok": True}
 
-    # Simple command handlers
-    if body.startswith("/start"):
-        await send_raw(
-            db, org_id,
-            "👋 <b>Aniq ERP — Telegram bot</b>\n\n"
-            "Mavjud komandalar:\n"
-            "  /balans — joriy kassalar qoldig'i\n"
-            "  /sotuv &lt;raqam&gt; — sotuv tafsiloti\n"
-            "  /yordam — yordam menyusi",
-            chat_id=chat_id,
-        )
-    elif body.startswith("/balans"):
-        cash_res = await db.execute(
-            text("""
-                SELECT c.name, c.balance, cur.code AS currency
-                FROM cashboxes c
-                LEFT JOIN currencies cur ON cur.id = c.currency_id
-                WHERE c.organization_id = :o AND c.is_active = TRUE
-                ORDER BY c.name
-            """),
-            {"o": org_id},
-        )
-        rows = list(cash_res)
-        if not rows:
-            await send_raw(db, org_id, "Kassalar topilmadi.", chat_id=chat_id)
-        else:
-            lines = ["💰 <b>Kassalar qoldig'i</b>", ""]
-            for r in rows:
-                lines.append(f"• <b>{r.name}</b>: {r.balance:,.2f} {r.currency or ''}")
-            await send_raw(db, org_id, "\n".join(lines), chat_id=chat_id)
-    elif body.startswith("/sotuv"):
-        parts = body.split(maxsplit=1)
-        doc_no = parts[1].strip() if len(parts) > 1 else ""
-        if not doc_no:
-            await send_raw(db, org_id, "Foydalanish: /sotuv 1234", chat_id=chat_id)
-        else:
-            sale_res = await db.execute(
-                text("""
-                    SELECT s.doc_number, s.total_amount, s.paid_amount, s.status,
-                           c.name AS customer_name
-                    FROM sales s LEFT JOIN customers c ON c.id = s.customer_id
-                    WHERE s.organization_id = :o AND s.doc_number = :d
-                    LIMIT 1
-                """),
-                {"o": org_id, "d": doc_no},
-            )
-            sale = sale_res.first()
-            if not sale:
-                await send_raw(db, org_id, f"Sotuv #{doc_no} topilmadi.", chat_id=chat_id)
-            else:
-                debt = float(sale.total_amount or 0) - float(sale.paid_amount or 0)
-                await send_raw(
-                    db, org_id,
-                    f"🧾 <b>Sotuv #{sale.doc_number}</b>\n"
-                    f"Mijoz: {sale.customer_name or '—'}\n"
-                    f"Holat: {sale.status}\n"
-                    f"Jami: {sale.total_amount:,.2f}\n"
-                    f"To'langan: {sale.paid_amount:,.2f}\n"
-                    f"Qarz: {debt:,.2f}",
-                    chat_id=chat_id,
-                )
-    elif body.startswith("/yordam"):
-        await send_raw(
-            db, org_id,
-            "ℹ️ <b>Yordam</b>\n\n"
-            "Bu bot Aniq ERP tizimi bilan integratsiyalashgan.\n"
-            "Sotuvlar avtomatik xabarnoma sifatida yuboriladi.\n\n"
-            "Komandalar: /balans, /sotuv &lt;raqam&gt;, /yordam",
-            chat_id=chat_id,
-        )
+@router.post(
+    "/telegram/bind/generate",
+    dependencies=[Depends(require_permission("settings.integration"))],
+)
+@limiter.limit("3/hour")
+async def telegram_bind_generate(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Generate a one-time 15-minute bind token and return a Telegram deep-link."""
+    bind_token = secrets.token_urlsafe(32)
 
+    await db.execute(
+        text("""
+            UPDATE users
+            SET tg_bind_token = :t, tg_bind_token_at = NOW()
+            WHERE id = :u
+        """),
+        {"t": bind_token, "u": user_id},
+    )
+    await db.commit()
+
+    cfg = await _read_crm_settings(db, org_id)
+    bot_username = cfg.get("bot_username") or "aniqerp_bot"
+
+    deep_link = f"https://t.me/{bot_username}?start={bind_token}"
+    return {
+        "token": bind_token,
+        "bot_username": f"@{bot_username}",
+        "deep_link": deep_link,
+        "expires_in_seconds": 900,
+    }
+
+
+@router.get(
+    "/telegram/bind/status",
+    dependencies=[Depends(require_permission("settings.integration"))],
+)
+async def telegram_bind_status(
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Return current Telegram binding status for the authenticated user."""
+    res = await db.execute(
+        text("""
+            SELECT chat_id, telegram_username, bound_at
+            FROM user_telegram_bindings
+            WHERE user_id = :u AND org_id = :o AND is_active = TRUE
+        """),
+        {"u": user_id, "o": org_id},
+    )
+    row = res.first()
+    if not row:
+        return {"bound": False}
+    return {
+        "bound": True,
+        "chat_id": row.chat_id,
+        "telegram_username": row.telegram_username,
+        "bound_at": row.bound_at.isoformat() if row.bound_at else None,
+    }
+
+
+@router.post(
+    "/telegram/bind/unbind",
+    dependencies=[Depends(require_permission("settings.integration"))],
+)
+async def telegram_bind_unbind(
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Deactivate the Telegram binding for the authenticated user."""
+    res = await db.execute(
+        text("""
+            UPDATE user_telegram_bindings
+            SET is_active = FALSE
+            WHERE user_id = :u AND org_id = :o AND is_active = TRUE
+            RETURNING id
+        """),
+        {"u": user_id, "o": org_id},
+    )
+    await db.commit()
+    if not res.first():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Faol bog'liqlik topilmadi")
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Didox e-invoice endpoints (scaffold — T-120)
+# All three action endpoints return a scaffold note until real credentials are
+# provisioned and create_invoice / send_invoice / get_invoice_status are wired.
+# ---------------------------------------------------------------------------
+
+_SCAFFOLD_NOTE = {"note": "SCAFFOLD — credentials pending", "stubbed": True}
+
+
+@router.post("/didox/invoice/create")
+async def didox_create_invoice(
+    payload: dict = Body(default={}),
+    org_id: str = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a Didox e-invoice from a sale (scaffold)."""
+    svc = DidoxIntegration(db=db, org_id=org_id)
+    if not await svc.is_enabled():
+        raise HTTPException(status_code=400, detail="Didox integratsiyasi yoqilmagan")
+
+    sale_id = payload.get("sale_id", "")
+    if not sale_id:
+        raise HTTPException(status_code=422, detail="sale_id majburiy")
+
+    return {
+        "invoice_id": "stub-123",
+        "status": "draft",
+        "sale_id": sale_id,
+        **_SCAFFOLD_NOTE,
+    }
+
+
+@router.post("/didox/invoice/{invoice_id}/send")
+async def didox_send_invoice(
+    invoice_id: str,
+    org_id: str = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a Didox e-invoice to the counterparty (scaffold)."""
+    svc = DidoxIntegration(db=db, org_id=org_id)
+    if not await svc.is_enabled():
+        raise HTTPException(status_code=400, detail="Didox integratsiyasi yoqilmagan")
+
+    return {"invoice_id": invoice_id, "status": "sent", **_SCAFFOLD_NOTE}
+
+
+@router.get("/didox/invoice/{invoice_id}")
+async def didox_get_invoice_status(
+    invoice_id: str,
+    org_id: str = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get Didox invoice status (scaffold)."""
+    svc = DidoxIntegration(db=db, org_id=org_id)
+    if not await svc.is_enabled():
+        raise HTTPException(status_code=400, detail="Didox integratsiyasi yoqilmagan")
+
+    return {"invoice_id": invoice_id, "status": "unknown", **_SCAFFOLD_NOTE}
+
+
+@router.post("/didox/webhook")
+async def didox_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Receive Didox status-change callbacks (scaffold)."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    log.info("didox_webhook body_keys=%s", list(body.keys()))
+    return {"ok": True, **_SCAFFOLD_NOTE}

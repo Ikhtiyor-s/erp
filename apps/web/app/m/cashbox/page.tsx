@@ -25,8 +25,12 @@ export default function MobileCashbox() {
 
   async function refresh() {
     if (!boxId) return;
-    const r = await api.get<any>(`/cashbox-sessions/active?cashbox_id=${boxId}`);
-    setActive(r.data);
+    try {
+      const r = await api.get<any>(`/cashbox-sessions/active?cashbox_id=${boxId}`);
+      setActive(r.data);
+    } catch (e: any) {
+      toast.error(getErrorMessage(e, "Smena ma'lumotini yuklab bo'lmadi"));
+    }
   }
   useEffect(() => { refresh(); }, [boxId]);
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Home, ShoppingCart, Box, Users, BarChart3, Menu, X,
-  Settings, LogOut, Package, Wallet, UserCog, Truck, Boxes, Coffee, ListChecks,
+  Settings, LogOut, Package, Wallet, UserCog, Truck, Boxes, Coffee, ListChecks, ClipboardList,
 } from "lucide-react";
 import { PWARegister } from "@/components/pwa-register";
 import { Toaster } from "sonner";
@@ -25,8 +25,10 @@ const DRAWER = [
   { href: "/m/sales", label: "Sotuvlar", icon: BarChart3 },
   { href: "/m/customers", label: "Mijozlar", icon: Users },
   { href: "/m/warehouse", label: "Sklad", icon: Box },
+  { href: "/m/orders", label: "Pick-list", icon: ClipboardList },
   { href: "/m/products", label: "Mahsulotlar", icon: Package },
   { href: "/m/finance", label: "Moliya", icon: Wallet },
+  { href: "/m/finance/debtors", label: "Qarzdorlar", icon: Users },
   { href: "/m/cashbox", label: "Kassa smenasi", icon: Boxes },
   { href: "/m/hr", label: "Xodimlar", icon: UserCog },
   { href: "/m/courier", label: "Kuryerlar", icon: Truck },
@@ -50,6 +52,15 @@ export default function MobileLayout({ children }: { children: React.ReactNode }
     if (u) try { setUser(JSON.parse(u)); } catch {}
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (path === "/m/login") return;
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      window.location.href = "/m/login";
+    }
+  }, [path]);
+
   // Don't show bottom nav on login or scanner/fullscreen pages
   const hideChrome = path === "/m/login" || path.startsWith("/m/scan");
 
@@ -59,8 +70,9 @@ export default function MobileLayout({ children }: { children: React.ReactNode }
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user");
-    localStorage.removeItem("organization_id");
-    router.push("/m/login");
+    localStorage.removeItem("org_id");
+    localStorage.removeItem("has_passcode");
+    window.location.href = "/m/login";
   }
 
   return (

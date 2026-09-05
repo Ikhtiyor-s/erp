@@ -43,21 +43,21 @@ export default function UnitsPage() {
     if (!confirm(`��${r.name}�� o'chirilsinmi?`)) return;
     try {
       await api.delete(`/reference/units/${r.id}`);
-      toast.success(t("ui__��������������_0c450c40")); load();
+      toast.success(t("ui__удалено_0c450c40")); load();
     } catch (e: any) {
       toast.error(getErrorMessage(e, "O'chirib bo'lmaydi (ishlatilmoqda)"));
     }
   }
 
   const columns: Column<Unit>[] = [
-    { key: "code", header: t("ui__������_3f34a617"), width: "120px" },
-    { key: "name", header: t("ui__����������������_602680ed") },
-    { key: "short_name", header: t("ui__��������_9f480467"), width: "120px", render: (r) => r.short_name || "���" },
+    { key: "code", header: t("ui__код_3f34a617"), width: "120px" },
+    { key: "name", header: t("ui__название_602680ed") },
+    { key: "short_name", header: t("ui__сокр_9f480467"), width: "120px", render: (r) => r.short_name || "���" },
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("ui__��������������_������������������_ecf1ed91")} description={t("ui__��������������������_������������_����_����_��������_��_53afcf57")}
+      <PageHeader title={t("ui__единицы_измерения_ecf1ed91")} description={t("ui__справочник_единиц_шт_кг_литр_и_53afcf57")}
         onCreate={() => { setForm(empty); setEditId(null); setOpen(true); }} />
       <DataTable columns={columns} rows={rows} loading={loading}
         onEdit={(r) => {
@@ -68,21 +68,21 @@ export default function UnitsPage() {
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Birlikni tahrirlash" : "Yangi birlik"}>
         <div className="space-y-3">
-          <Field label={t("ui__������_3f34a617")} required>
+          <Field label={t("ui__код_3f34a617")} required>
             <input className={input} maxLength={20} value={form.code}
               onChange={(e) => setForm({ ...form, code: e.target.value })} />
           </Field>
-          <Field label={t("ui__����������������_602680ed")} required>
+          <Field label={t("ui__название_602680ed")} required>
             <input className={input} value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </Field>
-          <Field label={t("ui__��������������������_f3ee7b07")}>
+          <Field label={t("ui__сокращение_f3ee7b07")}>
             <input className={input} maxLength={10} value={form.short_name}
               onChange={(e) => setForm({ ...form, short_name: e.target.value })} />
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__������������_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__������������������_74ea58b6")}</button>
+            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
+            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
           </div>
         </div>
       </Modal>

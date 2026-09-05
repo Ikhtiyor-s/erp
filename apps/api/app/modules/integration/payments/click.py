@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import uuid
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException
 from sqlalchemy import text
@@ -168,3 +171,50 @@ async def handle_click_webhook(
     else:
         return {"error": ClickError.ACTION_NOT_FOUND,
                 "error_note": "action 0 yoki 1 bo'lishi kerak"}
+
+
+BILL_SERVICES: list[dict] = [
+    {"id": "elektr", "name": "Elektr energiya", "provider": "click"},
+    {"id": "gaz", "name": "Gaz", "provider": "click"},
+    {"id": "suv", "name": "Ichimlik suv", "provider": "click"},
+    {"id": "internet", "name": "Internet", "provider": "click"},
+    {"id": "telefon", "name": "Telefon", "provider": "click"},
+]
+
+_BILL_SERVICE_IDS = {svc["id"] for svc in BILL_SERVICES}
+
+
+async def create_bill_payment_link(
+    org_id: str,
+    service_id: str,
+    account: str,
+    amount: Decimal,
+    return_url: str,
+    db: AsyncSession | None = None,
+) -> dict:
+    """Generate a Click payment URL for a utility bill.
+
+    Returns payment_url, invoice_id and expires_at.
+    Stub: real Click merchant credentials are required before going live.
+    """
+    if service_id not in _BILL_SERVICE_IDS:
+        raise ValueError(f"Unknown bill service_id: {service_id}")
+
+    invoice_id = f"stub-{uuid.uuid4()}"
+    expires_at = (datetime.utcnow() + timedelta(hours=1)).isoformat()
+
+    params = urlencode({
+        "service_id": service_id,
+        "account": account,
+        "amount": str(amount),
+        "return_url": return_url,
+    })
+    payment_url = f"https://my.click.uz/services/pay?{params}"
+
+    return {
+        "payment_url": payment_url,
+        "invoice_id": invoice_id,
+        "expires_at": expires_at,
+        "stubbed": True,
+        "note": "SCAFFOLD — real Click merchant credentials required",
+    }

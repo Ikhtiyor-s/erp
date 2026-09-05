@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { register } from "@/lib/auth";
+import { getErrorMessage } from "@/lib/api-error";
 import { toast } from "sonner";
 
 export default function RegisterPage() {
@@ -24,9 +25,9 @@ export default function RegisterPage() {
     try {
       await register(form);
       toast.success(t("welcome"));
-      router.push("/dashboard");
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Error");
+      window.location.href = "/dashboard";
+    } catch (err) {
+      toast.error(getErrorMessage(err, t("register_failed")));
     } finally {
       setLoading(false);
     }

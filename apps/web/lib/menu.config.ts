@@ -111,13 +111,14 @@ export const menuTree: MenuGroup[] = [
       { i18nKey: "warehouse_services",            label: "Услуги",                href: "/warehouse/services" },
       { i18nKey: "warehouse_category",            label: "Категории",             href: "/warehouse/category" },
       { i18nKey: "warehouse_warehouses",          label: "Склады",                href: "/warehouse/warehouses" },
-      { i18nKey: "warehouse_types",               label: "Типы складов",          href: "/warehouse/types" },
+      { i18nKey: "warehouse_types",               label: "Типы складов",          href: "/warehouse/types",              permission: "warehouse.type.view" },
 
       { i18nKey: "warehouse_income",              label: "Приходы",               href: "/warehouse/income",            permission: "warehouse.income" },
       { i18nKey: "warehouse_revision",            label: "Инвентаризации",        href: "/warehouse/revision",          permission: "warehouse.inventory" },
       { i18nKey: "warehouse_write_off",           label: "Списания",              href: "/warehouse/write-off",         permission: "warehouse.write_off" },
       { i18nKey: "warehouse_write_off_reason",    label: "Причины списания",      href: "/warehouse/write-off-reason",  permission: "warehouse.write_off" },
-      { i18nKey: "warehouse_internal_transfers",  label: "Внутр. переводы",       href: "/warehouse/internal-transfers", permission: "warehouse.transfer" },
+      { i18nKey: "warehouse_internal_transfers",  label: "Внутр. переводы",       href: "/warehouse/internal-transfers", permission: "warehouse.transfer.view" },
+      { i18nKey: "warehouse_requests",            label: "Заявки на товар",        href: "/warehouse/requests",           permission: "warehouse.request.view" },
 
       { i18nKey: "warehouse_product_warehouses",  label: "Остатки товаров",       href: "/warehouse/product-warehouses" },
       { i18nKey: "warehouse_recommended_stock",   label: "Рекомендуемые остатки", href: "/warehouse/recommended-stock" },
@@ -246,9 +247,11 @@ export const menuTree: MenuGroup[] = [
     icon: Wrench,
     permission: ["tools.view", "audit.view"],
     children: [
-      { i18nKey: "tools_price",          label: "Установить цену", href: "/tools/price",          permission: "tools.price_bulk" },
-      { i18nKey: "tools_exports_center", label: "Центр экспорта",  href: "/tools/exports-center", permission: "tools.export" },
-      { i18nKey: "tools_audit",          label: "Audit tarixi",    href: "/tools/audit",          permission: "audit.view" },
+      { i18nKey: "tools_price",          label: "Установить цену",   href: "/tools/price",          permission: "tools.price_bulk" },
+      { i18nKey: "tools_exports_center", label: "Центр экспорта",   href: "/tools/exports-center", permission: "tools.export" },
+      { i18nKey: "tools_1c_export",      label: "1C eksport",       href: "/tools/1c-export",      permission: "finance.export_1c" },
+      { i18nKey: "tools_label_print",    label: "Печать этикеток",  href: "/tools/label-print",    permission: "warehouse.product.export" },
+      { i18nKey: "tools_audit",          label: "Audit tarixi",     href: "/tools/audit",          permission: "audit.view" },
     ],
   },
 
@@ -288,7 +291,7 @@ export const menuTree: MenuGroup[] = [
     label: "Интеграции",
     icon: Plug,
     href: "/integration",
-    permission: "settings.integration",
+    permission: "integrations.view",
   },
 
   // ============ ADMIN PANEL ============
@@ -333,9 +336,11 @@ export const menuTree: MenuGroup[] = [
       { i18nKey: "settings_scale",            label: "Весы",              href: "/settings/scale" },
       { i18nKey: "settings_reminders",        label: "Напоминания",       href: "/settings/customer-reminders" },
       { i18nKey: "settings_online_payments",  label: "Онлайн-платежи",    href: "/settings/online-payments",  permission: "settings.integration" },
+      { i18nKey: "settings_didox",           label: "Didox",              href: "/settings/didox",            permission: "settings.integration" },
       { i18nKey: "settings_print_templates",  label: "Шаблоны печати",    href: "/settings/print-templates" },
       { i18nKey: "settings_calc_params",      label: "Параметры расчёта", href: "/settings/calc-params" },
       { i18nKey: "settings_marketplace",      label: "Marketpleys",       href: "/settings/marketplace",      permission: "settings.integration" },
+      { i18nKey: "settings_delivery",          label: "Yetkazib berish",   href: "/settings/delivery",         permission: "settings.integration" },
     ],
   },
 ];

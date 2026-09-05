@@ -95,7 +95,7 @@ export default function PurchaseOrderPage() {
 
   async function save() {
     if (!form.supplier_id) {
-      toast.error(t("ui__����������������_��������������������_56de5b3b"));
+      toast.error(t("ui__выберите_поставщика_56de5b3b"));
       return;
     }
     const items = form.items
@@ -106,7 +106,7 @@ export default function PurchaseOrderPage() {
         price: Number(i.price) || 0,
       }));
     if (items.length === 0) {
-      toast.error(t("ui__����������������_������������_959fc936"));
+      toast.error(t("ui__добавьте_товары_959fc936"));
       return;
     }
     try {
@@ -117,7 +117,7 @@ export default function PurchaseOrderPage() {
         notes: form.notes || null,
         items,
       });
-      toast.success(t("ui__����������_������������_4dc0ec43"));
+      toast.success(t("ui__заказ_создан_4dc0ec43"));
       setOpen(false);
       setForm({
         supplier_id: "",
@@ -135,7 +135,7 @@ export default function PurchaseOrderPage() {
   async function setStatus(r: PO, status: string) {
     try {
       await api.put(`/supplier/purchase-orders/${r.id}/status?status=${status}`);
-      toast.success(t("ui__������������_����������������_60431b86"));
+      toast.success(t("ui__статус_обновлён_60431b86"));
       load();
     } catch (e: any) {
       toast.error(getErrorMessage(e, "Xato"));
@@ -145,7 +145,7 @@ export default function PurchaseOrderPage() {
   async function del(r: PO) {
     if (!confirm(`Ariza ���${r.doc_number} o'chirilsinmi?`)) return;
     await api.delete(`/supplier/purchase-orders/${r.id}`);
-    toast.success(t("ui__��������������_0c450c40"));
+    toast.success(t("ui__удалено_0c450c40"));
     load();
   }
 
@@ -153,27 +153,27 @@ export default function PurchaseOrderPage() {
     { key: "doc_number", header: "���", width: "90px" },
     {
       key: "order_date",
-      header: t("ui__��������_8cdd8bb7"),
+      header: t("ui__дата_8cdd8bb7"),
       width: "130px",
       render: (r) => new Date(r.order_date).toLocaleDateString("ru-RU"),
     },
-    { key: "supplier_name", header: t("ui__������������������_b8fbf748"), render: (r) => r.supplier_name || "���" },
+    { key: "supplier_name", header: t("ui__поставщик_b8fbf748"), render: (r) => r.supplier_name || "���" },
     {
       key: "warehouse_name",
-      header: t("ui__����������_e8bf999f"),
+      header: t("ui__склад_e8bf999f"),
       width: "180px",
       render: (r) => r.warehouse_name || "���",
     },
     {
       key: "expected_date",
-      header: t("ui__������������������_ddd06519"),
+      header: t("ui__ожидается_ddd06519"),
       width: "130px",
       render: (r) =>
         r.expected_date ? new Date(r.expected_date).toLocaleDateString("ru-RU") : "���",
     },
     {
       key: "total_amount",
-      header: t("ui__����������_cf59ebf9"),
+      header: t("ui__сумма_cf59ebf9"),
       align: "right",
       width: "150px",
       render: (r) => (
@@ -184,7 +184,7 @@ export default function PurchaseOrderPage() {
     },
     {
       key: "status",
-      header: t("ui__������������_7203f7a4"),
+      header: t("ui__статус_7203f7a4"),
       width: "150px",
       render: (r) => (
         <select
@@ -204,21 +204,21 @@ export default function PurchaseOrderPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("ui__����������_����_����������_47afbc85")}
-        description={t("ui__������������_����_����������_��_����������������������_7c3a0b4e")}
+        title={t("ui__заказ_на_закуп_47afbc85")}
+        description={t("ui__заявки_на_закуп_у_поставщиков_7c3a0b4e")}
         onCreate={() => setOpen(true)}
-        createLabel={t("ui__����������_������������_3527f981")}
+        createLabel={t("ui__новая_заявка_3527f981")}
       />
 
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="sm:col-span-2 relative">
           <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__����������_������_������������������_c853540d")}
+            {t("ui__поиск_или_поставщик_c853540d")}
           </label>
           <Search size={14} className="absolute left-2.5 top-[34px] text-slate-400" />
           <input
             className={`${input} pl-8`}
-            placeholder={t("ui__����������_b84a8f87")}
+            placeholder={t("ui__поиск_b84a8f87")}
             value={filters.q}
             onChange={(e) => setFilters({ ...filters, q: e.target.value })}
             onKeyDown={(e) => e.key === "Enter" && load()}
@@ -226,18 +226,18 @@ export default function PurchaseOrderPage() {
         </div>
         <div>
           <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__������������_7203f7a4")}
+            {t("ui__статус_7203f7a4")}
           </label>
           <select
             className={input}
             value={filters.status}
             onChange={(e) => setFilters({ ...filters, status: e.target.value })}
           >
-            <option value="">{t("ui__������_a07b234e")}</option>
-            <option value="new">{t("ui__����������_97ae6e0b")}</option>
-            <option value="sent">{t("ui__������������������_8496c7e8")}</option>
-            <option value="received">{t("ui__��������������_47fb375d")}</option>
-            <option value="cancelled">{t("ui__��������������_79dcd7ca")}</option>
+            <option value="">{t("ui__все_a07b234e")}</option>
+            <option value="new">{t("ui__новый_97ae6e0b")}</option>
+            <option value="sent">{t("ui__отправлен_8496c7e8")}</option>
+            <option value="received">{t("ui__получен_47fb375d")}</option>
+            <option value="cancelled">{t("ui__отменён_79dcd7ca")}</option>
           </select>
         </div>
         <div className="flex items-end">
@@ -245,23 +245,23 @@ export default function PurchaseOrderPage() {
             onClick={load}
             className="w-full px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700 whitespace-nowrap"
           >
-            {t("ui__������������_2f884b41")}
+            {t("ui__фильтр_2f884b41")}
           </button>
         </div>
       </div>
 
       <DataTable columns={cols} rows={rows} loading={loading} onDelete={del} />
 
-      <Modal open={open} onClose={() => setOpen(false)} size="lg" title={t("ui__����������_������������_����_����������_05f9d30d")}>
+      <Modal open={open} onClose={() => setOpen(false)} size="lg" title={t("ui__новая_заявка_на_закуп_05f9d30d")}>
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Field label={t("ui__������������������_b8fbf748")} required>
+            <Field label={t("ui__поставщик_b8fbf748")} required>
               <select
                 className={input}
                 value={form.supplier_id}
                 onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}
               >
-                <option value="">{t("ui__��������������_fbbc1d13")}</option>
+                <option value="">{t("ui__выбрать_fbbc1d13")}</option>
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -269,7 +269,7 @@ export default function PurchaseOrderPage() {
                 ))}
               </select>
             </Field>
-            <Field label={t("ui__����������_e8bf999f")}>
+            <Field label={t("ui__склад_e8bf999f")}>
               <select
                 className={input}
                 value={form.warehouse_id || ""}
@@ -280,7 +280,7 @@ export default function PurchaseOrderPage() {
                   })
                 }
               >
-                <option value="">{t("ui__������_7b07413e")}</option>
+                <option value="">{t("ui__нет_7b07413e")}</option>
                 {warehouses.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
@@ -288,7 +288,7 @@ export default function PurchaseOrderPage() {
                 ))}
               </select>
             </Field>
-            <Field label={t("ui__������������������_��������_985a37d2")}>
+            <Field label={t("ui__ожидаемая_дата_985a37d2")}>
               <input
                 type="date"
                 className={input}
@@ -302,10 +302,10 @@ export default function PurchaseOrderPage() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 dark:bg-slate-900/40 text-slate-700 dark:text-slate-300">
                 <tr>
-                  <th className="text-left px-3 py-2">{t("ui__����������_8b35db64")}</th>
-                  <th className="text-right px-3 py-2 w-28">{t("ui__������_����_302e2bd6")}</th>
-                  <th className="text-right px-3 py-2 w-32">{t("ui__��������_������������_9ae1384c")}</th>
-                  <th className="text-right px-3 py-2 w-32">{t("ui__����������_cf59ebf9")}</th>
+                  <th className="text-left px-3 py-2">{t("ui__товар_8b35db64")}</th>
+                  <th className="text-right px-3 py-2 w-28">{t("ui__кол_во_302e2bd6")}</th>
+                  <th className="text-right px-3 py-2 w-32">{t("ui__цена_закупа_9ae1384c")}</th>
+                  <th className="text-right px-3 py-2 w-32">{t("ui__сумма_cf59ebf9")}</th>
                   <th className="w-10"></th>
                 </tr>
               </thead>
@@ -318,7 +318,7 @@ export default function PurchaseOrderPage() {
                         value={it.product_id}
                         onChange={(e) => setLine(idx, "product_id", e.target.value)}
                       >
-                        <option value="">{t("ui__����������_8c2c36d6")}</option>
+                        <option value="">{t("ui__товар_8c2c36d6")}</option>
                         {products.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name}
@@ -373,11 +373,11 @@ export default function PurchaseOrderPage() {
               }
               className="text-xs text-brand-600 dark:text-brand-400 px-3 py-2 inline-flex items-center gap-1"
             >
-              <Plus size={12} /> {t("ui__����������������_������������_d70236f2")}
+              <Plus size={12} /> {t("ui__добавить_строку_d70236f2")}
             </button>
           </div>
 
-          <Field label={t("ui__��������������_c8866295")}>
+          <Field label={t("ui__заметки_c8866295")}>
             <textarea
               className={input}
               rows={2}
@@ -391,13 +391,13 @@ export default function PurchaseOrderPage() {
               onClick={() => setOpen(false)}
               className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
             >
-              {t("ui__������������_987b33c6")}
+              {t("ui__отмена_987b33c6")}
             </button>
             <button
               onClick={save}
               className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
             >
-              {t("ui__������������������_74ea58b6")}
+              {t("ui__сохранить_74ea58b6")}
             </button>
           </div>
         </div>

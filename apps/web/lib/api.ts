@@ -41,8 +41,10 @@ api.interceptors.response.use(
     if (error?.response?.status === 401 && typeof window !== "undefined") {
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
-      if (!window.location.pathname.startsWith("/login")) {
-        window.location.href = "/login";
+      const isMobile = window.location.pathname.startsWith("/m");
+      const loginPath = isMobile ? "/m/login" : "/login";
+      if (!window.location.pathname.startsWith(loginPath)) {
+        window.location.href = loginPath;
       }
     }
     return Promise.reject(error);

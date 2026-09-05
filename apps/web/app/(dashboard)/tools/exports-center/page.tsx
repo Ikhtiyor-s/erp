@@ -38,17 +38,17 @@ async function downloadExport(key: string, name: string, format: "csv" | "xlsx")
 export default function ExportsCenterPage() {
   const t = useTranslations("ui");
   const exports = [
-    { key: "products",  name: t("ui__������������_2ccd69a3"),    description: t("ui__sku_����������_������_��������_������������_��������_dfa4dbb1"), icon: Package,       color: "text-blue-600 dark:text-blue-400" },
-    { key: "customers", name: t("ui__��������������_0b63184a"),   description: t("ui__������_������_��������������_������_����������_8be7cfc7"),      icon: Users,         color: "text-green-600 dark:text-green-400" },
-    { key: "suppliers", name: t("ui__��������������������_60515512"), description: t("ui__������_����������������_��������������_������_202cca8b"),     icon: Truck,         color: "text-purple-600 dark:text-purple-400" },
-    { key: "sales",     name: t("ui__��������������_fd692bfc"),   description: t("ui__������������������_������������_��������_����������_����_d425f964"), icon: ShoppingCart,  color: "text-orange-600 dark:text-orange-400" },
-    { key: "stock",     name: t("ui__��������������_021f57eb"),   description: t("ui__����������_����������_������_����_������������������_83bff1b0"),   icon: Warehouse,     color: "text-emerald-600 dark:text-emerald-400" },
+    { key: "products",  name: t("ui__товары_2ccd69a3"),    description: t("ui__sku_штрих_код_цена_закупа_прод_dfa4dbb1"), icon: Package,       color: "text-blue-600 dark:text-blue-400" },
+    { key: "customers", name: t("ui__клиенты_0b63184a"),   description: t("ui__код_фио_телефон_инн_адрес_8be7cfc7"),      icon: Users,         color: "text-green-600 dark:text-green-400" },
+    { key: "suppliers", name: t("ui__поставщики_60515512"), description: t("ui__код_название_телефон_инн_202cca8b"),     icon: Truck,         color: "text-purple-600 dark:text-purple-400" },
+    { key: "sales",     name: t("ui__продажи_fd692bfc"),   description: t("ui__документы_продаж_дата_сумма_кл_d425f964"), icon: ShoppingCart,  color: "text-orange-600 dark:text-orange-400" },
+    { key: "stock",     name: t("ui__остатки_021f57eb"),   description: t("ui__склад_товар_кол_во_стоимость_83bff1b0"),   icon: Warehouse,     color: "text-emerald-600 dark:text-emerald-400" },
   ];
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("ui__����������_����������������_80b061c0")}
-        description={t("ui__����������������_������������_��_��������������_csv_e8addc96")}
+        title={t("ui__центр_экспорта_80b061c0")}
+        description={t("ui__выгрузка_данных_в_формате_csv_e8addc96")}
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -91,7 +91,7 @@ export default function ExportsCenterPage() {
 
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-5">
         <h3 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">
-          {t("ui__��_����������������_5401d55d")}
+          {t("ui__о_форматах_5401d55d")}
         </h3>
         <ul className="text-sm text-slate-600 dark:text-slate-300 space-y-1 list-disc list-inside">
           <li><strong>Excel (.xlsx)</strong> ��� Microsoft Excel, Google Sheets, LibreOffice Calc'da to'g'ridan-to'g'ri ochiladi. Sarlavhalar formatlanagn, filter avtomatik yoqilgan, ustun kengligi avtomatik.</li>

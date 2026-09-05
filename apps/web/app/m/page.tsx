@@ -11,7 +11,7 @@ import { api } from "@/lib/api";
 const QUICK = [
   { href: "/m/pos", label: "POS-kassa", icon: ShoppingCart, color: "bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300" },
   { href: "/m/pos/tickets", label: "Ochiq ticket", icon: Coffee, color: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" },
-  { href: "/m/sales/new", label: "Yangi sotuv", icon: BarChart3, color: "bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300" },
+  { href: "/m/sales", label: "Sotuvlar", icon: BarChart3, color: "bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300" },
   { href: "/m/customers", label: "Mijoz", icon: Users, color: "bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300" },
   { href: "/m/warehouse", label: "Sklad", icon: Box, color: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" },
   { href: "/m/finance", label: "Moliya", icon: Wallet, color: "bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300" },
@@ -66,7 +66,7 @@ export default function MobileHome() {
       {/* Quick actions */}
       <div>
         <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Tezkor</div>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
           {QUICK.map((q) => {
             const Icon = q.icon;
             return (

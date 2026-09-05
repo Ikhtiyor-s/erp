@@ -152,12 +152,14 @@ function LocaleSwitcher() {
   const { locale, setLocale } = useLocale();
   const [open, setOpen] = useState(false);
 
-  const langs: { v: "uz" | "ru" | "en"; label: string }[] = [
-    { v: "uz", label: "UZ" },
-    { v: "ru", label: "RU" },
-    { v: "en", label: "EN" },
+  const langs: { v: "uz" | "ru" | "en" | "uz-cyrl" | "kaa"; label: string; name: string }[] = [
+    { v: "uz", label: "UZ", name: "O'zbekcha" },
+    { v: "ru", label: "RU", name: "Ruscha" },
+    { v: "en", label: "EN", name: "English" },
+    { v: "uz-cyrl", label: "ЎЗ", name: "Ўзбекча" },
+    { v: "kaa", label: "KAA", name: "Qaraqalpaqsha" },
   ];
-  const current = langs.find((l) => l.v === locale)!;
+  const current = langs.find((l) => l.v === locale) ?? langs[0];
 
   return (
     <div className="relative">
@@ -168,12 +170,12 @@ function LocaleSwitcher() {
         title="Language"
       >
         <Languages size={13} strokeWidth={1.75} />
-        <span className="hidden sm:inline uppercase">{current.v}</span>
+        <span className="hidden sm:inline uppercase">{current.label}</span>
         <ChevronDown size={10} className="opacity-50" />
       </button>
       {open && (
         <div
-          className="absolute right-0 mt-1 w-36 bg-white dark:bg-ink-900 border border-ink-200/60 dark:border-ink-800 rounded-md shadow-md overflow-hidden z-20"
+          className="absolute right-0 mt-1 w-44 bg-white dark:bg-ink-900 border border-ink-200/60 dark:border-ink-800 rounded-md shadow-md overflow-hidden z-20"
           onMouseLeave={() => setOpen(false)}
         >
           {langs.map((l) => (
@@ -183,13 +185,14 @@ function LocaleSwitcher() {
                 setLocale(l.v);
                 setOpen(false);
               }}
-              className={`w-full px-3 py-1.5 text-[12.5px] text-left hover:bg-ink-100 dark:hover:bg-ink-800 ${
+              className={`w-full px-3 py-1.5 text-[12.5px] text-left hover:bg-ink-100 dark:hover:bg-ink-800 flex items-center justify-between gap-2 ${
                 l.v === locale
                   ? "text-brand-600 dark:text-brand-400 font-medium"
                   : "text-ink-700 dark:text-ink-200"
               }`}
             >
-              {l.label}
+              <span className="font-mono uppercase">{l.label}</span>
+              <span className="text-[11px] opacity-60 truncate">{l.name}</span>
             </button>
           ))}
         </div>

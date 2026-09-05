@@ -18,10 +18,18 @@ type Visit = {
 export default function MobileVisits() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [rows, setRows] = useState<Visit[]>([]);
+  const [loading, setLoading] = useState(false);
 
   async function load() {
-    const r = await api.get<Visit[]>(`/distribution/planned-visits?visit_date=${date}`);
-    setRows(r.data || []);
+    setLoading(true);
+    try {
+      const r = await api.get<Visit[]>(`/distribution/planned-visits?visit_date=${date}`);
+      setRows(r.data || []);
+    } catch (e: any) {
+      toast.error(getErrorMessage(e, "Vizitlarni yuklab bo'lmadi"));
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, [date]);
 
@@ -51,7 +59,9 @@ export default function MobileVisits() {
       <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md text-sm" />
 
-      {rows.length === 0 ? (
+      {loading ? (
+        <div className="py-16 text-center text-slate-400 text-sm">Yuklanmoqda...</div>
+      ) : rows.length === 0 ? (
         <div className="py-16 text-center text-slate-400">
           Bu kunda vizitlar yo'q
         </div>

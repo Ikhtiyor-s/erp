@@ -44,6 +44,7 @@ URL_MODULE = {
     "tasks": "manufacturing",
     "assistant": "statistics",
     "integration": "settings",
+    "integrations": "integrations",
 }
 
 METHOD_ACTION = {
@@ -80,6 +81,10 @@ SKIP_PATHS_PREFIX = (
     "/api/v1/integration/telegram/webhook",
     "/api/v1/integration/click/webhook",
     "/api/v1/integration/payme/webhook",
+    "/api/v1/integration/alif/webhook",
+    "/api/v1/integration/uzum/webhook",
+    "/api/v1/integration/multicard/webhook",
+    "/api/v1/integration/rahmat/webhook",
     "/api/v1/customer-portal/",
 )
 

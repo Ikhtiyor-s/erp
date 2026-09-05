@@ -64,7 +64,7 @@ export default function PriceListsPage() {
 
   async function save() {
     if (!form.name) {
-      toast.error(t("ui__����������������_����������������������_4df3db9f"));
+      toast.error(t("ui__название_обязательно_4df3db9f"));
       return;
     }
     try {
@@ -75,7 +75,7 @@ export default function PriceListsPage() {
       };
       if (editId) await api.put(`/reference/price-lists/${editId}`, payload);
       else await api.post("/reference/price-lists", payload);
-      toast.success(t("ui__������������������_54a59b19"));
+      toast.success(t("ui__сохранено_54a59b19"));
       setOpen(false);
       setForm({ name: "", currency_id: "", is_default: false });
       setEditId(null);
@@ -87,7 +87,7 @@ export default function PriceListsPage() {
   async function del(r: PriceList) {
     if (!confirm(`��${r.name}�� o'chirilsinmi?`)) return;
     await api.delete(`/reference/price-lists/${r.id}`);
-    toast.success(t("ui__��������������_0c450c40"));
+    toast.success(t("ui__удалено_0c450c40"));
     load();
   }
 
@@ -104,7 +104,7 @@ export default function PriceListsPage() {
         product_id: newItem.product_id,
         price: Number(newItem.price),
       });
-      toast.success(t("ui__������������������_0e7e5ccb"));
+      toast.success(t("ui__добавлено_0e7e5ccb"));
       setNewItem({ product_id: "", price: "" });
       const { data } = await api.get<PriceItem[]>(`/reference/price-lists/${itemsFor.id}/items`);
       setItems(data);
@@ -122,7 +122,7 @@ export default function PriceListsPage() {
   const cols: Column<PriceList>[] = [
     {
       key: "name",
-      header: t("ui__����������������_602680ed"),
+      header: t("ui__название_602680ed"),
       render: (r) => (
         <div className="flex items-center gap-2">
           {r.is_default && (
@@ -134,13 +134,13 @@ export default function PriceListsPage() {
     },
     {
       key: "currency_code",
-      header: t("ui__������������_cf55d9a9"),
+      header: t("ui__валюта_cf55d9a9"),
       width: "100px",
       render: (r) => r.currency_code || "���",
     },
     {
       key: "item_count",
-      header: t("ui__��������������_7366e179"),
+      header: t("ui__позиций_7366e179"),
       align: "right",
       width: "120px",
       render: (r) => (
@@ -159,7 +159,7 @@ export default function PriceListsPage() {
           onClick={() => openItems(r)}
           className="text-brand-600 dark:text-brand-400 hover:text-brand-700 text-xs inline-flex items-center gap-1"
         >
-          <ListPlus size={14} /> {t("ui__��������������_3f4e8c19")}
+          <ListPlus size={14} /> {t("ui__позиции_3f4e8c19")}
         </button>
       ),
     },
@@ -168,8 +168,8 @@ export default function PriceListsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("ui__����������_����������_85573231")}
-        description={t("ui__������������_����_������������������_����������������_500b80f3")}
+        title={t("ui__прайс_листы_85573231")}
+        description={t("ui__прайсы_по_сегментам_клиентов_500b80f3")}
         onCreate={() => {
           setForm({ name: "", currency_id: "", is_default: false });
           setEditId(null);
@@ -195,14 +195,14 @@ export default function PriceListsPage() {
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Narxnomani tahrirlash" : "Yangi narxnoma"}>
         <div className="space-y-3">
-          <Field label={t("ui__����������������_602680ed")} required>
+          <Field label={t("ui__название_602680ed")} required>
             <input
               className={input}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </Field>
-          <Field label={t("ui__������������_cf55d9a9")}>
+          <Field label={t("ui__валюта_cf55d9a9")}>
             <select
               className={input}
               value={form.currency_id || ""}
@@ -213,7 +213,7 @@ export default function PriceListsPage() {
                 })
               }
             >
-              <option value="">{t("ui__������_7b07413e")}</option>
+              <option value="">{t("ui__нет_7b07413e")}</option>
               {currencies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.code}
@@ -227,14 +227,14 @@ export default function PriceListsPage() {
               checked={form.is_default}
               onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
             />
-            {t("ui__����_������������������_d3b9e440")}
+            {t("ui__по_умолчанию_d3b9e440")}
           </label>
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
             <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700">
-              {t("ui__������������_987b33c6")}
+              {t("ui__отмена_987b33c6")}
             </button>
             <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">
-              {t("ui__������������������_74ea58b6")}
+              {t("ui__сохранить_74ea58b6")}
             </button>
           </div>
         </div>
@@ -249,13 +249,13 @@ export default function PriceListsPage() {
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 items-end">
             <div className="sm:col-span-2">
-              <Field label={t("ui__����������_8b35db64")}>
+              <Field label={t("ui__товар_8b35db64")}>
                 <select
                   className={input}
                   value={newItem.product_id}
                   onChange={(e) => setNewItem({ ...newItem, product_id: e.target.value })}
                 >
-                  <option value="">{t("ui__��������������_fbbc1d13")}</option>
+                  <option value="">{t("ui__выбрать_fbbc1d13")}</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} {p.sku ? `(${p.sku})` : ""}
@@ -264,7 +264,7 @@ export default function PriceListsPage() {
                 </select>
               </Field>
             </div>
-            <Field label={t("ui__��������_682fa8db")}>
+            <Field label={t("ui__цена_682fa8db")}>
               <input
                 type="number"
                 step="0.01"
@@ -278,7 +278,7 @@ export default function PriceListsPage() {
                 onClick={addItem}
                 className="px-4 py-2 text-sm bg-brand-600 text-white rounded-md hover:bg-brand-700"
               >
-                {t("ui__����������������_5eba283b")}
+                {t("ui__добавить_5eba283b")}
               </button>
             </div>
           </div>
@@ -287,8 +287,8 @@ export default function PriceListsPage() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 dark:bg-slate-900/40 text-slate-700 dark:text-slate-300 sticky top-0">
                 <tr>
-                  <th className="px-3 py-2 text-left">{t("ui__����������_8b35db64")}</th>
-                  <th className="px-3 py-2 text-right w-32">{t("ui__��������_682fa8db")}</th>
+                  <th className="px-3 py-2 text-left">{t("ui__товар_8b35db64")}</th>
+                  <th className="px-3 py-2 text-right w-32">{t("ui__цена_682fa8db")}</th>
                   <th className="w-10"></th>
                 </tr>
               </thead>
@@ -296,7 +296,7 @@ export default function PriceListsPage() {
                 {items.length === 0 ? (
                   <tr>
                     <td colSpan={3} className="text-center py-6 text-slate-400 dark:text-slate-500">
-                      {t("ui__������_��������������_cc62d9ac")}
+                      {t("ui__нет_позиций_cc62d9ac")}
                     </td>
                   </tr>
                 ) : (

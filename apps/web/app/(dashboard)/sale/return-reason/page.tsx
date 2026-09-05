@@ -59,7 +59,7 @@ export default function ReturnReasonPage() {
 
   async function save() {
     if (!form.name) {
-      toast.error(t("ui__������������������_����������������_cb9fd103"));
+      toast.error(t("ui__заполните_название_cb9fd103"));
       return;
     }
     try {
@@ -71,7 +71,7 @@ export default function ReturnReasonPage() {
       };
       if (editId) await api.put(`/sale/return-reasons/${editId}`, payload);
       else await api.post("/sale/return-reasons", payload);
-      toast.success(t("ui__������������������_54a59b19"));
+      toast.success(t("ui__сохранено_54a59b19"));
       setOpen(false);
       setForm(empty);
       setEditId(null);
@@ -83,15 +83,15 @@ export default function ReturnReasonPage() {
   async function del(r: Reason) {
     if (!confirm(`��${r.name}�� nofaol qilinsinmi?`)) return;
     await api.delete(`/sale/return-reasons/${r.id}`);
-    toast.success(t("ui__����������������������������_bf64c95d"));
+    toast.success(t("ui__деактивировано_bf64c95d"));
     load();
   }
 
   const cols: Column<Reason>[] = [
-    { key: "name", header: t("ui__����������������_602680ed") },
+    { key: "name", header: t("ui__название_602680ed") },
     {
       key: "code",
-      header: t("ui__������_3f34a617"),
+      header: t("ui__код_3f34a617"),
       width: "120px",
       render: (r) =>
         r.code ? (
@@ -104,13 +104,13 @@ export default function ReturnReasonPage() {
     },
     {
       key: "created_by_name",
-      header: t("ui__��������������_������_594548b1"),
+      header: t("ui__создано_кем_594548b1"),
       width: "180px",
       render: (r) => r.created_by_name || "���",
     },
     {
       key: "return_type",
-      header: t("ui__������_����������������_80dd2b37"),
+      header: t("ui__тип_возврата_80dd2b37"),
       align: "center",
       width: "180px",
       render: (r) => (
@@ -125,19 +125,19 @@ export default function ReturnReasonPage() {
     },
     {
       key: "description",
-      header: t("ui__����������������_38ca0af8"),
+      header: t("ui__описание_38ca0af8"),
       render: (r) => r.description || "���",
     },
     {
       key: "is_active",
-      header: t("ui__��������������������_010b2231"),
+      header: t("ui__активность_010b2231"),
       align: "center",
       width: "120px",
       render: (r) =>
         r.is_active ? (
-          <span className="text-green-600 text-xs">{t("ui__����������������_782343ea")}</span>
+          <span className="text-green-600 text-xs">{t("ui__активный_782343ea")}</span>
         ) : (
-          <span className="text-slate-400 text-xs">{t("ui__����_��������������_8e4c9b49")}</span>
+          <span className="text-slate-400 text-xs">{t("ui__не_активен_8e4c9b49")}</span>
         ),
     },
   ];
@@ -145,8 +145,8 @@ export default function ReturnReasonPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("ui__��������������_����������������_b9ece5e2")}
-        description={t("ui__��������������������_������������_����������������_��_��_277c7a1f")}
+        title={t("ui__причины_возврата_b9ece5e2")}
+        description={t("ui__справочник_причин_возврата_с_т_277c7a1f")}
         onCreate={() => {
           setForm(empty);
           setEditId(null);
@@ -155,15 +155,15 @@ export default function ReturnReasonPage() {
       />
 
       <div className="flex items-center gap-3">
-        <label className="text-sm text-slate-600 dark:text-slate-300">{t("ui__������_����������������_a16cb638")}</label>
+        <label className="text-sm text-slate-600 dark:text-slate-300">{t("ui__тип_возврата_a16cb638")}</label>
         <select
           className={`${input} max-w-xs`}
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
         >
-          <option value="">{t("ui__������_a07b234e")}</option>
-          <option value="valid">{t("ui__����������������������������_adb84d7c")}</option>
-          <option value="invalid">{t("ui__��������������������������������_cb867986")}</option>
+          <option value="">{t("ui__все_a07b234e")}</option>
+          <option value="valid">{t("ui__действительный_adb84d7c")}</option>
+          <option value="invalid">{t("ui__недействительный_cb867986")}</option>
         </select>
       </div>
 
@@ -192,14 +192,14 @@ export default function ReturnReasonPage() {
       >
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <Field label={t("ui__����������������_602680ed")} required>
+            <Field label={t("ui__название_602680ed")} required>
               <input
                 className={input}
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
             </Field>
-            <Field label={t("ui__������_3f34a617")}>
+            <Field label={t("ui__код_3f34a617")}>
               <input
                 className={input}
                 value={form.code}
@@ -207,7 +207,7 @@ export default function ReturnReasonPage() {
               />
             </Field>
           </div>
-          <Field label={t("ui__������_����������������_80dd2b37")} required>
+          <Field label={t("ui__тип_возврата_80dd2b37")} required>
             <select
               className={input}
               value={form.return_type}
@@ -215,11 +215,11 @@ export default function ReturnReasonPage() {
                 setForm({ ...form, return_type: e.target.value })
               }
             >
-              <option value="valid">{t("ui__����������������������������_adb84d7c")}</option>
-              <option value="invalid">{t("ui__��������������������������������_cb867986")}</option>
+              <option value="valid">{t("ui__действительный_adb84d7c")}</option>
+              <option value="invalid">{t("ui__недействительный_cb867986")}</option>
             </select>
           </Field>
-          <Field label={t("ui__����������������_38ca0af8")}>
+          <Field label={t("ui__описание_38ca0af8")}>
             <textarea
               className={input}
               rows={3}
@@ -234,13 +234,13 @@ export default function ReturnReasonPage() {
               onClick={() => setOpen(false)}
               className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40"
             >
-              {t("ui__������������_987b33c6")}
+              {t("ui__отмена_987b33c6")}
             </button>
             <button
               onClick={save}
               className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
             >
-              {t("ui__������������������_74ea58b6")}
+              {t("ui__сохранить_74ea58b6")}
             </button>
           </div>
         </div>

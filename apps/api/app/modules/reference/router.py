@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_org_id, get_current_user_id
 from app.modules.audit.logger import log_action
+from app.modules.rbac.deps import require_permission
 
 
 
@@ -875,3 +876,156 @@ async def delete_warehouse_type(
     )
     await db.commit()
     return {"ok": True}
+
+
+# =========================================================
+# MXIK — Soliq.uz product/service catalog (global reference)
+# No organization_id filter: shared across all tenants.
+# =========================================================
+
+_MXIK_SEED = [
+    # (code, name_uz, name_ru, unit, group_code, group_name)
+    ("0102293000", "Qoramol go'shti (suyak bilan, muzlatilgan)", "Говядина (с костью, мороженая)", "kg", "0102", "Qoramol"),
+    ("0102219000", "Qoramol go'shti (suyaksiz, muzlatilgan)", "Говядина (без кости, мороженая)", "kg", "0102", "Qoramol"),
+    ("0203190000", "Cho'chqa go'shti (muzlatilgan)", "Свинина (мороженая)", "kg", "0203", "Cho'chqa"),
+    ("0207120000", "Tovuq go'shti (muzlatilgan)", "Мясо курицы (мороженое)", "kg", "0207", "Parrandalar"),
+    ("0302110000", "Losos' (yangi, sovutilgan)", "Лосось (свежий, охлаждённый)", "kg", "0302", "Baliq"),
+    ("0401100000", "Sut (tabiiy, 3.5% yog'li)", "Молоко (натуральное, 3.5% жирн.)", "l", "0401", "Sut mahsulotlari"),
+    ("0402210000", "Quruq sut kukuni", "Сухое молоко", "kg", "0402", "Sut mahsulotlari"),
+    ("0405100000", "Sariyog'", "Сливочное масло", "kg", "0405", "Yog'lar"),
+    ("0406100000", "Tvorog (pishloq)", "Творог", "kg", "0406", "Pishloqlar"),
+    ("0701900000", "Kartoshka", "Картофель", "kg", "0701", "Sabzavotlar"),
+    ("0702000000", "Pomidor (yangi)", "Помидоры (свежие)", "kg", "0702", "Sabzavotlar"),
+    ("0703100000", "Piyoz", "Лук репчатый", "kg", "0703", "Sabzavotlar"),
+    ("0706100000", "Sabzi", "Морковь", "kg", "0706", "Sabzavotlar"),
+    ("0709200000", "Asparagus", "Спаржа", "kg", "0709", "Sabzavotlar"),
+    ("0803901000", "Banan", "Бананы", "kg", "0803", "Mevalar"),
+    ("0805100000", "Apelsin", "Апельсины", "kg", "0805", "Mevalar"),
+    ("0806100000", "Uzum (yangi)", "Виноград (свежий)", "kg", "0806", "Mevalar"),
+    ("0808100000", "Olma", "Яблоки", "kg", "0808", "Mevalar"),
+    ("0809100000", "O'rik", "Абрикосы", "kg", "0809", "Mevalar"),
+    ("0901110000", "Qahva (qovurilmagan)", "Кофе (нежареный)", "kg", "0901", "Qahva va choy"),
+    ("0902300000", "Qora choy (bog'langan)", "Чай чёрный (фасованный)", "kg", "0902", "Qahva va choy"),
+    ("1001910000", "Bug'doy (urug'lik)", "Пшеница (семенная)", "kg", "1001", "Don ekinlari"),
+    ("1006300000", "Sholi (qayta ishlangan)", "Рис (обработанный)", "kg", "1006", "Don ekinlari"),
+    ("1101000000", "Bug'doy uni", "Мука пшеничная", "kg", "1101", "Un va kraxmal"),
+    ("1102200000", "Makkajo'xori uni", "Мука кукурузная", "kg", "1102", "Un va kraxmal"),
+    ("1507100000", "Soya moyi (xom)", "Масло соевое (нерафинированное)", "l", "1507", "O'simlik moylari"),
+    ("1509100000", "Zaytun moyi (qo'shimcha virgin)", "Масло оливковое (extra virgin)", "l", "1509", "O'simlik moylari"),
+    ("1512110000", "Kungaboqar moyi (xom)", "Масло подсолнечное (нерафинированное)", "l", "1512", "O'simlik moylari"),
+    ("1601000000", "Kolbasa (qaynatilgan)", "Колбаса варёная", "kg", "1601", "Et mahsulotlari"),
+    ("1604130000", "Sichqan baliq konservasi", "Консервы рыбные", "dona", "1604", "Konservalar"),
+    ("1704900000", "Qand-shakar mahsulotlari", "Кондитерские изделия (прочие)", "kg", "1704", "Konfet va shirinliklar"),
+    ("1806310000", "Shokolad (plitka)", "Шоколад (плиточный)", "kg", "1806", "Shokolad"),
+    ("1901200000", "Non mahsulotlari (quritilgan)", "Хлебные изделия (сухие)", "kg", "1901", "Non va xamirlar"),
+    ("1905310000", "Pechene (sweet biscuit)", "Печенье", "kg", "1905", "Non va xamirlar"),
+    ("2001100000", "Bodring konservasi", "Огурцы консервированные", "l", "2001", "Konservalar"),
+    ("2002100000", "Pomidor konservasi (butun)", "Помидоры консервированные (целые)", "l", "2002", "Konservalar"),
+    ("2009110000", "Apelsin sharbati", "Сок апельсиновый", "l", "2009", "Sharbatlar"),
+    ("2009900000", "Meva sharbatlari (aralash)", "Соки фруктовые (смешанные)", "l", "2009", "Sharbatlar"),
+    ("2101110000", "Qahva ekstrakti", "Экстракт кофе", "kg", "2101", "Qahva mahsulotlari"),
+    ("2106900000", "Oziq-ovqat qo'shimchalari", "Пищевые добавки", "kg", "2106", "Qo'shimchalar"),
+    ("2201101900", "Mineral suv (gazsizdantirilgan)", "Вода минеральная (негазированная)", "l", "2201", "Suv"),
+    ("2202100000", "Gazlangan ichimliklar (shakarli)", "Напитки газированные (сахарные)", "l", "2202", "Gazlangan ichimliklar"),
+    ("2204210000", "Vino (stolnoe, qizil)", "Вино (столовое, красное)", "l", "2204", "Alkogol"),
+    ("2208400000", "Rum", "Ром", "l", "2208", "Alkogol"),
+    ("3004100000", "Dori-darmonlar (penitsillin guruh)", "Лекарства (пенициллиновая группа)", "dona", "3004", "Farmatsevtika"),
+    ("3304100000", "Labda bo'yog'i", "Губная помада", "dona", "3304", "Kosmetika"),
+    ("3401110000", "Sovun (yuqori sifatli)", "Мыло туалетное (высший сорт)", "kg", "3401", "Gigiena"),
+    ("3402200000", "Kir yuvish vositasi (kukunli)", "Стиральный порошок", "kg", "3402", "Tozalash vositalari"),
+    ("4011100000", "Avtomobil shinasi (yangi)", "Шины автомобильные (новые)", "dona", "4011", "Shinalar"),
+    ("6109100000", "Futbolka (paxta)", "Футболка (хлопок)", "dona", "6109", "Kiyim"),
+    ("6203420000", "Shim (paxta, erkaklar)", "Брюки (хлопок, мужские)", "dona", "6203", "Kiyim"),
+    ("6403510000", "Poyabzal (charm tagi)", "Обувь (кожаная подошва)", "juft", "6403", "Poyabzal"),
+    ("7013290000", "Shisha idishlar (dasturxon uchun)", "Посуда стеклянная (столовая)", "dona", "7013", "Uy-ro'zg'or buyumlari"),
+    ("7323930000", "Pishirish idishlari (po'lat)", "Посуда для готовки (сталь)", "dona", "7323", "Uy-ro'zg'or buyumlari"),
+    ("8414510000", "Ventilyator (uy uchun)", "Вентилятор бытовой", "dona", "8414", "Maishiy texnika"),
+    ("8418100000", "Muzlatgich (kombinatsiyalangan)", "Холодильник комбинированный", "dona", "8418", "Maishiy texnika"),
+    ("8450110000", "Kir yuvish mashinasi (avtomatik)", "Стиральная машина (автоматическая)", "dona", "8450", "Maishiy texnika"),
+    ("8471300000", "Noutbuk", "Ноутбук", "dona", "8471", "Kompyuterlar"),
+    ("8517120000", "Mobil telefon (smartfon)", "Телефон мобильный (смартфон)", "dona", "8517", "Telefon"),
+    ("8528720000", "Televizor (rangli, LCD)", "Телевизор цветной (LCD)", "dona", "8528", "Elektronika"),
+    ("9403200000", "Metall mebel (ofis)", "Мебель металлическая (офисная)", "dona", "9403", "Mebel"),
+    ("9403500000", "Yog'och mebel (yotoqxona)", "Мебель деревянная (спальная)", "dona", "9403", "Mebel"),
+    ("1000000001", "Non (bug'doy, oq)", "Хлеб (пшеничный, белый)", "dona", "1905", "Non va xamirlar"),
+    ("1000000002", "Choy paketi (qora, 25 ta)", "Чай в пакетиках (чёрный, 25 шт.)", "quti", "0902", "Qahva va choy"),
+    ("1000000003", "Tuxum (tovuq, 10 ta)", "Яйца куриные (10 шт.)", "quti", "0407", "Tuxum"),
+    ("1000000004", "Makaron (italyan turi)", "Макароны (итальянский тип)", "kg", "1902", "Makaron"),
+    ("1000000005", "Guruch (uza, yumaloq)", "Рис (круглозернистый)", "kg", "1006", "Don ekinlari"),
+    ("1000000006", "Shakar (qand, oq)", "Сахар (рафинад, белый)", "kg", "1701", "Shakar"),
+    ("1000000007", "Tuz (oshxona, yodlangan)", "Соль поваренная (йодированная)", "kg", "2501", "Tuz"),
+    ("1000000008", "Qora murch (maydalangan)", "Перец чёрный (молотый)", "kg", "0904", "Ziravorlar"),
+    ("1000000009", "Qizil murch (quruq)", "Перец красный (сухой)", "kg", "0904", "Ziravorlar"),
+    ("1000000010", "Zira", "Кумин (зира)", "kg", "0909", "Ziravorlar"),
+    ("1000000011", "Kunjut", "Кунжут", "kg", "1207", "Moyli urug'lar"),
+    ("1000000012", "Ketchup (pomidor)", "Кетчуп томатный", "dona", "2103", "Sous va ketchup"),
+    ("1000000013", "Majonez", "Майонез", "dona", "2103", "Sous va ketchup"),
+    ("1000000014", "Smetana (20% yog'li)", "Сметана (20% жирн.)", "kg", "0401", "Sut mahsulotlari"),
+    ("1000000015", "Kefir (1% yog'li)", "Кефир (1% жирн.)", "l", "0401", "Sut mahsulotlari"),
+    ("1000000016", "Pishloq (Rossiya turi)", "Сыр (Российский)", "kg", "0406", "Pishloqlar"),
+    ("1000000017", "Pampers (kichik, L o'lcham)", "Подгузники (детские, размер L)", "dona", "9619", "Gigiyena buyumlari"),
+    ("1000000018", "Dishan pastasi", "Зубная паста", "dona", "3306", "Og'iz gigienasi"),
+    ("1000000019", "Shampun (soch uchun)", "Шампунь (для волос)", "dona", "3305", "Kosmetika"),
+    ("1000000020", "Qog'oz ro'molcha (3 qatlamli)", "Бумажные салфетки (3-слойные)", "quti", "4818", "Qog'oz mahsulotlari"),
+]
+
+
+@router.get("/mxik/search", dependencies=[Depends(require_permission("mxik.view"))])
+async def search_mxik(
+    q: str = "",
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    _user_id: str = Depends(get_current_user_id),
+):
+    """Full-text MXIK catalog search (global reference — no org filter).
+
+    On first call seeds the table if empty.
+    """
+    if limit < 1:
+        limit = 1
+    elif limit > 100:
+        limit = 100
+
+    # Seed on demand so the catalog is immediately useful
+    count_res = await db.execute(text("SELECT COUNT(*) FROM mxik_products"))
+    if count_res.scalar() == 0:
+        for code, name_uz, name_ru, unit, group_code, group_name in _MXIK_SEED:
+            await db.execute(
+                text(
+                    "INSERT INTO mxik_products (code, name_uz, name_ru, unit, group_code, group_name) "
+                    "VALUES (:c, :nuz, :nru, :u, :gc, :gn) "
+                    "ON CONFLICT (code) DO NOTHING"
+                ),
+                {"c": code, "nuz": name_uz, "nru": name_ru,
+                 "u": unit, "gc": group_code, "gn": group_name},
+            )
+        await db.commit()
+
+    q = q.strip()
+    if not q:
+        res = await db.execute(
+            text(
+                "SELECT code, name_uz, name_ru, unit "
+                "FROM mxik_products WHERE is_active = TRUE "
+                "ORDER BY code LIMIT :lim"
+            ),
+            {"lim": limit},
+        )
+        return [dict(r._mapping) for r in res]
+
+    res = await db.execute(
+        text(
+            "SELECT code, name_uz, name_ru, unit "
+            "FROM mxik_products "
+            "WHERE is_active = TRUE AND ("
+            "  to_tsvector('simple', name_uz) @@ plainto_tsquery('simple', :q) OR "
+            "  to_tsvector('simple', COALESCE(name_ru, '')) @@ plainto_tsquery('simple', :q) OR "
+            "  name_uz ILIKE :qlike OR "
+            "  name_ru ILIKE :qlike OR "
+            "  code ILIKE :qlike"
+            ") "
+            "ORDER BY code LIMIT :lim"
+        ),
+        {"q": q, "qlike": f"%{q}%", "lim": limit},
+    )
+    return [dict(r._mapping) for r in res]

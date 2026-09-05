@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { toast } from "sonner";
 import { Plus, Coffee } from "lucide-react";
 import { api } from "@/lib/api";
@@ -72,7 +71,7 @@ export default function MobileTickets() {
       ) : (
         <div className="grid grid-cols-2 gap-2">
           {rows.map((t) => (
-            <Link key={t.id} href={`/m/pos/tickets/${t.id}`}
+            <div key={t.id}
               className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
               <div className="font-semibold truncate">{t.ticket_name}</div>
               {t.table_number && <div className="text-xs text-slate-500">Stol № {t.table_number}</div>}
@@ -80,7 +79,7 @@ export default function MobileTickets() {
                 <span className="text-xs text-slate-500">{t.item_count}</span>
                 <span className="font-mono text-sm font-semibold">{fmt(t.total_amount)}</span>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       )}

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Search, Plus, Minus, ShoppingCart, Trash2, ScanLine, X, CheckCircle } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Search, Plus, Minus, ShoppingCart, ScanLine, X } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
-import { BarcodeScanner } from "@/components/mobile/barcode-scanner";
+import { BarcodeScanner } from "@/components/barcode/scanner";
 
 type Product = { id: string; name: string; sku?: string; barcode?: string; sale_price: string; total_stock?: string };
 type CartItem = { product: Product; quantity: number; price: number };
@@ -13,6 +14,7 @@ type CartItem = { product: Product; quantity: number; price: number };
 const fmt = (v: any) => Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 
 export default function MobilePOS() {
+  const ts = useTranslations("barcode.scan");
   const [q, setQ] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -75,16 +77,21 @@ export default function MobilePOS() {
     );
   }
 
-  async function onScan(code: string) {
+  const onScan = useCallback(async (code: string) => {
     setScanOpen(false);
-    const r = await api.get<Product[]>(`/warehouse/products?q=${encodeURIComponent(code)}&limit=1`);
-    if (r.data?.[0]) {
-      addToCart(r.data[0]);
-      toast.success(r.data[0].name);
-    } else {
-      toast.error("Topilmadi: " + code);
+    try {
+      const r = await api.get<Product[]>(`/warehouse/products?barcode=${encodeURIComponent(code)}&limit=1`);
+      if (r.data?.[0]) {
+        addToCart(r.data[0]);
+        navigator.vibrate?.(50);
+        toast.success(r.data[0].name);
+      } else {
+        toast.error(ts("product_not_found"));
+      }
+    } catch (e) {
+      toast.error(getErrorMessage(e, ts("product_not_found")));
     }
-  }
+  }, [ts]);
 
   const total = cart.reduce((s, it) => s + it.quantity * it.price, 0);
   const itemCount = cart.reduce((s, it) => s + it.quantity, 0);
@@ -123,7 +130,7 @@ export default function MobilePOS() {
             className="w-full pl-9 pr-3 py-2 bg-slate-100 dark:bg-slate-900 rounded-md text-sm" />
         </div>
         <button onClick={() => setScanOpen(true)}
-          aria-label="Shtrix-kod skanerlash"
+          aria-label={ts("open_scanner")}
           className="min-h-[44px] min-w-[44px] flex items-center justify-center bg-brand-600 text-white rounded-md">
           <ScanLine size={20} />
         </button>
@@ -238,7 +245,27 @@ export default function MobilePOS() {
         </div>
       )}
 
-      <BarcodeScanner open={scanOpen} onClose={() => setScanOpen(false)} onDetect={onScan} />
+      {scanOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-end">
+          <div className="w-full bg-slate-900 rounded-t-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
+              <span className="text-white font-medium text-sm">{ts("open_scanner")}</span>
+              <button
+                onClick={() => setScanOpen(false)}
+                aria-label={ts("close_scanner")}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-300"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <BarcodeScanner
+              onScan={onScan}
+              onError={() => setScanOpen(false)}
+              className="w-full h-64"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

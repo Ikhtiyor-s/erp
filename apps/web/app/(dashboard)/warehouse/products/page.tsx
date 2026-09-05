@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Search } from "lucide-react";
+import { Download, Search, Upload, ClipboardList, Printer } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -11,7 +11,22 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { TagsInput } from "@/components/ui/tags-input";
 import { CustomFieldsEditor } from "@/components/ui/custom-fields";
+import { usePermissions } from "@/lib/permissions";
 import { useTranslations } from "next-intl";
+import { BomEditorModal } from "@/components/warehouse/BomEditorModal";
+import { MxikCombobox } from "@/components/ui/mxik-combobox";
+import { LabelPrint, type LabelData } from "@/components/barcode/label-print";
+
+const MAX_LABEL_SELECT = 100;
+
+function toLabel(r: { name: string; barcode?: string; sku?: string; id: string; sale_price: string; unit_name?: string }): LabelData {
+  return {
+    name: r.name,
+    barcode: r.barcode || r.sku || r.id,
+    price: Number(r.sale_price) || undefined,
+    unit: r.unit_name,
+  };
+}
 
 type Product = {
   id: string;
@@ -30,19 +45,32 @@ type Product = {
   is_service: boolean;
   is_produced?: boolean;
   total_stock?: string;
+  product_type?: string | null;
+  default_rack_id?: number | null;
+  rack_name?: string | null;
+  default_cell_id?: string | null;
+  default_cell_code?: string | null;
 };
+
 type Ref = { id: number; name: string; code?: string };
+type ImportError = { row: number; message: string };
+type ImportResult = { created: number; updated: number; errors: ImportError[] };
+
+type Warehouse = { id: number; name: string };
+type WarehouseRow = { id: number; name: string };
+type Rack = { id: number; name: string };
+type Cell = { id: string; code: string; is_active: boolean };
 
 const empty = {
   name: "",
   sku: "",
   barcode: "",
   mxik: "",
-  category_id: null,
-  unit_id: null,
+  category_id: null as number | null,
+  unit_id: null as number | null,
   purchase_price: 0,
   sale_price: 0,
-  currency_id: null,
+  currency_id: null as number | null,
   is_service: false,
   is_material: false,
   is_semi_product: false,
@@ -58,27 +86,351 @@ const empty = {
   description: "",
   extra_barcodes: [] as string[],
   tag_ids: [] as number[],
+  product_type: "",
+  default_rack_id: null as number | null,
+  default_cell_id: null as string | null,
 };
 
-const fmt = (v: any) =>
+const fmt = (v: unknown) =>
   Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+
+function CellPicker({
+  rackValue,
+  cellValue,
+  onRackChange,
+  onCellChange,
+  warehouses,
+  tw,
+}: {
+  rackValue: number | null;
+  cellValue: string | null;
+  onRackChange: (id: number | null) => void;
+  onCellChange: (id: string | null) => void;
+  warehouses: Warehouse[];
+  tw: ReturnType<typeof useTranslations<"warehouse.products">>;
+}) {
+  const [warehouseId, setWarehouseId] = useState<number | null>(null);
+  const [rowId, setRowId] = useState<number | null>(null);
+  const [rows, setRows] = useState<WarehouseRow[]>([]);
+  const [racks, setRacks] = useState<Rack[]>([]);
+  const [cells, setCells] = useState<Cell[]>([]);
+
+  useEffect(() => {
+    setRowId(null);
+    setRacks([]);
+    setCells([]);
+    onRackChange(null);
+    onCellChange(null);
+    if (!warehouseId) {
+      setRows([]);
+      return;
+    }
+    api
+      .get<WarehouseRow[]>(`/warehouse/${warehouseId}/rows`)
+      .then((r) => setRows(r.data))
+      .catch(() => setRows([]));
+  }, [warehouseId]);
+
+  useEffect(() => {
+    setRacks([]);
+    setCells([]);
+    onRackChange(null);
+    onCellChange(null);
+    if (!rowId) return;
+    api
+      .get<Rack[]>(`/warehouse/rows/${rowId}/racks`)
+      .then((r) => setRacks(r.data))
+      .catch(() => setRacks([]));
+  }, [rowId]);
+
+  function handleRackChange(rackId: number | null) {
+    onRackChange(rackId);
+    onCellChange(null);
+    setCells([]);
+    if (!rackId) return;
+    api
+      .get<Cell[]>(`/warehouse/racks/${rackId}/cells`)
+      .then((r) => setCells(r.data.filter((c) => c.is_active)))
+      .catch(() => setCells([]));
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+      <div>
+        <label className="text-[11px] text-ink-500 dark:text-ink-400 block mb-1">
+          {tw("rack_warehouse")}
+        </label>
+        <select
+          className={input}
+          value={warehouseId ?? ""}
+          onChange={(e) =>
+            setWarehouseId(e.target.value ? Number(e.target.value) : null)
+          }
+        >
+          <option value="">{tw("rack_select_warehouse")}</option>
+          {warehouses.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-[11px] text-ink-500 dark:text-ink-400 block mb-1">
+          {tw("rack_row")}
+        </label>
+        <select
+          className={input}
+          value={rowId ?? ""}
+          disabled={!warehouseId}
+          onChange={(e) =>
+            setRowId(e.target.value ? Number(e.target.value) : null)
+          }
+        >
+          <option value="">{tw("rack_select_row")}</option>
+          {rows.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-[11px] text-ink-500 dark:text-ink-400 block mb-1">
+          {tw("rack_label")}
+        </label>
+        <select
+          className={input}
+          value={rackValue ?? ""}
+          disabled={!rowId}
+          onChange={(e) =>
+            handleRackChange(e.target.value ? Number(e.target.value) : null)
+          }
+        >
+          <option value="">{tw("rack_select_rack")}</option>
+          {racks.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-[11px] text-ink-500 dark:text-ink-400 block mb-1">
+          {tw("cell_label")}
+        </label>
+        <select
+          className={input}
+          value={cellValue ?? ""}
+          disabled={!rackValue}
+          onChange={(e) =>
+            onCellChange(e.target.value ? e.target.value : null)
+          }
+        >
+          <option value="">{tw("cell_select_cell")}</option>
+          {cells.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.code}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+function ImportModal({
+  open,
+  onClose,
+  onSuccess,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const tw = useTranslations("warehouse.products");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<ImportResult | null>(null);
+
+  function reset() {
+    setResult(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function handleClose() {
+    reset();
+    onClose();
+  }
+
+  async function handleUpload() {
+    const file = fileRef.current?.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith(".xlsx")) {
+      toast.error(tw("only_xlsx"));
+      return;
+    }
+    setUploading(true);
+    setResult(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await api.post<ImportResult>(
+        "/warehouse/products/import",
+        fd,
+        { timeout: 120000 }
+      );
+      setResult(res.data);
+      if (res.data.errors.length === 0) {
+        toast.success(
+          `${tw("result_created", { n: res.data.created })} / ${tw("result_updated", { n: res.data.updated })}`
+        );
+        onSuccess();
+      }
+    } catch (e) {
+      toast.error(getErrorMessage(e, tw("only_xlsx")));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function downloadTemplate() {
+    try {
+      const res = await api.get("/warehouse/products/import/template", {
+        responseType: "blob",
+        timeout: 30000,
+      });
+      const url = URL.createObjectURL(res.data as Blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "products-template.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Shablon yuklab olinmadi"));
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={handleClose} title={tw("import_modal_title")} size="lg">
+      <div className="space-y-4">
+        <button
+          type="button"
+          onClick={downloadTemplate}
+          className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:text-brand-700 underline underline-offset-2"
+        >
+          <Download size={14} />
+          {tw("template_download")}
+        </button>
+
+        <Field label={tw("file_label")}>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx"
+            className={`${input} file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-xs file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100`}
+          />
+        </Field>
+
+        <button
+          type="button"
+          onClick={handleUpload}
+          disabled={uploading}
+          className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
+        >
+          <Upload size={14} />
+          {uploading ? tw("uploading") : tw("upload_btn")}
+        </button>
+
+        {result && (
+          <div className="space-y-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <div className="flex flex-wrap gap-3 text-sm">
+              <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                {tw("result_created", { n: result.created })}
+              </span>
+              <span className="text-brand-700 dark:text-brand-400 font-medium">
+                {tw("result_updated", { n: result.updated })}
+              </span>
+              {result.errors.length > 0 && (
+                <span className="inline-flex items-center gap-1 bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 text-xs font-semibold px-2 py-0.5 rounded-full">
+                  {tw("result_errors", { n: result.errors.length })}
+                </span>
+              )}
+            </div>
+
+            {result.errors.length > 0 && (
+              <div
+                className="overflow-auto rounded border border-rose-200 dark:border-rose-800"
+                style={{ maxHeight: 300 }}
+              >
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-rose-50 dark:bg-rose-950 text-left">
+                      <th className="px-3 py-2 font-medium text-rose-700 dark:text-rose-300 w-20">
+                        {tw("error_row")} №
+                      </th>
+                      <th className="px-3 py-2 font-medium text-rose-700 dark:text-rose-300">
+                        {tw("error_message")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.errors.map((err, i) => (
+                      <tr
+                        key={i}
+                        className="border-t border-rose-100 dark:border-rose-900 odd:bg-white dark:odd:bg-ink-950 even:bg-rose-50/40 dark:even:bg-rose-950/30"
+                      >
+                        <td className="px-3 py-1.5 font-mono text-rose-600 dark:text-rose-400">
+                          {err.row}
+                        </td>
+                        <td className="px-3 py-1.5 text-ink-700 dark:text-ink-300">
+                          {err.message}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex justify-end pt-2 border-t border-ink-200 dark:border-ink-800">
+          <button
+            type="button"
+            onClick={handleClose}
+            className="px-4 py-2 text-sm rounded-md border border-ink-300 dark:border-ink-600 hover:bg-ink-50 dark:hover:bg-ink-800"
+          >
+            {tw("close")}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 export default function ProductsPage() {
   const t = useTranslations("ui");
+  const tw = useTranslations("warehouse.products");
+  const { can } = usePermissions();
+
   const [rows, setRows] = useState<Product[]>([]);
   const [cats, setCats] = useState<Ref[]>([]);
   const [units, setUnits] = useState<Ref[]>([]);
   const [currencies, setCurrencies] = useState<Ref[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
-    q: "",
-    category_id: "",
-    is_service: "",
-  });
+  const [filters, setFilters] = useState({ q: "", category_id: "", is_service: "" });
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<any>(empty);
+  const [form, setForm] = useState<typeof empty>(empty);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [bomTarget, setBomTarget] = useState<Product | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [printTarget, setPrintTarget] = useState<Product | null>(null);
+  const [bulkPrintOpen, setBulkPrintOpen] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -89,6 +441,8 @@ export default function ProductsPage() {
       if (filters.category_id) p.set("category_id", filters.category_id);
       if (filters.is_service) p.set("is_service", filters.is_service);
       setRows((await api.get<Product[]>(`/warehouse/products?${p}`)).data);
+    } catch (e) {
+      toast.error(getErrorMessage(e, t("ui__ошибка_c6fd3c6a")));
     } finally {
       setLoading(false);
     }
@@ -99,13 +453,18 @@ export default function ProductsPage() {
       api.get<Ref[]>("/warehouse/categories").then((r) => setCats(r.data)).catch(() => {}),
       api.get<Ref[]>("/reference/units").then((r) => setUnits(r.data)).catch(() => {}),
       api.get<Ref[]>("/reference/currencies").then((r) => setCurrencies(r.data)).catch(() => {}),
+      api
+        .get<Warehouse[]>("/warehouse/warehouses")
+        .then((r) => setWarehouses(r.data))
+        .catch(() => {}),
     ]);
     load();
   }, []);
 
   async function save() {
     try {
-      const toNum = (v: any) => (v === "" || v == null ? null : Number(v));
+      const toNum = (v: unknown) =>
+        v === "" || v == null ? null : Number(v);
       const payload = {
         ...form,
         purchase_price: Number(form.purchase_price) || 0,
@@ -121,6 +480,9 @@ export default function ProductsPage() {
         dim_weight: toNum(form.dim_weight),
         extra_barcodes: form.extra_barcodes?.filter(Boolean) || [],
         tag_ids: form.tag_ids || [],
+        product_type: form.product_type?.trim() || null,
+        default_rack_id: form.default_rack_id || null,
+        default_cell_id: form.default_cell_id || null,
       };
       if (editId) await api.put(`/warehouse/products/${editId}`, payload);
       else await api.post("/warehouse/products", payload);
@@ -131,167 +493,487 @@ export default function ProductsPage() {
       toast.error(getErrorMessage(e, "MXIK xato"));
     }
   }
+
   async function confirmDelete() {
     if (!deleteTarget) return;
-    await api.delete(`/warehouse/products/${deleteTarget.id}`);
-    toast.success(t("ui__удалено_0c450c40"));
-    setDeleteTarget(null);
-    load();
+    try {
+      await api.delete(`/warehouse/products/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, t("ui__ошибка_c6fd3c6a")));
+    }
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const params: Record<string, string> = {};
+      if (filters.category_id) params.category_id = filters.category_id;
+      const res = await api.get("/warehouse/products/export", {
+        params,
+        responseType: "blob",
+        timeout: 60000,
+      });
+      const blob = res.data as Blob;
+      const cd: string =
+        res.headers["content-disposition"] || res.headers["Content-Disposition"] || "";
+      const match = cd.match(/filename="?([^";\n]+)"?/);
+      const date = new Date().toISOString().slice(0, 10);
+      const filename = match?.[1] || `products-${date}.xlsx`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(getErrorMessage(e, tw("export_loading")));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function openEdit(r: Product) {
+    try {
+      const full = await api.get<Record<string, unknown>>(
+        `/warehouse/products/${r.id}/full`
+      );
+      const d = full.data;
+      setForm({
+        ...empty,
+        name: String(d.name ?? ""),
+        sku: String(d.sku ?? ""),
+        barcode: String(d.barcode ?? ""),
+        mxik: String(d.mxik ?? ""),
+        category_id: (d.category_id as number) || null,
+        unit_id: (d.unit_id as number) || null,
+        purchase_price: d.purchase_price as number,
+        sale_price: d.sale_price as number,
+        currency_id: (d.currency_id as number) || null,
+        is_service: !!(d.is_service),
+        is_material: !!(d.is_material),
+        is_semi_product: !!(d.is_semi_product),
+        is_marked: !!(d.is_marked),
+        has_expiration: !!(d.has_expiration),
+        image_url: String(d.image_url ?? ""),
+        box_qty: String(d.box_qty ?? ""),
+        box_barcode: String(d.box_barcode ?? ""),
+        dim_length: String(d.dim_length ?? ""),
+        dim_width: String(d.dim_width ?? ""),
+        dim_height: String(d.dim_height ?? ""),
+        dim_weight: String(d.dim_weight ?? ""),
+        description: String(d.description ?? ""),
+        extra_barcodes: ((d.extra_barcodes as Array<{ barcode: string }>) || []).map(
+          (b) => b.barcode
+        ),
+        tag_ids: ((d.tags as Array<{ id: number }>) || []).map((tg) => tg.id),
+        product_type: String(d.product_type ?? ""),
+        default_rack_id: (d.default_rack_id as number) || null,
+        default_cell_id: (d.default_cell_id as string) || null,
+      });
+    } catch {
+      setForm({
+        ...empty,
+        name: r.name,
+        sku: r.sku || "",
+        barcode: r.barcode || "",
+        category_id: r.category_id || null,
+        unit_id: r.unit_id || null,
+        purchase_price: r.purchase_price as unknown as number,
+        sale_price: r.sale_price as unknown as number,
+        currency_id: r.currency_id || null,
+        is_service: r.is_service,
+        product_type: r.product_type || "",
+        default_rack_id: r.default_rack_id || null,
+        default_cell_id: r.default_cell_id || null,
+      });
+    }
+    setEditId(r.id);
+    setOpen(true);
+  }
+
+  const tb = useTranslations("warehouse.bom");
+  const tbc = useTranslations("barcode.print");
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < MAX_LABEL_SELECT) next.add(id);
+      else toast.warning(tbc("max_warning"));
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === rows.length) {
+      setSelectedIds(new Set());
+    } else {
+      const ids = rows.slice(0, MAX_LABEL_SELECT).map((r) => r.id);
+      if (rows.length > MAX_LABEL_SELECT) toast.warning(tbc("max_warning"));
+      setSelectedIds(new Set(ids));
+    }
+  }
+
+  const selectedProducts = rows.filter((r) => selectedIds.has(r.id));
+  const bulkLabels = selectedProducts.map(toLabel);
+
   const columns: Column<Product>[] = [
+    {
+      key: "id" as keyof Product,
+      header: (
+        <input
+          type="checkbox"
+          className="w-4 h-4 rounded border-slate-300 text-brand-600 cursor-pointer"
+          checked={rows.length > 0 && selectedIds.size === rows.length}
+          ref={(el) => {
+            if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < rows.length;
+          }}
+          onChange={toggleSelectAll}
+          aria-label={tbc("select_labels")}
+        />
+      ) as unknown as string,
+      width: "40px",
+      align: "center" as const,
+      render: (r: Product) => (
+        <input
+          type="checkbox"
+          className="w-4 h-4 rounded border-slate-300 text-brand-600 cursor-pointer"
+          checked={selectedIds.has(r.id)}
+          onChange={(e) => { e.stopPropagation(); toggleSelect(r.id); }}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={r.name}
+        />
+      ),
+    },
     { key: "sku", header: "SKU", width: "120px", render: (r) => r.sku || "—" },
-    { key: "barcode", header: t("ui__штрих_код_067fa0f2"), width: "140px", render: (r) => r.barcode || "—" },
-    { key: "mxik", header: t("mxik"), width: "130px",
-      render: (r) => <span className="font-mono text-xs">{r.mxik || "—"}</span> },
+    {
+      key: "barcode",
+      header: t("ui__штрих_код_067fa0f2"),
+      width: "140px",
+      render: (r) => r.barcode || "—",
+    },
+    {
+      key: "mxik",
+      header: t("mxik"),
+      width: "130px",
+      render: (r) => (
+        <span className="font-mono text-xs">{r.mxik || "—"}</span>
+      ),
+    },
     { key: "name", header: t("ui__название_602680ed") },
-    { key: "category_name", header: t("ui__категория_c95a1e2d"), width: "140px", render: (r) => r.category_name || "—" },
-    { key: "unit_name", header: t("ui__ед_11f95ddc"), width: "80px", render: (r) => r.unit_name || "—" },
-    { key: "purchase_price", header: t("ui__закуп_57c36fc5"), align: "right", width: "120px",
-      render: (r) => <span className="font-mono">{fmt(r.purchase_price)}</span> },
-    { key: "sale_price", header: t("ui__продажа_78b786c5"), align: "right", width: "140px",
-      render: (r) => <span className="font-mono">{fmt(r.sale_price)} {r.currency_code}</span> },
-    { key: "total_stock", header: t("ui__остаток_9a6054b1"), align: "right", width: "100px",
-      render: (r) => <span className="font-mono">{r.is_service ? "—" : fmt(r.total_stock)}</span> },
-    { key: "is_service", header: t("ui__тип_345805b8"), align: "center", width: "100px",
+    {
+      key: "category_name",
+      header: t("ui__категория_c95a1e2d"),
+      width: "140px",
+      render: (r) => r.category_name || "—",
+    },
+    {
+      key: "product_type",
+      header: tw("col_product_type"),
+      width: "120px",
+      render: (r) => r.product_type || "—",
+    },
+    {
+      key: "rack_name",
+      header: tw("col_rack"),
+      width: "100px",
+      render: (r) => r.rack_name || "—",
+    },
+    {
+      key: "default_cell_code",
+      header: tw("col_cell"),
+      width: "90px",
       render: (r) =>
-        r.is_service ? <span className="text-xs text-blue-700 dark:text-blue-400">{t("ui__услуга_8bf3c249")}</span>
-        : r.is_produced ? <span className="text-xs text-purple-700 dark:text-purple-400">{t("ui__произв_ea4594a1")}</span>
-        : <span className="text-xs text-slate-600 dark:text-slate-400">{t("ui__товар_8b35db64")}</span> },
+        r.default_cell_code ? (
+          <span className="font-mono text-xs">{r.default_cell_code}</span>
+        ) : (
+          "—"
+        ),
+    },
+    {
+      key: "unit_name",
+      header: t("ui__ед_11f95ddc"),
+      width: "80px",
+      render: (r) => r.unit_name || "—",
+    },
+    {
+      key: "purchase_price",
+      header: t("ui__закуп_57c36fc5"),
+      align: "right",
+      width: "120px",
+      render: (r) => <span className="font-mono">{fmt(r.purchase_price)}</span>,
+    },
+    {
+      key: "sale_price",
+      header: t("ui__продажа_78b786c5"),
+      align: "right",
+      width: "140px",
+      render: (r) => (
+        <span className="font-mono">
+          {fmt(r.sale_price)} {r.currency_code}
+        </span>
+      ),
+    },
+    {
+      key: "total_stock",
+      header: t("ui__остаток_9a6054b1"),
+      align: "right",
+      width: "100px",
+      render: (r) => (
+        <span className="font-mono">
+          {r.is_service ? "—" : fmt(r.total_stock)}
+        </span>
+      ),
+    },
+    {
+      key: "is_service",
+      header: t("ui__тип_345805b8"),
+      align: "center",
+      width: "100px",
+      render: (r) =>
+        r.is_service ? (
+          <span className="text-xs text-blue-700 dark:text-blue-400">
+            {t("ui__услуга_8bf3c249")}
+          </span>
+        ) : r.is_produced ? (
+          <span className="text-xs text-purple-700 dark:text-purple-400">
+            {t("ui__произв_ea4594a1")}
+          </span>
+        ) : (
+          <span className="text-xs text-slate-600 dark:text-slate-400">
+            {t("ui__товар_8b35db64")}
+          </span>
+        ),
+    },
+    ...(can("warehouse.bom.view")
+      ? [
+          {
+            key: "bom_action" as keyof Product,
+            header: tb("col_header"),
+            align: "center" as const,
+            width: "80px",
+            render: (r: Product) => (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBomTarget(r);
+                }}
+                className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-brand-300 text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-colors"
+                title={tb("tab_label")}
+              >
+                <ClipboardList size={12} />
+                BOM
+              </button>
+            ),
+          },
+        ]
+      : []),
+    {
+      key: "print_action" as keyof Product,
+      header: "",
+      align: "center" as const,
+      width: "70px",
+      render: (r: Product) => {
+        const hasBarcode = !!(r.barcode || r.sku || r.id);
+        return (
+          <button
+            type="button"
+            disabled={!hasBarcode}
+            title={hasBarcode ? tbc("row_action") : tbc("no_barcode")}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPrintTarget(r);
+            }}
+            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-ink-300 dark:border-ink-600 text-ink-600 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <Printer size={12} />
+            {tbc("row_action")}
+          </button>
+        );
+      },
+    },
   ];
+
+  const toolbarActions = (
+    <div className="flex items-center gap-2 flex-wrap">
+      {selectedIds.size > 0 && (
+        <button
+          type="button"
+          onClick={() => setBulkPrintOpen(true)}
+          className="inline-flex items-center gap-1.5 border border-brand-400 dark:border-brand-600 bg-brand-50 dark:bg-brand-950/30 hover:bg-brand-100 dark:hover:bg-brand-950/50 text-brand-700 dark:text-brand-300 text-[clamp(12px,1.6vw,13px)] font-medium px-3 py-1.5 rounded-md transition-colors whitespace-nowrap"
+        >
+          <Printer size={14} />
+          {tbc("bulk_print")} ({selectedIds.size})
+        </button>
+      )}
+      {can("warehouse.product.export") && (
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={exporting}
+          className="inline-flex items-center gap-1.5 border border-ink-300 dark:border-ink-600 bg-white dark:bg-ink-900 hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-60 text-ink-700 dark:text-ink-200 text-[clamp(12px,1.6vw,13px)] font-medium px-3 py-1.5 rounded-md transition-colors whitespace-nowrap"
+        >
+          <Download size={14} />
+          {exporting ? tw("export_loading") : tw("export_btn")}
+        </button>
+      )}
+      {can("warehouse.product.import") && (
+        <button
+          type="button"
+          onClick={() => setImportOpen(true)}
+          className="inline-flex items-center gap-1.5 border border-ink-300 dark:border-ink-600 bg-white dark:bg-ink-900 hover:bg-ink-50 dark:hover:bg-ink-800 text-ink-700 dark:text-ink-200 text-[clamp(12px,1.6vw,13px)] font-medium px-3 py-1.5 rounded-md transition-colors whitespace-nowrap"
+        >
+          <Upload size={14} />
+          {tw("import_btn")}
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("ui__товары_2ccd69a3")} description={t("ui__каталог_товаров_и_услуг_b8c9dd1f")}
-        onCreate={() => { setForm(empty); setEditId(null); setOpen(true); }} />
+      <PageHeader
+        title={t("ui__товары_2ccd69a3")}
+        description={t("ui__каталог_товаров_и_услуг_b8c9dd1f")}
+        actions={toolbarActions}
+        onCreate={() => {
+          setForm(empty);
+          setEditId(null);
+          setOpen(true);
+        }}
+      />
 
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="col-span-2 relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">{t("ui__поиск_название_sku_штрих_код_369d9946")}</label>
+        <div className="col-span-1 sm:col-span-2 relative">
+          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+            {t("ui__поиск_название_sku_штрих_код_369d9946")}
+          </label>
           <Search size={14} className="absolute left-2.5 top-[34px] text-slate-400" />
-          <input className={`${input} pl-8`} placeholder={t("ui__поиск_b84a8f87")}
-            value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && load()} />
+          <input
+            className={`${input} pl-8`}
+            placeholder={t("ui__поиск_b84a8f87")}
+            value={filters.q}
+            onChange={(e) => setFilters({ ...filters, q: e.target.value })}
+            onKeyDown={(e) => e.key === "Enter" && load()}
+          />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">{t("ui__категория_c95a1e2d")}</label>
-          <select className={input} value={filters.category_id}
-            onChange={(e) => setFilters({ ...filters, category_id: e.target.value })}>
+          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+            {t("ui__категория_c95a1e2d")}
+          </label>
+          <select
+            className={input}
+            value={filters.category_id}
+            onChange={(e) => setFilters({ ...filters, category_id: e.target.value })}
+          >
             <option value="">{t("ui__все_a07b234e")}</option>
-            {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {cats.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
           </select>
         </div>
         <div className="flex items-end gap-2">
-          <select className={input} value={filters.is_service}
-            onChange={(e) => setFilters({ ...filters, is_service: e.target.value })}>
+          <select
+            className={input}
+            value={filters.is_service}
+            onChange={(e) => setFilters({ ...filters, is_service: e.target.value })}
+          >
             <option value="">{t("ui__все_типы_eb6499ca")}</option>
             <option value="false">{t("ui__товары_2ccd69a3")}</option>
             <option value="true">{t("ui__услуги_4e1a0e95")}</option>
           </select>
-          <button onClick={load} className="px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700">{t("ui__фильтр_2f884b41")}</button>
+          <button
+            onClick={load}
+            className="px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
+          >
+            {t("ui__фильтр_2f884b41")}
+          </button>
         </div>
       </div>
 
       {/* Desktop table */}
       <div className="hidden md:block">
-        <DataTable columns={columns} rows={rows} loading={loading}
-          onEdit={async (r) => {
-            // Load full record (with extra_barcodes + tags)
-            try {
-              const full = await api.get<any>(`/warehouse/products/${r.id}/full`);
-              const d = full.data;
-              setForm({
-                ...empty,
-                name: d.name, sku: d.sku || "", barcode: d.barcode || "",
-                mxik: d.mxik || "",
-                category_id: d.category_id || null, unit_id: d.unit_id || null,
-                purchase_price: d.purchase_price, sale_price: d.sale_price,
-                currency_id: d.currency_id || null,
-                is_service: !!d.is_service, is_material: !!d.is_material,
-                is_semi_product: !!d.is_semi_product, is_marked: !!d.is_marked,
-                has_expiration: !!d.has_expiration,
-                image_url: d.image_url || "", box_qty: d.box_qty || "",
-                box_barcode: d.box_barcode || "",
-                dim_length: d.dim_length || "", dim_width: d.dim_width || "",
-                dim_height: d.dim_height || "", dim_weight: d.dim_weight || "",
-                description: d.description || "",
-                extra_barcodes: (d.extra_barcodes || []).map((b: any) => b.barcode),
-                tag_ids: (d.tags || []).map((t: any) => t.id),
-              });
-            } catch {
-              setForm({
-                ...empty, name: r.name, sku: r.sku || "", barcode: r.barcode || "",
-                category_id: r.category_id || null, unit_id: r.unit_id || null,
-                purchase_price: r.purchase_price, sale_price: r.sale_price,
-                currency_id: r.currency_id || null, is_service: r.is_service,
-              });
-            }
-            setEditId(r.id); setOpen(true);
-          }}
-          onDelete={(r) => setDeleteTarget(r)} />
+        <DataTable
+          columns={columns}
+          rows={rows}
+          loading={loading}
+          onEdit={(r) => openEdit(r)}
+          onDelete={(r) => setDeleteTarget(r)}
+        />
       </div>
 
       {/* Mobile cards */}
       <ul className="md:hidden space-y-2">
         {loading && (
-          <li className="text-center text-sm text-slate-400 py-8">{t("ui__загрузка_43e40d49")}</li>
+          <li className="text-center text-sm text-slate-400 py-8">
+            {t("ui__загрузка_43e40d49")}
+          </li>
         )}
         {!loading && rows.length === 0 && (
-          <li className="text-center text-sm text-slate-400 py-8">{t("ui__нет_данных_dee9a2d8")}</li>
+          <li className="text-center text-sm text-slate-400 py-8">
+            {t("ui__нет_данных_dee9a2d8")}
+          </li>
         )}
         {rows.map((r) => (
-          <li key={r.id} className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 text-sm">
+          <li
+            key={r.id}
+            className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 text-sm"
+          >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="font-medium truncate">{r.name}</div>
-                {r.sku && <div className="text-xs text-slate-500 font-mono truncate">SKU: {r.sku}</div>}
-                {r.mxik && <div className="text-xs text-slate-500 font-mono truncate">{t("mxik")}: {r.mxik}</div>}
-                {r.barcode && <div className="text-xs text-slate-500 font-mono truncate">Barcode: {r.barcode}</div>}
-                {r.category_name && <div className="text-xs text-slate-400 truncate">{r.category_name}</div>}
+                {r.sku && (
+                  <div className="text-xs text-slate-500 font-mono truncate">SKU: {r.sku}</div>
+                )}
+                {r.mxik && (
+                  <div className="text-xs text-slate-500 font-mono truncate">
+                    {t("mxik")}: {r.mxik}
+                  </div>
+                )}
+                {r.barcode && (
+                  <div className="text-xs text-slate-500 font-mono truncate">
+                    Barcode: {r.barcode}
+                  </div>
+                )}
+                {r.category_name && (
+                  <div className="text-xs text-slate-400 truncate">{r.category_name}</div>
+                )}
+                {r.product_type && (
+                  <div className="text-xs text-slate-400 truncate">{r.product_type}</div>
+                )}
+                {r.rack_name && (
+                  <div className="text-xs text-slate-400 truncate">
+                    {tw("col_rack")}: {r.rack_name}
+                  </div>
+                )}
+                {r.default_cell_code && (
+                  <div className="text-xs text-slate-400 font-mono truncate">
+                    {tw("col_cell")}: {r.default_cell_code}
+                  </div>
+                )}
               </div>
               <div className="text-right shrink-0">
-                <div className="font-mono text-sm">{fmt(r.sale_price)} {r.currency_code}</div>
+                <div className="font-mono text-sm">
+                  {fmt(r.sale_price)} {r.currency_code}
+                </div>
                 <div className="text-xs text-slate-500">{r.unit_name || "—"}</div>
                 {!r.is_service && (
-                  <div className="text-xs text-slate-400">{t("ui__остаток_9a6054b1")}: {fmt(r.total_stock)}</div>
+                  <div className="text-xs text-slate-400">
+                    {t("ui__остаток_9a6054b1")}: {fmt(r.total_stock)}
+                  </div>
                 )}
               </div>
             </div>
             <div className="flex gap-3 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
               <button
                 aria-label="Tahrirlash"
-                onClick={async () => {
-                  try {
-                    const full = await api.get<any>(`/warehouse/products/${r.id}/full`);
-                    const d = full.data;
-                    setForm({
-                      ...empty,
-                      name: d.name, sku: d.sku || "", barcode: d.barcode || "",
-                      mxik: d.mxik || "",
-                      category_id: d.category_id || null, unit_id: d.unit_id || null,
-                      purchase_price: d.purchase_price, sale_price: d.sale_price,
-                      currency_id: d.currency_id || null,
-                      is_service: !!d.is_service, is_material: !!d.is_material,
-                      is_semi_product: !!d.is_semi_product, is_marked: !!d.is_marked,
-                      has_expiration: !!d.has_expiration,
-                      image_url: d.image_url || "", box_qty: d.box_qty || "",
-                      box_barcode: d.box_barcode || "",
-                      dim_length: d.dim_length || "", dim_width: d.dim_width || "",
-                      dim_height: d.dim_height || "", dim_weight: d.dim_weight || "",
-                      description: d.description || "",
-                      extra_barcodes: (d.extra_barcodes || []).map((b: any) => b.barcode),
-                      tag_ids: (d.tags || []).map((t: any) => t.id),
-                    });
-                  } catch {
-                    setForm({
-                      ...empty, name: r.name, sku: r.sku || "", barcode: r.barcode || "",
-                      category_id: r.category_id || null, unit_id: r.unit_id || null,
-                      purchase_price: r.purchase_price, sale_price: r.sale_price,
-                      currency_id: r.currency_id || null, is_service: r.is_service,
-                    });
-                  }
-                  setEditId(r.id); setOpen(true);
-                }}
+                onClick={() => openEdit(r)}
                 className="text-xs text-brand-600 hover:text-brand-700"
               >
                 Tahrir
@@ -303,164 +985,349 @@ export default function ProductsPage() {
               >
                 O&apos;chir
               </button>
+              {can("warehouse.bom.view") && (
+                <button
+                  type="button"
+                  onClick={() => setBomTarget(r)}
+                  className="text-xs text-brand-600 hover:text-brand-700 inline-flex items-center gap-1"
+                >
+                  <ClipboardList size={11} />
+                  BOM
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setPrintTarget(r)}
+                className="text-xs text-ink-600 dark:text-ink-300 hover:text-ink-800 inline-flex items-center gap-1"
+                title={tbc("row_action")}
+              >
+                <Printer size={11} />
+                {tbc("row_action")}
+              </button>
             </div>
           </li>
         ))}
       </ul>
 
-      <Modal open={open} onClose={() => setOpen(false)}
-        title={editId ? "Mahsulotni tahrirlash" : "Yangi mahsulot"} size="lg">
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={editId ? "Mahsulotni tahrirlash" : "Yangi mahsulot"}
+        size="lg"
+      >
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <Field label={t("ui__название_602680ed")} required>
-              <input className={input} value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <input
+                className={input}
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
             </Field>
           </div>
           <Field label="SKU">
-            <input className={input} value={form.sku}
-              onChange={(e) => setForm({ ...form, sku: e.target.value })} />
-          </Field>
-          <Field label={t("mxik")}>
             <input
               className={input}
-              inputMode="numeric"
-              placeholder={t("mxik_placeholder")}
+              value={form.sku}
+              onChange={(e) => setForm({ ...form, sku: e.target.value })}
+            />
+          </Field>
+          <Field label={t("mxik")}>
+            <MxikCombobox
               value={form.mxik || ""}
-              onChange={(e) =>
-                setForm({ ...form, mxik: e.target.value.replace(/\D/g, "").slice(0, 17) })
-              }
+              onChange={(code) => setForm({ ...form, mxik: code })}
             />
           </Field>
           <Field label={t("ui__штрих_код_067fa0f2")}>
-            <input className={input} value={form.barcode}
-              onChange={(e) => setForm({ ...form, barcode: e.target.value })} />
+            <input
+              className={input}
+              value={form.barcode}
+              onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+            />
           </Field>
           <Field label={t("ui__категория_c95a1e2d")}>
-            <select className={input} value={form.category_id || ""}
-              onChange={(e) => setForm({ ...form, category_id: e.target.value ? Number(e.target.value) : null })}>
+            <select
+              className={input}
+              value={form.category_id || ""}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  category_id: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+            >
               <option value="">{t("ui__нет_7b07413e")}</option>
-              {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {cats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </select>
           </Field>
           <Field label={t("ui__единица_c0ffee84")}>
-            <select className={input} value={form.unit_id || ""}
-              onChange={(e) => setForm({ ...form, unit_id: e.target.value ? Number(e.target.value) : null })}>
+            <select
+              className={input}
+              value={form.unit_id || ""}
+              onChange={(e) =>
+                setForm({ ...form, unit_id: e.target.value ? Number(e.target.value) : null })
+              }
+            >
               <option value="">{t("ui__нет_7b07413e")}</option>
-              {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              {units.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
             </select>
           </Field>
           <Field label={t("ui__цена_закупа_9ae1384c")}>
-            <input type="number" step="0.01" className={input} value={form.purchase_price}
-              onChange={(e) => setForm({ ...form, purchase_price: e.target.value })} />
+            <input
+              type="number"
+              step="0.01"
+              className={input}
+              value={form.purchase_price}
+              onChange={(e) => setForm({ ...form, purchase_price: Number(e.target.value) })}
+            />
           </Field>
           <Field label={t("ui__цена_продажи_b379afd3")}>
-            <input type="number" step="0.01" className={input} value={form.sale_price}
-              onChange={(e) => setForm({ ...form, sale_price: e.target.value })} />
+            <input
+              type="number"
+              step="0.01"
+              className={input}
+              value={form.sale_price}
+              onChange={(e) => setForm({ ...form, sale_price: Number(e.target.value) })}
+            />
           </Field>
           <Field label={t("ui__валюта_cf55d9a9")}>
-            <select className={input} value={form.currency_id || ""}
-              onChange={(e) => setForm({ ...form, currency_id: e.target.value ? Number(e.target.value) : null })}>
+            <select
+              className={input}
+              value={form.currency_id || ""}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  currency_id: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+            >
               <option value="">{t("ui__нет_7b07413e")}</option>
-              {currencies.map((c) => <option key={c.id} value={c.id}>{(c as any).code || c.name}</option>)}
+              {currencies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {(c as { code?: string }).code || c.name}
+                </option>
+              ))}
             </select>
           </Field>
+
+          {/* New field: product_type */}
+          <div className="col-span-2">
+            <Field label={tw("product_type_label")}>
+              <input
+                className={input}
+                placeholder={tw("product_type_placeholder")}
+                value={form.product_type || ""}
+                onChange={(e) => setForm({ ...form, product_type: e.target.value })}
+              />
+            </Field>
+          </div>
+
+          {/* Default cell — cascade warehouse → row → rack → cell */}
+          <div className="col-span-2">
+            <label className="text-[12px] text-ink-600 dark:text-ink-400 font-medium block mb-1">
+              {tw("cell_label")}
+            </label>
+            <CellPicker
+              rackValue={form.default_rack_id}
+              cellValue={form.default_cell_id}
+              onRackChange={(id) => setForm({ ...form, default_rack_id: id })}
+              onCellChange={(id) => setForm({ ...form, default_cell_id: id })}
+              warehouses={warehouses}
+              tw={tw}
+            />
+          </div>
+
           <div className="col-span-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-2 p-3 bg-slate-50 dark:bg-slate-900/40 rounded border border-slate-200 dark:border-slate-700">
-            <div className="col-span-3 text-xs font-semibold text-slate-500 uppercase">Tur va flag'lar</div>
+            <div className="col-span-3 text-xs font-semibold text-slate-500 uppercase">
+              Tur va flag&apos;lar
+            </div>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={form.is_service}
-                onChange={(e) => setForm({ ...form, is_service: e.target.checked })} />
-              Xizmat (sklad yo'q)
+              <input
+                type="checkbox"
+                checked={form.is_service}
+                onChange={(e) => setForm({ ...form, is_service: e.target.checked })}
+              />
+              Xizmat (sklad yo&apos;q)
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={form.is_material}
-                onChange={(e) => setForm({ ...form, is_material: e.target.checked })} />
+              <input
+                type="checkbox"
+                checked={form.is_material}
+                onChange={(e) => setForm({ ...form, is_material: e.target.checked })}
+              />
               Xom-ashyo (material)
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={form.is_semi_product}
-                onChange={(e) => setForm({ ...form, is_semi_product: e.target.checked })} />
+              <input
+                type="checkbox"
+                checked={form.is_semi_product}
+                onChange={(e) => setForm({ ...form, is_semi_product: e.target.checked })}
+              />
               Yarim tayyor mahsulot
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={form.is_marked}
-                onChange={(e) => setForm({ ...form, is_marked: e.target.checked })} />
+              <input
+                type="checkbox"
+                checked={form.is_marked}
+                onChange={(e) => setForm({ ...form, is_marked: e.target.checked })}
+              />
               Markirovkali (Soliq.uz)
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={form.has_expiration}
-                onChange={(e) => setForm({ ...form, has_expiration: e.target.checked })} />
+              <input
+                type="checkbox"
+                checked={form.has_expiration}
+                onChange={(e) => setForm({ ...form, has_expiration: e.target.checked })}
+              />
               Yaroqlilik muddati bor
             </label>
           </div>
 
           <div className="col-span-2 grid grid-cols-2 gap-3 mt-2">
-            <div className="col-span-2 text-xs font-semibold text-slate-500 uppercase">Qo'shimcha shtrix-kodlar</div>
+            <div className="col-span-2 text-xs font-semibold text-slate-500 uppercase">
+              Qo&apos;shimcha shtrix-kodlar
+            </div>
             <div className="col-span-2">
-              <textarea className={`${input} h-16 font-mono text-xs`}
+              <textarea
+                className={`${input} h-16 font-mono text-xs`}
                 placeholder="Har qatorda bitta shtrix-kod"
                 value={(form.extra_barcodes || []).join("\n")}
-                onChange={(e) => setForm({ ...form, extra_barcodes: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) })} />
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    extra_barcodes: e.target.value
+                      .split("\n")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  })
+                }
+              />
             </div>
             <Field label="Quti shtrix-kodi">
-              <input className={input} value={form.box_barcode}
-                onChange={(e) => setForm({ ...form, box_barcode: e.target.value })} />
+              <input
+                className={input}
+                value={form.box_barcode}
+                onChange={(e) => setForm({ ...form, box_barcode: e.target.value })}
+              />
             </Field>
             <Field label="Quti hajmi (ta)">
-              <input type="number" className={input} value={form.box_qty}
-                onChange={(e) => setForm({ ...form, box_qty: e.target.value })} />
+              <input
+                type="number"
+                className={input}
+                value={form.box_qty}
+                onChange={(e) => setForm({ ...form, box_qty: e.target.value })}
+              />
             </Field>
           </div>
 
           <div className="col-span-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-2">
-            <div className="col-span-1 sm:col-span-2 lg:col-span-4 text-xs font-semibold text-slate-500 uppercase">O'lcham va vazn</div>
+            <div className="col-span-1 sm:col-span-2 lg:col-span-4 text-xs font-semibold text-slate-500 uppercase">
+              O&apos;lcham va vazn
+            </div>
             <Field label="Uzunlik (sm)">
-              <input type="number" step="0.1" className={input} value={form.dim_length}
-                onChange={(e) => setForm({ ...form, dim_length: e.target.value })} />
+              <input
+                type="number"
+                step="0.1"
+                className={input}
+                value={form.dim_length}
+                onChange={(e) => setForm({ ...form, dim_length: e.target.value })}
+              />
             </Field>
             <Field label="Eni (sm)">
-              <input type="number" step="0.1" className={input} value={form.dim_width}
-                onChange={(e) => setForm({ ...form, dim_width: e.target.value })} />
+              <input
+                type="number"
+                step="0.1"
+                className={input}
+                value={form.dim_width}
+                onChange={(e) => setForm({ ...form, dim_width: e.target.value })}
+              />
             </Field>
             <Field label="Bo'yi (sm)">
-              <input type="number" step="0.1" className={input} value={form.dim_height}
-                onChange={(e) => setForm({ ...form, dim_height: e.target.value })} />
+              <input
+                type="number"
+                step="0.1"
+                className={input}
+                value={form.dim_height}
+                onChange={(e) => setForm({ ...form, dim_height: e.target.value })}
+              />
             </Field>
             <Field label="Vazn (kg)">
-              <input type="number" step="0.001" className={input} value={form.dim_weight}
-                onChange={(e) => setForm({ ...form, dim_weight: e.target.value })} />
+              <input
+                type="number"
+                step="0.001"
+                className={input}
+                value={form.dim_weight}
+                onChange={(e) => setForm({ ...form, dim_weight: e.target.value })}
+              />
             </Field>
           </div>
 
           <div className="col-span-2 mt-2">
             <Field label="Rasm URL">
-              <input className={input} value={form.image_url} placeholder="https://..."
-                onChange={(e) => setForm({ ...form, image_url: e.target.value })} />
+              <input
+                className={input}
+                value={form.image_url}
+                placeholder="https://..."
+                onChange={(e) => setForm({ ...form, image_url: e.target.value })}
+              />
             </Field>
           </div>
 
           <div className="col-span-2 mt-2">
             <Field label="Tavsif">
-              <textarea className={`${input} h-16`} value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              <textarea
+                className={`${input} h-16`}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
             </Field>
           </div>
 
           <div className="col-span-2 mt-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-2">Teglar</label>
-            <TagsInput value={form.tag_ids} onChange={(ids) => setForm({ ...form, tag_ids: ids })} />
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-2">
+              Teglar
+            </label>
+            <TagsInput
+              value={form.tag_ids}
+              onChange={(ids) => setForm({ ...form, tag_ids: ids })}
+            />
           </div>
 
           {editId && <CustomFieldsEditor entityType="product" entityId={editId} />}
 
           <div className="col-span-2 flex justify-end gap-2 pt-3 mt-3 border-t border-slate-200 dark:border-slate-700">
-            <button onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+            <button
+              onClick={() => setOpen(false)}
+              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
+            >
+              {t("ui__отмена_987b33c6")}
+            </button>
+            <button
+              onClick={save}
+              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
+            >
+              {t("ui__сохранить_74ea58b6")}
+            </button>
           </div>
         </div>
       </Modal>
+
+      <ImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onSuccess={() => {
+          setImportOpen(false);
+          load();
+        }}
+      />
 
       <ConfirmDialog
         open={!!deleteTarget}
@@ -468,6 +1335,27 @@ export default function ProductsPage() {
         onConfirm={confirmDelete}
         title="O'chirishni tasdiqlang"
         message={`«${deleteTarget?.name}» mahsulotini o'chirishni tasdiqlaysizmi?`}
+      />
+
+      <BomEditorModal
+        open={!!bomTarget}
+        onClose={() => setBomTarget(null)}
+        productId={bomTarget?.id ?? ""}
+        productName={bomTarget?.name ?? ""}
+      />
+
+      <LabelPrint
+        items={printTarget ? [toLabel(printTarget)] : []}
+        format="A4"
+        open={!!printTarget}
+        onClose={() => setPrintTarget(null)}
+      />
+
+      <LabelPrint
+        items={bulkLabels}
+        format="A4"
+        open={bulkPrintOpen}
+        onClose={() => setBulkPrintOpen(false)}
       />
     </div>
   );

@@ -6,10 +6,11 @@ import uz from "./messages/uz.json";
 import ru from "./messages/ru.json";
 import en from "./messages/en.json";
 import uzCyrl from "./messages/uz-cyrl.json";
+import kaa from "./messages/kaa.json";
 
-export type Locale = "uz" | "ru" | "en" | "uz-cyrl";
+export type Locale = "uz" | "ru" | "en" | "uz-cyrl" | "kaa";
 
-const MESSAGES: Record<Locale, any> = { uz, ru, en, "uz-cyrl": uzCyrl };
+const MESSAGES: Record<Locale, any> = { uz, ru, en, "uz-cyrl": uzCyrl, kaa };
 
 type Ctx = { locale: Locale; setLocale: (l: Locale) => void };
 const LocaleCtx = createContext<Ctx>({ locale: "uz", setLocale: () => {} });
@@ -22,7 +23,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const saved = localStorage.getItem("locale") as Locale | null;
-    if (saved && ["uz", "ru", "en", "uz-cyrl"].includes(saved)) setLocaleState(saved);
+    if (saved && ["uz", "ru", "en", "uz-cyrl", "kaa"].includes(saved)) setLocaleState(saved);
     setMounted(true);
   }, []);
 

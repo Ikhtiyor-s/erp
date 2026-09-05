@@ -42,30 +42,30 @@ export default function DevicesPage() {
   useEffect(() => { load(); }, []);
 
   async function save() {
-    if (!form.name) { toast.error(t("ui__��������������_����������������_74a8590b")); return; }
+    if (!form.name) { toast.error(t("ui__введите_название_74a8590b")); return; }
     try {
       if (editId) await api.put(`/settings/devices/${editId}`, form);
       else await api.post("/settings/devices", form);
-      toast.success(t("ui__������������������_54a59b19")); setOpen(false); setForm(empty); setEditId(null); load();
+      toast.success(t("ui__сохранено_54a59b19")); setOpen(false); setForm(empty); setEditId(null); load();
     } catch (e: any) { toast.error(getErrorMessage(e, "Xato")); }
   }
   async function del(r: Device) {
     if (!confirm(`��${r.name}�� o'chirilsinmi?`)) return;
     await api.delete(`/settings/devices/${r.id}`);
-    toast.success(t("ui__��������������_0c450c40")); load();
+    toast.success(t("ui__удалено_0c450c40")); load();
   }
 
   const cols: Column<Device>[] = [
-    { key: "kind", header: t("ui__������_345805b8"), width: "140px",
+    { key: "kind", header: t("ui__тип_345805b8"), width: "140px",
       render: (r) => <span className="inline-flex items-center gap-1.5">{kindIcon(r.kind)} {kindLabel(r.kind)}</span> },
-    { key: "name", header: t("ui__����������������_602680ed") },
-    { key: "connection", header: t("ui__����������������������_ffa9d591"), width: "140px", render: (r) => r.connection || "���" },
-    { key: "address", header: t("ui__����������_��������_2c1023f4"), render: (r) => r.address || "���" },
+    { key: "name", header: t("ui__название_602680ed") },
+    { key: "connection", header: t("ui__подключение_ffa9d591"), width: "140px", render: (r) => r.connection || "���" },
+    { key: "address", header: t("ui__адрес_порт_2c1023f4"), render: (r) => r.address || "���" },
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("ui__��������������������_5172b9d5")} description={t("ui__����������������_��������������_��������_��_��_��_2faaa419")}
+      <PageHeader title={t("ui__устройства_5172b9d5")} description={t("ui__принтеры_сканеры_весы_и_т_д_2faaa419")}
         onCreate={() => { setForm(empty); setEditId(null); setOpen(true); }} />
       <DataTable columns={cols} rows={rows} loading={loading}
         onEdit={(r) => { setForm({ ...r, config: (r as any).config || {} }); setEditId(r.id); setOpen(true); }}
@@ -73,36 +73,36 @@ export default function DevicesPage() {
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Qurilmani tahrirlash" : "Yangi qurilma"}>
         <div className="space-y-3">
-          <Field label={t("ui__����������������_602680ed")} required>
+          <Field label={t("ui__название_602680ed")} required>
             <input className={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={t("ui__������_345805b8")} required>
+            <Field label={t("ui__тип_345805b8")} required>
               <select className={input} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
-                <option value="printer">{t("ui__��������������_f6bf3878")}</option>
-                <option value="scanner">{t("ui__������������_49d0f370")}</option>
-                <option value="scale">{t("ui__��������_01729404")}</option>
-                <option value="cash_drawer">{t("ui__����������������_��������_ec2ec2d0")}</option>
-                <option value="monitor">{t("ui__��������������_��������������������_52f8f61e")}</option>
+                <option value="printer">{t("ui__принтер_f6bf3878")}</option>
+                <option value="scanner">{t("ui__сканер_49d0f370")}</option>
+                <option value="scale">{t("ui__весы_01729404")}</option>
+                <option value="cash_drawer">{t("ui__денежный_ящик_ec2ec2d0")}</option>
+                <option value="monitor">{t("ui__монитор_покупателя_52f8f61e")}</option>
               </select>
             </Field>
-            <Field label={t("ui__����������������������_ffa9d591")}>
+            <Field label={t("ui__подключение_ffa9d591")}>
               <select className={input} value={form.connection || ""}
                 onChange={(e) => setForm({ ...form, connection: e.target.value })}>
                 <option value="usb">USB</option>
-                <option value="network">{t("ui__��������_ip_34026f0e")}</option>
+                <option value="network">{t("ui__сеть_ip_34026f0e")}</option>
                 <option value="bluetooth">Bluetooth</option>
                 <option value="serial">Serial / COM</option>
               </select>
             </Field>
           </div>
-          <Field label={t("ui__����������_��������_2c1023f4")}>
+          <Field label={t("ui__адрес_порт_2c1023f4")}>
             <input className={input} placeholder="COM1, 192.168.1.10, /dev/usb..."
               value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} />
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__������������_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__������������������_74ea58b6")}</button>
+            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
+            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
           </div>
         </div>
       </Modal>

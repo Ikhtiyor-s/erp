@@ -6,6 +6,8 @@ import { Lock, Mail, Smartphone, Fingerprint } from "lucide-react";
 import { toast } from "sonner";
 import { login } from "@/lib/auth";
 import { api } from "@/lib/api";
+import { getErrorMessage } from "@/lib/api-error";
+import { isBiometricSupported, authenticateWithBiometric } from "@/lib/biometric";
 
 function deviceId(): string {
   let id = localStorage.getItem("device_id");
@@ -25,6 +27,7 @@ export default function MobileLogin() {
   const [loading, setLoading] = useState(false);
   const [hasPasscode, setHasPasscode] = useState(false);
   const [lastUser, setLastUser] = useState<any>(null);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
 
   useEffect(() => {
     const u = localStorage.getItem("user");
@@ -36,6 +39,8 @@ export default function MobileLogin() {
       } catch {}
     }
     if (!u) setMode("password");
+    const enrolled = localStorage.getItem("biometric_enrolled");
+    if (enrolled && isBiometricSupported()) setBiometricAvailable(true);
   }, []);
 
   async function doPasswordLogin(e: React.FormEvent) {
@@ -44,9 +49,9 @@ export default function MobileLogin() {
     try {
       await login(email, password);
       toast.success("Xush kelibsiz!");
-      router.push("/m");
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Login xato");
+      window.location.href = "/m";
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Login xato"));
     } finally {
       setLoading(false);
     }
@@ -64,11 +69,37 @@ export default function MobileLogin() {
       });
       localStorage.setItem("access_token", r.data.access_token);
       localStorage.setItem("refresh_token", r.data.refresh_token);
+      if (r.data.user) localStorage.setItem("user", JSON.stringify(r.data.user));
+      try {
+        const orgs = await api.get<{ id: string }[]>("/organizations/mine");
+        if (Array.isArray(orgs.data) && orgs.data.length > 0 && !localStorage.getItem("org_id")) {
+          localStorage.setItem("org_id", orgs.data[0].id);
+        }
+      } catch {}
       toast.success("Xush kelibsiz!");
-      router.push("/m");
+      window.location.href = "/m";
     } catch (err: any) {
       toast.error("Noto'g'ri passcode");
       setPasscode("");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function doBiometricLogin() {
+    if (!lastUser?.email) return;
+    setLoading(true);
+    try {
+      const ok = await authenticateWithBiometric(lastUser.email);
+      if (ok) {
+        if (lastUser) localStorage.setItem("user", JSON.stringify(lastUser));
+        toast.success("Xush kelibsiz!");
+        window.location.href = "/m";
+      } else {
+        toast.error("Biometrik autentifikatsiya muvaffaqiyatsiz");
+      }
+    } catch {
+      toast.error("Biometrik autentifikatsiya xatosi");
     } finally {
       setLoading(false);
     }
@@ -132,6 +163,16 @@ export default function MobileLogin() {
                 ⌫
               </button>
             </div>
+            {biometricAvailable && lastUser?.email && (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={doBiometricLogin}
+                className="w-full py-3 flex items-center justify-center gap-2 border border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-300 rounded-xl font-medium hover:bg-brand-50 dark:hover:bg-brand-950/30 disabled:opacity-50 transition">
+                <Fingerprint size={20} />
+                Barmoq izi bilan kirish
+              </button>
+            )}
             <button type="button" onClick={() => {
               localStorage.removeItem("user");
               localStorage.removeItem("has_passcode");

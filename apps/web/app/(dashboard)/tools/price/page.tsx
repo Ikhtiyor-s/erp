@@ -21,7 +21,7 @@ export default function BulkPricePage() {
   async function apply() {
     const m = Number(markup);
     if (!m) {
-      toast.error(t("ui__��������������_��������������_29aa3157"));
+      toast.error(t("ui__введите_процент_29aa3157"));
       return;
     }
     if (
@@ -53,24 +53,24 @@ export default function BulkPricePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("ui__��������������������_��������_45d073be")}
-        description={t("ui__����������������_����������_������_��������������_������_3e840767")}
+        title={t("ui__установить_цену_45d073be")}
+        description={t("ui__массовая_смена_цен_товаров_нац_3e840767")}
       />
 
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-6 max-w-2xl">
         <div className="space-y-4">
-          <Field label={t("ui__����������_��������_������������_66af109c")}>
+          <Field label={t("ui__какое_поле_менять_66af109c")}>
             <select
               className={input}
               value={field}
               onChange={(e) => setField(e.target.value as any)}
             >
-              <option value="sale_price">{t("ui__��������_��������������_b379afd3")}</option>
-              <option value="purchase_price">{t("ui__��������_������������_9ae1384c")}</option>
+              <option value="sale_price">{t("ui__цена_продажи_b379afd3")}</option>
+              <option value="purchase_price">{t("ui__цена_закупа_9ae1384c")}</option>
             </select>
           </Field>
 
-          <Field label={t("ui__��������������_������������������_10_������������������_778fed41")}>
+          <Field label={t("ui__процент_изменения_10_повышение_778fed41")}>
             <input
               type="number"
               step="0.01"
@@ -80,7 +80,7 @@ export default function BulkPricePage() {
             />
           </Field>
 
-          <Field label={t("ui__id_������������������_����������������������_����������_5973eef0")}>
+          <Field label={t("ui__id_категории_опционально_иначе_5973eef0")}>
             <input
               type="number"
               className={input}
@@ -103,7 +103,7 @@ export default function BulkPricePage() {
       </div>
 
       <div className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl">
-        <p>{t("ui__����������������_��������������������_��������������������_f5927bfc")}</p>
+        <p>{t("ui__операция_необратима_рекомендуе_f5927bfc")}</p>
       </div>
     </div>
   );

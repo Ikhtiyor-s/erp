@@ -1,22 +1,33 @@
+import json
+import logging
 from datetime import date
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi.responses import Response
+
 from app.core.deps import get_db, get_current_user_id, get_current_org_id
+from app.core import secret_box
 from app.modules.finance.schemas import (
     CashboxCreate, CashboxOut,
     CashMovementCreate, CashMovementOut,
     CashboxSetBalance, EntitySetBalance, ExtraCostCreate,
 )
+from app.modules.finance.export_1c import build_export, ExportType
+from app.modules.integration.payments.click import create_bill_payment_link, BILL_SERVICES
+from app.modules.integration.payments.base import get_payment_settings
+from app.modules.integration.sms import eskiz as eskiz_sms
+from app.modules.rbac.deps import require_permission
 
 
 router = APIRouter(prefix="/finance", tags=["finance"])
+log = logging.getLogger(__name__)
 
 
 # =========================================================
@@ -658,3 +669,381 @@ async def person_balances(
         {"o": org_id},
     )
     return [dict(r._mapping) for r in res]
+
+
+# =========================================================
+# 1C BUXGALTERIYA EXPORT
+# =========================================================
+
+@router.get(
+    "/export/1c-csv",
+    dependencies=[Depends(require_permission("finance.export_1c"))],
+)
+async def export_1c_csv(
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    type: ExportType = Query("all"),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    data, ctype, filename = await build_export(
+        db, org_id, date_from, date_to, type, "csv"
+    )
+    return Response(
+        content=data,
+        media_type=ctype,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/export/1c-xml",
+    dependencies=[Depends(require_permission("finance.export_1c"))],
+)
+async def export_1c_xml(
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    type: ExportType = Query("all"),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    data, ctype, filename = await build_export(
+        db, org_id, date_from, date_to, type, "xml"
+    )
+    return Response(
+        content=data,
+        media_type=ctype,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# =========================================================
+# BILL PAYMENT (Click utility bills)
+# =========================================================
+
+class BillPaymentIn(BaseModel):
+    bill_type: Literal["electricity", "gas", "water", "internet", "phone"]
+    account_number: str = Field(min_length=1, max_length=64)
+    amount: Decimal = Field(gt=0)
+    customer_id: UUID | None = None
+
+
+_BILL_TYPE_TO_SERVICE: dict[str, str] = {
+    "electricity": "elektr",
+    "gas": "gaz",
+    "water": "suv",
+    "internet": "internet",
+    "phone": "telefon",
+}
+
+
+@router.post(
+    "/bill-payment",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_permission("finance.bill_payment"))],
+)
+async def create_bill_payment(
+    payload: BillPaymentIn,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    _user_id: str = Depends(get_current_user_id),
+):
+    # Idempotency: return cached result for repeat requests within 24h
+    if idempotency_key:
+        cached = await db.execute(
+            text("""
+                SELECT id, status, provider_tx_id
+                FROM payment_transactions
+                WHERE organization_id = :o
+                  AND provider = 'click_bill'
+                  AND provider_tx_id = :k
+                  AND created_at >= NOW() - INTERVAL '24 hours'
+            """),
+            {"o": org_id, "k": f"idem:{idempotency_key}"},
+        )
+        existing = cached.first()
+        if existing:
+            return {
+                "transaction_id": str(existing.id),
+                "status": existing.status,
+                "provider_ref": existing.provider_tx_id,
+            }
+
+    cfg = await get_payment_settings(db, org_id, "click")
+    if not cfg.get("enabled"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Click to'lov tizimi yoqilmagan. Sozlamalardan Click'ni faollashtiring.",
+        )
+
+    service_id = _BILL_TYPE_TO_SERVICE[payload.bill_type]
+    idem_ref = f"idem:{idempotency_key}" if idempotency_key else None
+
+    link_result = await create_bill_payment_link(
+        org_id=org_id,
+        service_id=service_id,
+        account=payload.account_number,
+        amount=payload.amount,
+        return_url="",
+        db=db,
+    )
+
+    tx_id = uuid4()
+    await db.execute(
+        text("""
+            INSERT INTO payment_transactions
+                (id, organization_id, provider, provider_tx_id, amount, status,
+                 customer_id, provider_data)
+            VALUES (:id, :o, 'click_bill', :ptx, :amt, 'pending',
+                    :cu, CAST(:pd AS jsonb))
+        """),
+        {
+            "id": str(tx_id),
+            "o": org_id,
+            "ptx": idem_ref or link_result["invoice_id"],
+            "amt": payload.amount,
+            "cu": str(payload.customer_id) if payload.customer_id else None,
+            "pd": json.dumps({
+                "bill_type": payload.bill_type,
+                "account_number": payload.account_number,
+                "service_id": service_id,
+                "invoice_id": link_result["invoice_id"],
+                "payment_url": link_result["payment_url"],
+                "expires_at": link_result["expires_at"],
+            }),
+        },
+    )
+    await db.commit()
+
+    return {
+        "transaction_id": str(tx_id),
+        "status": "pending",
+        "provider_ref": link_result["invoice_id"],
+    }
+
+
+# =========================================================
+# SMS DEBT REMINDER  (T-132)
+# =========================================================
+
+_SMS_DEFAULT_TEMPLATE = (
+    "Hurmatli {ism}, sizning qarzdorligingiz: {summa} so'm. "
+    "Iltimos, to'lovni amalga oshiring. Aniq ERP"
+)
+_SMS_MAX_LEN = 480  # 3 SMS parts
+
+
+class DebtReminderIn(BaseModel):
+    message_template: Literal["default", "custom"] = "default"
+    custom_text: str | None = Field(None, max_length=_SMS_MAX_LEN)
+
+
+async def _get_eskiz_creds(db: AsyncSession, org_id: str) -> tuple[str, str]:
+    """Read decrypted Eskiz credentials from app_settings. Returns (email, password)."""
+    res = await db.execute(
+        text(
+            "SELECT value FROM app_settings "
+            "WHERE organization_id = :o AND key = 'integrations'"
+        ),
+        {"o": org_id},
+    )
+    row = res.first()
+    if not row or not row.value:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="sms_not_configured")
+    cfg = row.value if isinstance(row.value, dict) else json.loads(row.value)
+    eskiz_cfg = cfg.get("eskiz") or {}
+    if not eskiz_cfg.get("enabled"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="sms_not_configured")
+    email = eskiz_cfg.get("email") or ""
+    password_enc = eskiz_cfg.get("password") or ""
+    if not email or not password_enc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="sms_not_configured")
+    try:
+        password = secret_box.decrypt(password_enc)
+    except Exception:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="sms_not_configured")
+    return email, password
+
+
+@router.post(
+    "/debtors/{customer_id}/send-sms",
+    dependencies=[Depends(require_permission("finance.send_sms"))],
+)
+async def send_debt_reminder(
+    customer_id: UUID,
+    payload: DebtReminderIn,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    # 1. Validate customer belongs to org and get phone + name
+    cust_res = await db.execute(
+        text(
+            "SELECT id, name, phone FROM customers "
+            "WHERE id = :cid AND organization_id = :o"
+        ),
+        {"cid": str(customer_id), "o": org_id},
+    )
+    cust = cust_res.first()
+    if not cust:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="customer_not_found")
+    if not cust.phone:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="phone_missing")
+
+    phone = cust.phone
+
+    # 2. Rate limit: max 1 SMS per customer per hour (manual check — slowapi
+    #    key_func doesn't have DB access; using a DB timestamp guard instead)
+    rate_res = await db.execute(
+        text(
+            "SELECT COUNT(*) FROM sms_debt_reminders "
+            "WHERE organization_id = :o AND customer_id = :cid "
+            "AND sent_at >= NOW() - INTERVAL '1 hour' AND status = 'sent'"
+        ),
+        {"o": org_id, "cid": str(customer_id)},
+    )
+    if (rate_res.scalar() or 0) >= 1:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="rate_limit: max 1 SMS per customer per hour",
+        )
+
+    # 3. Daily user rate limit: max 30 SMS per user per day
+    daily_res = await db.execute(
+        text(
+            "SELECT COUNT(*) FROM sms_debt_reminders "
+            "WHERE organization_id = :o AND user_id = :uid "
+            "AND sent_at >= NOW() - INTERVAL '24 hours' AND status = 'sent'"
+        ),
+        {"o": org_id, "uid": user_id},
+    )
+    if (daily_res.scalar() or 0) >= 30:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="rate_limit: max 30 SMS per user per day",
+        )
+
+    # 4. Fetch real-time debt balance from DB (v_customer_balance view)
+    bal_res = await db.execute(
+        text(
+            "SELECT COALESCE(balance, 0) AS balance FROM v_customer_balance "
+            "WHERE id = :cid AND organization_id = :o"
+        ),
+        {"cid": str(customer_id), "o": org_id},
+    )
+    bal_row = bal_res.first()
+    debt_amount = abs(bal_row.balance) if bal_row else 0
+
+    # 5. Build message text
+    if payload.message_template == "custom":
+        if not payload.custom_text:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="custom_text required when message_template=custom",
+            )
+        message_text = payload.custom_text
+    else:
+        message_text = _SMS_DEFAULT_TEMPLATE.format(
+            ism=cust.name or "Mijoz",
+            summa=f"{debt_amount:,.0f}",
+        )
+
+    if len(message_text) > _SMS_MAX_LEN:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"message too long: max {_SMS_MAX_LEN} characters",
+        )
+
+    # 6. Read Eskiz credentials and send
+    email, password = await _get_eskiz_creds(db, org_id)
+
+    log_id = str(uuid4())
+    provider_message_id = None
+    sms_status = "failed"
+    error_text = None
+
+    try:
+        result = await eskiz_sms.send_sms(email, password, phone, message_text)
+        # Eskiz returns {"id": ..., "status": "waiting"} on success
+        provider_message_id = str(result.get("id") or result.get("message_id") or "")
+        sms_status = "sent"
+    except Exception as exc:
+        error_text = str(exc)[:500]
+        log.warning("eskiz sms failed org=%s customer=%s err=%s", org_id, customer_id, error_text)
+
+    # 7. Log to sms_debt_reminders
+    await db.execute(
+        text(
+            "INSERT INTO sms_debt_reminders "
+            "(id, organization_id, customer_id, user_id, phone, message, "
+            " status, provider_message_id, error) "
+            "VALUES (:id, :o, :cid, :uid, :ph, :msg, :st, :pmid, :err)"
+        ),
+        {
+            "id": log_id,
+            "o": org_id,
+            "cid": str(customer_id),
+            "uid": user_id,
+            "ph": phone,
+            "msg": message_text,
+            "st": sms_status,
+            "pmid": provider_message_id or None,
+            "err": error_text,
+        },
+    )
+    await db.commit()
+
+    if sms_status == "failed":
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail=f"sms_send_failed: {error_text}",
+        )
+
+    return {
+        "sent": True,
+        "phone": phone,
+        "message_id": provider_message_id or None,
+    }
+
+
+@router.get(
+    "/debtors/{customer_id}/sms-log",
+    dependencies=[Depends(require_permission("finance.send_sms"))],
+)
+async def list_sms_log(
+    customer_id: UUID,
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    # Validate customer belongs to org
+    cust_res = await db.execute(
+        text("SELECT id FROM customers WHERE id = :cid AND organization_id = :o"),
+        {"cid": str(customer_id), "o": org_id},
+    )
+    if not cust_res.first():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="customer_not_found")
+
+    res = await db.execute(
+        text(
+            "SELECT id, phone, message, status, provider_message_id, error, sent_at "
+            "FROM sms_debt_reminders "
+            "WHERE organization_id = :o AND customer_id = :cid "
+            "ORDER BY sent_at DESC LIMIT :lim"
+        ),
+        {"o": org_id, "cid": str(customer_id), "lim": limit},
+    )
+    rows = res.fetchall()
+    return [
+        {
+            "id": str(r.id),
+            "phone": r.phone,
+            "message": r.message,
+            "status": r.status,
+            "provider_message_id": r.provider_message_id,
+            "error": r.error,
+            "sent_at": r.sent_at.isoformat() if r.sent_at else None,
+        }
+        for r in rows
+    ]
