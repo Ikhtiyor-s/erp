@@ -1,212 +1,376 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Trash2, ArrowRight } from "lucide-react";
+import { Plus, ChevronDown, ChevronUp } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
-import { DataTable, type Column } from "@/components/ui/data-table";
-import { Modal, Field, input } from "@/components/ui/modal";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { useTranslations } from "next-intl";
 
-type Tr = {
-  id: string; doc_number?: string; transfer_date: string; status: string;
-  from_name?: string; to_name?: string;
+type TransferStatus = "draft" | "sent" | "received" | "cancelled";
+
+type Transfer = {
+  id: string;
+  doc_number: string;
+  from_warehouse: number;
+  from_name: string;
+  to_warehouse: number;
+  to_name: string;
+  status: TransferStatus;
+  item_count: number;
+  created_by_name: string | null;
+  created_at: string;
+  sent_at: string | null;
+  received_at: string | null;
 };
-type Wh = { id: number; name: string };
-type Product = { id: string; name: string; sku?: string };
 
-const fmt = (v: any) => Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 3 });
-const today = () => new Date().toISOString().slice(0, 10);
+type Warehouse = { id: number; name: string };
 
-export default function TransferPage() {
-  const t = useTranslations("ui");
-  const [rows, setRows] = useState<Tr[]>([]);
-  const [warehouses, setWarehouses] = useState<Wh[]>([]);
+type PaginatedTransfers = {
+  items: Transfer[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+const STATUS_TABS: Array<{ key: "all" | TransferStatus; i18nKey: string }> = [
+  { key: "all", i18nKey: "status_all" },
+  { key: "draft", i18nKey: "status_draft" },
+  { key: "sent", i18nKey: "status_sent" },
+  { key: "received", i18nKey: "status_received" },
+  { key: "cancelled", i18nKey: "status_cancelled" },
+];
+
+function statusBadge(status: TransferStatus, t: (k: string) => string) {
+  const map: Record<TransferStatus, string> = {
+    draft: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+    sent: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+    received: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+    cancelled: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
+  };
+  const labelMap: Record<TransferStatus, string> = {
+    draft: "status_draft",
+    sent: "status_sent",
+    received: "status_received",
+    cancelled: "status_cancelled",
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${map[status]}`}>
+      {t(labelMap[status])}
+    </span>
+  );
+}
+
+function fmtDate(s: string | null) {
+  if (!s) return "—";
+  return new Date(s).toLocaleDateString("ru-RU");
+}
+
+type ActionState = {
+  id: string;
+  action: "send" | "receive" | "cancel";
+} | null;
+
+export default function InternalTransfersPage() {
+  const t = useTranslations("warehouse.transfers");
+  const router = useRouter();
+
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
-  const [view, setView] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const [fromId, setFromId] = useState<number | "">("");
-  const [toId, setToId] = useState<number | "">("");
-  const [date, setDate] = useState(today());
-  const [notes, setNotes] = useState("");
-  const [items, setItems] = useState<{ product_id: string; product_name: string; quantity: string }[]>([]);
-  const [productSearch, setProductSearch] = useState("");
-  const [productOptions, setProductOptions] = useState<Product[]>([]);
+  const [statusFilter, setStatusFilter] = useState<"all" | TransferStatus>("all");
+  const [fromWh, setFromWh] = useState<number | "">("");
+  const [toWh, setToWh] = useState<number | "">("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
-  async function load() {
+  const [actionState, setActionState] = useState<ActionState>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const load = useCallback(async () => {
     setLoading(true);
-    try { setRows((await api.get<Tr[]>("/warehouse/transfers")).data); }
-    finally { setLoading(false); }
-  }
+    setError(null);
+    try {
+      const params: Record<string, string | number> = {};
+      if (statusFilter !== "all") params.status = statusFilter;
+      if (fromWh) params.from_warehouse = fromWh;
+      if (toWh) params.to_warehouse = toWh;
+      const res = await api.get<PaginatedTransfers>("/warehouse/transfers", { params });
+      setTransfers(res.data.items);
+    } catch (e) {
+      setError(getErrorMessage(e, t("error_load")));
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, fromWh, toWh]);
+
   useEffect(() => {
-    api.get<Wh[]>("/warehouse/warehouses").then((r) => setWarehouses(r.data)).catch(() => {});
-    load();
+    api.get<Warehouse[]>("/warehouse/warehouses").then((r) => setWarehouses(r.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
-    if (productSearch.length < 2) { setProductOptions([]); return; }
-    const t = setTimeout(() => {
-      api.get<Product[]>(`/warehouse/products?q=${encodeURIComponent(productSearch)}`)
-        .then((r) => setProductOptions(r.data.slice(0, 10))).catch(() => {});
-    }, 250);
-    return () => clearTimeout(t);
-  }, [productSearch]);
+    load();
+  }, [load]);
 
-  function addItem(p: Product) {
-    if (items.some((i) => i.product_id === p.id)) return;
-    setItems([...items, { product_id: p.id, product_name: p.name, quantity: "1" }]);
-    setProductSearch(""); setProductOptions([]);
-  }
-
-  async function create() {
-    if (!fromId || !toId || items.length === 0) { toast.error(t("ui__������������������_������������_��_������������_de29f019")); return; }
-    if (fromId === toId) { toast.error(t("ui__������������_������������_��������_������������_916b5497")); return; }
+  async function handleAction() {
+    if (!actionState) return;
+    setActionLoading(true);
     try {
-      await api.post("/warehouse/transfers", {
-        from_warehouse_id: Number(fromId), to_warehouse_id: Number(toId),
-        transfer_date: date, notes,
-        items: items.map((i) => ({ product_id: i.product_id, quantity: Number(i.quantity) || 0 }))
-          .filter((i) => i.quantity > 0),
-      });
-      toast.success(t("ui__��������������_����������������_86f6af27"));
-      setOpen(false); setItems([]); setFromId(""); setToId(""); setNotes(""); load();
-    } catch (e: any) { toast.error(getErrorMessage(e, "Xato")); }
+      await api.post(`/warehouse/transfers/${actionState.id}/${actionState.action}`);
+      const okMap = { send: t("sent_ok"), receive: t("received_ok"), cancel: t("cancelled_ok") };
+      toast.success(okMap[actionState.action]);
+      setActionState(null);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, t("error_load")));
+    } finally {
+      setActionLoading(false);
+    }
   }
 
-  async function openView(r: Tr) {
-    const { data } = await api.get(`/warehouse/transfers/${r.id}`);
-    setView(data);
-  }
-
-  const columns: Column<Tr>[] = [
-    { key: "doc_number", header: "���", render: (r) => r.doc_number || r.id.slice(0, 8), width: "100px" },
-    { key: "transfer_date", header: t("ui__��������_8cdd8bb7"), width: "120px" },
-    {
-      key: "from_name", header: t("ui__������������_��������_9518dfba"),
-      render: (r) => (
-        <span className="inline-flex items-center gap-1 text-sm">
-          {r.from_name || "���"} <ArrowRight size={14} className="text-slate-400" /> {r.to_name || "���"}
-        </span>
-      ),
-    },
-    { key: "status", header: t("ui__������������_7203f7a4"), width: "120px",
-      render: (r) => <span className="text-green-600">{r.status === "received" ? "Olindi" : r.status}</span> },
-  ];
+  const confirmTitles = {
+    send: t("send_confirm_title"),
+    receive: t("receive_confirm_title"),
+    cancel: t("cancel_confirm_title"),
+  };
+  const confirmMsgs = {
+    send: t("send_confirm_msg"),
+    receive: t("receive_confirm_msg"),
+    cancel: t("cancel_confirm_msg"),
+  };
 
   return (
-    <div className="space-y-6">
-      <PageHeader title={t("ui__��������������������_����������������_41b90803")} description={t("ui__����������������������_��������������_����������_��������_932e70ec")}
-        onCreate={() => setOpen(true)} createLabel={t("ui__����������_��������������_964c5514")} />
-      <DataTable columns={columns} rows={rows} loading={loading} onEdit={openView} />
+    <div className="space-y-4">
+      <PageHeader
+        title={t("title")}
+        description={t("description")}
+        onCreate={() => router.push("/warehouse/internal-transfers/new")}
+        createLabel={t("new_btn")}
+      />
 
-      <Modal open={open} onClose={() => setOpen(false)} size="lg" title={t("ui__����������_��������������_964c5514")}>
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            <Field label={t("ui__������������_2043c6e6")} required>
-              <select className={input} value={fromId} onChange={(e) => setFromId(e.target.value ? Number(e.target.value) : "")}>
-                <option value="">{t("ui__����������_c435037c")}</option>
+      {/* Status tabs */}
+      <div className="flex gap-1 flex-wrap border-b border-ink-200 dark:border-ink-800">
+        {STATUS_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setStatusFilter(tab.key)}
+            className={`px-3 py-2 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap -mb-px ${
+              statusFilter === tab.key
+                ? "border-brand-600 text-brand-600"
+                : "border-transparent text-ink-500 hover:text-ink-900 dark:hover:text-ink-100"
+            }`}
+          >
+            {t(tab.i18nKey)}
+          </button>
+        ))}
+      </div>
+
+      {/* Filter panel toggle (mobile-friendly) */}
+      <div>
+        <button
+          onClick={() => setFiltersOpen((v) => !v)}
+          className="inline-flex items-center gap-1.5 text-[13px] text-ink-600 dark:text-ink-400 hover:text-ink-900 dark:hover:text-ink-100 transition-colors"
+        >
+          {t("filter_collapse")}
+          {filtersOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+
+        {filtersOpen && (
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 rounded-lg border border-ink-200 dark:border-ink-800 bg-ink-50 dark:bg-ink-900/30">
+            <div className="space-y-1">
+              <label className="text-[12px] text-ink-600 dark:text-ink-400 font-medium">{t("filter_from_wh")}</label>
+              <select
+                value={fromWh}
+                onChange={(e) => setFromWh(e.target.value ? Number(e.target.value) : "")}
+                className="w-full border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-950 text-ink-900 dark:text-ink-100 rounded-md px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-brand-500"
+              >
+                <option value="">{t("filter_wh_all")}</option>
                 {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
-            </Field>
-            <Field label={t("ui__��������_b60bd4b1")} required>
-              <select className={input} value={toId} onChange={(e) => setToId(e.target.value ? Number(e.target.value) : "")}>
-                <option value="">{t("ui__����������_c435037c")}</option>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[12px] text-ink-600 dark:text-ink-400 font-medium">{t("filter_to_wh")}</label>
+              <select
+                value={toWh}
+                onChange={(e) => setToWh(e.target.value ? Number(e.target.value) : "")}
+                className="w-full border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-950 text-ink-900 dark:text-ink-100 rounded-md px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-brand-500"
+              >
+                <option value="">{t("filter_wh_all")}</option>
                 {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
-            </Field>
-            <Field label={t("ui__��������_8cdd8bb7")} required>
-              <input type="date" className={input} value={date} onChange={(e) => setDate(e.target.value)} />
-            </Field>
-          </div>
-          <Field label={t("ui__��������������������_686eb72b")}>
-            <input className={input} value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </Field>
-
-          <Field label={t("ui__����������������_������������_db2bb4a6")}>
-            <div className="relative">
-              <input className={input} placeholder={t("ui__����������_������������_b493d1bc")}
-                value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
-              {productOptions.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border rounded-md shadow-lg max-h-48 overflow-auto">
-                  {productOptions.map((p) => (
-                    <button key={p.id} onClick={() => addItem(p)}
-                      className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:bg-slate-900/40">
-                      {p.name}{p.sku && <span className="text-slate-400"> ({p.sku})</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
-          </Field>
-
-          {items.length > 0 && (
-            <div className="border rounded-md max-h-64 overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-900/40">
-                  <tr>
-                    <th className="px-3 py-2 text-left">{t("ui__����������_8b35db64")}</th>
-                    <th className="px-3 py-2 text-right w-32">{t("ui__��������������������_cb8bfd4d")}</th>
-                    <th className="w-10"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((it, idx) => (
-                    <tr key={it.product_id} className="border-t">
-                      <td className="px-3 py-2">{it.product_name}</td>
-                      <td className="px-3 py-2 text-right">
-                        <input type="number" step="0.001" value={it.quantity}
-                          onChange={(e) => { const n = [...items]; n[idx].quantity = e.target.value; setItems(n); }}
-                          className="w-24 border rounded px-2 py-1 text-right text-sm" />
-                      </td>
-                      <td className="text-center">
-                        <button onClick={() => setItems(items.filter((_, i) => i !== idx))}
-                          className="text-red-600 hover:bg-red-50 p-1 rounded"><Trash2 size={14} /></button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-1">
+              <label className="text-[12px] text-ink-600 dark:text-ink-400 font-medium">{t("filter_date_from")}</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-full border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-950 text-ink-900 dark:text-ink-100 rounded-md px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-brand-500"
+              />
             </div>
-          )}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__������������_987b33c6")}</button>
-            <button onClick={create} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__������������������_bdf82a2a")}</button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal open={!!view} onClose={() => setView(null)} size="lg"
-        title={view ? `Ko'chirish: ${view.head.from_name} ��� ${view.head.to_name}` : ""}>
-        {view && (
-          <div className="space-y-3">
-            <div className="text-sm text-slate-500 dark:text-slate-400">��������: {view.head.transfer_date}</div>
-            <div className="border rounded-md max-h-72 overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-900/40">
-                  <tr>
-                    <th className="px-3 py-2 text-left">{t("ui__����������_8b35db64")}</th>
-                    <th className="px-3 py-2 text-right">{t("ui__������_����_302e2bd6")}</th>
-                    <th className="px-3 py-2 text-right">{t("ui__������������_1f8eb5d4")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {view.items.map((i: any) => (
-                    <tr key={i.product_id} className="border-t">
-                      <td className="px-3 py-2">{i.name}</td>
-                      <td className="px-3 py-2 text-right font-mono">{fmt(i.quantity)}</td>
-                      <td className="px-3 py-2 text-right font-mono">{fmt(i.cost)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-1">
+              <label className="text-[12px] text-ink-600 dark:text-ink-400 font-medium">{t("filter_date_to")}</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-full border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-950 text-ink-900 dark:text-ink-100 rounded-md px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-brand-500"
+              />
             </div>
           </div>
         )}
-      </Modal>
+      </div>
+
+      {/* Loading / Error / Empty */}
+      {loading && (
+        <div className="text-center py-12 text-ink-400 text-[13px]">{t("loading")}</div>
+      )}
+      {!loading && error && (
+        <div className="text-center py-12 text-rose-600 text-[13px]">{error}</div>
+      )}
+      {!loading && !error && transfers.length === 0 && (
+        <div className="text-center py-12 text-ink-400 text-[13px]">{t("empty")}</div>
+      )}
+
+      {/* Desktop table */}
+      {!loading && !error && transfers.length > 0 && (
+        <>
+          <div className="hidden md:block overflow-x-auto rounded-lg border border-ink-200 dark:border-ink-800">
+            <table className="w-full text-[13px]">
+              <thead className="bg-ink-50 dark:bg-ink-900/40">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-ink-600 dark:text-ink-400 whitespace-nowrap">{t("col_doc")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-ink-600 dark:text-ink-400">{t("col_from")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-ink-600 dark:text-ink-400">{t("col_to")}</th>
+                  <th className="px-4 py-3 text-center font-medium text-ink-600 dark:text-ink-400 whitespace-nowrap">{t("col_items")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-ink-600 dark:text-ink-400 whitespace-nowrap">{t("col_status")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-ink-600 dark:text-ink-400 whitespace-nowrap">{t("col_created_by")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-ink-600 dark:text-ink-400 whitespace-nowrap">{t("col_created_at")}</th>
+                  <th className="px-4 py-3 text-right font-medium text-ink-600 dark:text-ink-400">{t("col_actions")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-200/60 dark:divide-ink-800/60">
+                {transfers.map((tr) => (
+                  <tr key={tr.id} className="hover:bg-ink-50/50 dark:hover:bg-ink-900/20 transition-colors">
+                    <td className="px-4 py-3 font-mono text-brand-600 dark:text-brand-400">
+                      <button
+                        onClick={() => router.push(`/warehouse/internal-transfers/${tr.id}`)}
+                        className="hover:underline"
+                      >
+                        {tr.doc_number}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-ink-900 dark:text-ink-100">{tr.from_name}</td>
+                    <td className="px-4 py-3 text-ink-900 dark:text-ink-100">{tr.to_name}</td>
+                    <td className="px-4 py-3 text-center text-ink-600 dark:text-ink-400">{tr.item_count}</td>
+                    <td className="px-4 py-3">{statusBadge(tr.status, t)}</td>
+                    <td className="px-4 py-3 text-ink-600 dark:text-ink-400">{tr.created_by_name ?? "—"}</td>
+                    <td className="px-4 py-3 text-ink-600 dark:text-ink-400 whitespace-nowrap">{fmtDate(tr.created_at)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <RowActions tr={tr} onAction={setActionState} onView={() => router.push(`/warehouse/internal-transfers/${tr.id}`)} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile cards */}
+          <ul className="md:hidden space-y-3">
+            {transfers.map((tr) => (
+              <li
+                key={tr.id}
+                className="rounded-lg border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-900 p-4 space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    onClick={() => router.push(`/warehouse/internal-transfers/${tr.id}`)}
+                    className="font-mono text-brand-600 dark:text-brand-400 text-[13px] hover:underline"
+                  >
+                    {tr.doc_number}
+                  </button>
+                  {statusBadge(tr.status, t)}
+                </div>
+                <div className="text-[13px] text-ink-700 dark:text-ink-300">
+                  {tr.from_name} → {tr.to_name}
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] text-ink-500">{fmtDate(tr.created_at)}</span>
+                  <RowActions tr={tr} onAction={setActionState} onView={() => router.push(`/warehouse/internal-transfers/${tr.id}`)} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {/* Confirm dialog */}
+      {actionState && (
+        <ConfirmDialog
+          open={!!actionState}
+          onClose={() => setActionState(null)}
+          onConfirm={handleAction}
+          title={confirmTitles[actionState.action]}
+          message={confirmMsgs[actionState.action]}
+          confirmLabel={t("confirm_label")}
+          cancelLabel={t("cancel_label")}
+          variant={actionState.action === "cancel" ? "danger" : "warning"}
+          loading={actionLoading}
+        />
+      )}
+    </div>
+  );
+}
+
+function RowActions({
+  tr,
+  onAction,
+  onView,
+}: {
+  tr: Transfer;
+  onAction: (s: ActionState) => void;
+  onView: () => void;
+}) {
+  const t = useTranslations("warehouse.transfers");
+  return (
+    <div className="flex items-center gap-1 justify-end flex-wrap">
+      <button
+        onClick={onView}
+        className="px-2 py-1 text-[12px] rounded border border-ink-200 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800 text-ink-700 dark:text-ink-300 transition-colors"
+      >
+        {t("detail_title")}
+      </button>
+      {tr.status === "draft" && (
+        <button
+          onClick={() => onAction({ id: tr.id, action: "send" })}
+          className="px-2 py-1 text-[12px] rounded bg-amber-500 hover:bg-amber-600 text-white transition-colors"
+        >
+          {t("send_btn")}
+        </button>
+      )}
+      {tr.status === "sent" && (
+        <button
+          onClick={() => onAction({ id: tr.id, action: "receive" })}
+          className="px-2 py-1 text-[12px] rounded bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+        >
+          {t("receive_btn")}
+        </button>
+      )}
+      {(tr.status === "draft" || tr.status === "sent") && (
+        <button
+          onClick={() => onAction({ id: tr.id, action: "cancel" })}
+          className="px-2 py-1 text-[12px] rounded bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/20 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 transition-colors"
+        >
+          {t("cancel_transfer_btn")}
+        </button>
+      )}
     </div>
   );
 }
