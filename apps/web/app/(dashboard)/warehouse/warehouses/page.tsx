@@ -8,6 +8,7 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Wh = {
@@ -16,24 +17,31 @@ type Wh = {
   address?: string;
   responsible_id?: string;
   responsible_name?: string;
+  type_id?: number | null;
+  type_name?: string | null;
   product_count?: number;
   stock_value?: string;
 };
 type Emp = { id: string; full_name: string };
+type WhType = { id: number; name: string; code: string | null };
 
-const empty = { name: "", address: "", responsible_id: null as string | null };
+const empty = { name: "", address: "", responsible_id: null as string | null, type_id: null as number | null };
 const fmt = (v: any) =>
   Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 
 export default function WarehousesPage() {
   const t = useTranslations("ui");
+  const tw = useTranslations("warehouse");
   const [rows, setRows] = useState<Wh[]>([]);
   const [employees, setEmployees] = useState<Emp[]>([]);
+  const [whTypes, setWhTypes] = useState<WhType[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<number | null>(null);
+  const [confirmWh, setConfirmWh] = useState<Wh | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -48,6 +56,10 @@ export default function WarehousesPage() {
       .get<Emp[]>("/hr/employees")
       .then((r) => setEmployees(r.data))
       .catch(() => {});
+    api
+      .get<WhType[]>("/warehouse/types")
+      .then((r) => setWhTypes(r.data))
+      .catch(() => {});
     load();
   }, []);
 
@@ -56,6 +68,7 @@ export default function WarehousesPage() {
       const payload = {
         ...form,
         responsible_id: form.responsible_id || null,
+        type_id: form.type_id || null,
       };
       if (editId) await api.put(`/warehouse/warehouses/${editId}`, payload);
       else await api.post("/warehouse/warehouses", payload);
@@ -63,14 +76,22 @@ export default function WarehousesPage() {
       setOpen(false);
       load();
     } catch (e) {
-      toast.error(getErrorMessage(e, "Xato"));
+      toast.error(getErrorMessage(e, t("ui__ошибка_c6fd3c6a")));
     }
   }
   async function del(r: Wh) {
-    if (!confirm(`«${r.name}» ombori o'chirilsinmi?`)) return;
-    await api.delete(`/warehouse/warehouses/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40"));
-    load();
+    setDeleting(true);
+    try {
+      await api.delete(`/warehouse/warehouses/${r.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setConfirmWh(null);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, t("ui__ошибка_c6fd3c6a")));
+      setConfirmWh(null);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const filtered = q
@@ -92,6 +113,16 @@ export default function WarehousesPage() {
 
   const columns: Column<Wh>[] = [
     { key: "name", header: t("ui__название_602680ed") },
+    {
+      key: "type_name",
+      header: tw("warehouse_type_label"),
+      width: "160px",
+      render: (r) => r.type_name ? (
+        <span className="text-xs bg-ink-100 dark:bg-ink-800 px-1.5 py-0.5 rounded font-mono">
+          {r.type_name}
+        </span>
+      ) : "—",
+    },
     {
       key: "address",
       header: t("ui__адрес_80148fa5"),
@@ -188,11 +219,12 @@ export default function WarehousesPage() {
               name: r.name,
               address: r.address || "",
               responsible_id: r.responsible_id || null,
+              type_id: r.type_id ?? null,
             });
             setEditId(r.id);
             setOpen(true);
           }}
-          onDelete={del}
+          onDelete={(r) => setConfirmWh(r)}
         />
       </div>
 
@@ -222,20 +254,20 @@ export default function WarehousesPage() {
                 <button
                   aria-label="Tahrirlash"
                   onClick={() => {
-                    setForm({ name: r.name, address: r.address || "", responsible_id: r.responsible_id || null });
+                    setForm({ name: r.name, address: r.address || "", responsible_id: r.responsible_id || null, type_id: r.type_id ?? null });
                     setEditId(r.id);
                     setOpen(true);
                   }}
                   className="text-xs text-brand-600 hover:text-brand-700 px-2 py-1 rounded border border-brand-200"
                 >
-                  {t("ui__редактировать_bc41d38a") || "Tahrir"}
+                  {t("ui__редактировать_1706282c")}
                 </button>
                 <button
                   aria-label="O'chirish"
-                  onClick={() => del(r)}
+                  onClick={() => setConfirmWh(r)}
                   className="text-xs text-rose-600 hover:text-rose-700 px-2 py-1 rounded border border-rose-200"
                 >
-                  {t("ui__удалить_b8cd2db2") || "O'chir"}
+                  {t("ui__удалить_ed2bbfbc")}
                 </button>
               </div>
             </div>
@@ -246,7 +278,7 @@ export default function WarehousesPage() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title={editId ? "Omborni tahrirlash" : "Yangi ombor"}
+        title={editId ? tw("edit_warehouse") : tw("new_warehouse")}
       >
         <div className="space-y-3">
           <Field label={t("ui__название_602680ed")} required>
@@ -282,6 +314,25 @@ export default function WarehousesPage() {
               ))}
             </select>
           </Field>
+          <Field label={tw("warehouse_type_label")}>
+            <select
+              className={input}
+              value={form.type_id ?? ""}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  type_id: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+            >
+              <option value="">{t("ui__нет_7b07413e")}</option>
+              {whTypes.map((wt) => (
+                <option key={wt.id} value={wt.id}>
+                  {wt.name}
+                </option>
+              ))}
+            </select>
+          </Field>
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
             <button
               onClick={() => setOpen(false)}
@@ -298,6 +349,16 @@ export default function WarehousesPage() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={confirmWh !== null}
+        onClose={() => setConfirmWh(null)}
+        onConfirm={() => { if (confirmWh) del(confirmWh); }}
+        title={t("ui__удалить_запись_12469355")}
+        message={`«${confirmWh?.name}» ombori o'chirilsinmi?`}
+        confirmLabel={t("ui__удалить_ed2bbfbc")}
+        loading={deleting}
+      />
     </div>
   );
 }

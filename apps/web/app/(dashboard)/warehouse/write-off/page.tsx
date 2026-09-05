@@ -67,7 +67,7 @@ export default function WriteOffPage() {
   }
 
   async function create() {
-    if (!whId || items.length === 0) { toast.error(t("ui__������������������_����������_��_������������_8cd8f90a")); return; }
+    if (!whId || items.length === 0) { toast.error(t("ui__заполните_склад_и_товары_8cd8f90a")); return; }
     try {
       const payload = {
         warehouse_id: Number(whId),
@@ -90,45 +90,45 @@ export default function WriteOffPage() {
 
   const columns: Column<WO>[] = [
     { key: "doc_number", header: "���", render: (r) => r.doc_number || r.id.slice(0, 8), width: "100px" },
-    { key: "write_off_date", header: t("ui__��������_8cdd8bb7"), width: "120px" },
-    { key: "warehouse_name", header: t("ui__����������_e8bf999f") },
-    { key: "reason_name", header: t("ui__��������������_d88300c7"), render: (r) => r.reason_name || "���" },
-    { key: "total_amount", header: t("ui__����������_cf59ebf9"), align: "right", width: "150px",
+    { key: "write_off_date", header: t("ui__дата_8cdd8bb7"), width: "120px" },
+    { key: "warehouse_name", header: t("ui__склад_e8bf999f") },
+    { key: "reason_name", header: t("ui__причина_d88300c7"), render: (r) => r.reason_name || "���" },
+    { key: "total_amount", header: t("ui__сумма_cf59ebf9"), align: "right", width: "150px",
       render: (r) => <span className="font-mono">{fmt(r.total_amount)}</span> },
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("ui__����������������_bb8d994e")} description={t("ui__������������������_����������������_��������������_199109f1")}
-        onCreate={() => setOpen(true)} createLabel={t("ui__����������_����������������_01c31308")} />
+      <PageHeader title={t("ui__списания_bb8d994e")} description={t("ui__документы_списания_товаров_199109f1")}
+        onCreate={() => setOpen(true)} createLabel={t("ui__новое_списание_01c31308")} />
       <DataTable columns={columns} rows={rows} loading={loading} onEdit={openView} />
 
-      <Modal open={open} onClose={() => setOpen(false)} size="lg" title={t("ui__����������_����������������_01c31308")}>
+      <Modal open={open} onClose={() => setOpen(false)} size="lg" title={t("ui__новое_списание_01c31308")}>
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            <Field label={t("ui__����������_e8bf999f")} required>
+            <Field label={t("ui__склад_e8bf999f")} required>
               <select className={input} value={whId} onChange={(e) => setWhId(e.target.value ? Number(e.target.value) : "")}>
-                <option value="">{t("ui__����������������_edab92dd")}</option>
+                <option value="">{t("ui__выберите_edab92dd")}</option>
                 {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             </Field>
-            <Field label={t("ui__��������������_d88300c7")}>
+            <Field label={t("ui__причина_d88300c7")}>
               <select className={input} value={reasonId} onChange={(e) => setReasonId(e.target.value ? Number(e.target.value) : "")}>
-                <option value="">{t("ui__������_7b07413e")}</option>
+                <option value="">{t("ui__нет_7b07413e")}</option>
                 {reasons.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             </Field>
-            <Field label={t("ui__��������_8cdd8bb7")} required>
+            <Field label={t("ui__дата_8cdd8bb7")} required>
               <input type="date" className={input} value={date} onChange={(e) => setDate(e.target.value)} />
             </Field>
           </div>
-          <Field label={t("ui__��������������������_686eb72b")}>
+          <Field label={t("ui__примечание_686eb72b")}>
             <input className={input} value={notes} onChange={(e) => setNotes(e.target.value)} />
           </Field>
 
-          <Field label={t("ui__����������������_������������_db2bb4a6")}>
+          <Field label={t("ui__добавить_товары_db2bb4a6")}>
             <div className="relative">
-              <input className={input} placeholder={t("ui__����������_������������_b493d1bc")}
+              <input className={input} placeholder={t("ui__поиск_товара_b493d1bc")}
                 value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
               {productOptions.length > 0 && (
                 <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border rounded-md shadow-lg max-h-48 overflow-auto">
@@ -148,8 +148,8 @@ export default function WriteOffPage() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 dark:bg-slate-900/40">
                   <tr>
-                    <th className="px-3 py-2 text-left">{t("ui__����������_8b35db64")}</th>
-                    <th className="px-3 py-2 text-right w-32">{t("ui__��������������������_cb8bfd4d")}</th>
+                    <th className="px-3 py-2 text-left">{t("ui__товар_8b35db64")}</th>
+                    <th className="px-3 py-2 text-right w-32">{t("ui__количество_cb8bfd4d")}</th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
@@ -174,8 +174,8 @@ export default function WriteOffPage() {
           )}
 
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__������������_987b33c6")}</button>
-            <button onClick={create} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__��������������_f8b7fd55")}</button>
+            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
+            <button onClick={create} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__списать_f8b7fd55")}</button>
           </div>
         </div>
       </Modal>
@@ -185,17 +185,17 @@ export default function WriteOffPage() {
         {view && (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-slate-500 dark:text-slate-400">{t("ui__��������_5c790abe")}</span> {view.head.write_off_date}</div>
-              <div><span className="text-slate-500 dark:text-slate-400">{t("ui__��������������_ce28b881")}</span> {view.head.reason_name || "���"}</div>
+              <div><span className="text-slate-500 dark:text-slate-400">{t("ui__дата_5c790abe")}</span> {view.head.write_off_date}</div>
+              <div><span className="text-slate-500 dark:text-slate-400">{t("ui__причина_ce28b881")}</span> {view.head.reason_name || "���"}</div>
             </div>
             <div className="border rounded-md max-h-72 overflow-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 dark:bg-slate-900/40">
                   <tr>
-                    <th className="px-3 py-2 text-left">{t("ui__����������_8b35db64")}</th>
-                    <th className="px-3 py-2 text-right">{t("ui__������_����_302e2bd6")}</th>
-                    <th className="px-3 py-2 text-right">{t("ui__������������_1f8eb5d4")}</th>
-                    <th className="px-3 py-2 text-right">{t("ui__����������_cf59ebf9")}</th>
+                    <th className="px-3 py-2 text-left">{t("ui__товар_8b35db64")}</th>
+                    <th className="px-3 py-2 text-right">{t("ui__кол_во_302e2bd6")}</th>
+                    <th className="px-3 py-2 text-right">{t("ui__себест_1f8eb5d4")}</th>
+                    <th className="px-3 py-2 text-right">{t("ui__сумма_cf59ebf9")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -211,7 +211,7 @@ export default function WriteOffPage() {
               </table>
             </div>
             <div className="text-right text-lg font-semibold">
-              {t("ui__����������_eab79dbd")} <span className="font-mono">{fmt(view.head.total_amount)}</span>
+              {t("ui__итого_eab79dbd")} <span className="font-mono">{fmt(view.head.total_amount)}</span>
             </div>
           </div>
         )}

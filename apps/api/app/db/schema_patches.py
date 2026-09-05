@@ -962,6 +962,399 @@ END $$
     """ALTER TABLE users ADD COLUMN IF NOT EXISTS twofa_secret TEXT""",
     """ALTER TABLE users ADD COLUMN IF NOT EXISTS twofa_enabled BOOLEAN DEFAULT FALSE""",
     """ALTER TABLE users ADD COLUMN IF NOT EXISTS twofa_backup_codes JSONB DEFAULT '[]'::jsonb""",
+
+    # ============================================================
+    # Sprint W1 — Warehouse Module Rebuild (T-001)
+    # Rollback (reverse FK order):
+    #   DROP TABLE IF EXISTS product_request_items;
+    #   DROP TABLE IF EXISTS product_requests;
+    #   DROP TABLE IF EXISTS internal_transfer_items;
+    #   DROP TABLE IF EXISTS internal_transfers;
+    #   DROP TABLE IF EXISTS document_sequences;
+    #   ALTER TABLE products DROP COLUMN IF EXISTS default_rack_id;
+    #   ALTER TABLE products DROP COLUMN IF EXISTS product_type;
+    #   DROP TABLE IF EXISTS warehouse_racks;
+    #   DROP TABLE IF EXISTS warehouse_rows;
+    #   ALTER TABLE warehouses DROP COLUMN IF EXISTS type_id;  -- already exists from Faza 12
+    #   -- warehouse_types already existed from Faza 12; only code column + unique index added
+    # ============================================================
+
+    # warehouse_types existed from Faza 12 but lacked `code` column and unique constraint
+    """ALTER TABLE warehouse_types ADD COLUMN IF NOT EXISTS code VARCHAR(50)""",
+    """CREATE UNIQUE INDEX IF NOT EXISTS uq_warehouse_types_org_name
+       ON warehouse_types(organization_id, name)""",
+
+    # Rows inside a warehouse
+    """
+    CREATE TABLE IF NOT EXISTS warehouse_rows (
+        id              SERIAL PRIMARY KEY,
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        warehouse_id    INT  NOT NULL REFERENCES warehouses(id) ON DELETE CASCADE,
+        name            VARCHAR(100) NOT NULL,
+        sort_order      INT DEFAULT 0
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_warehouse_rows_wh
+       ON warehouse_rows(warehouse_id)""",
+    """CREATE INDEX IF NOT EXISTS idx_warehouse_rows_org
+       ON warehouse_rows(organization_id, warehouse_id)""",
+
+    # Racks inside a row
+    """
+    CREATE TABLE IF NOT EXISTS warehouse_racks (
+        id              SERIAL PRIMARY KEY,
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        row_id          INT  NOT NULL REFERENCES warehouse_rows(id) ON DELETE CASCADE,
+        name            VARCHAR(100) NOT NULL,
+        sort_order      INT DEFAULT 0
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_warehouse_racks_row
+       ON warehouse_racks(row_id)""",
+    """CREATE INDEX IF NOT EXISTS idx_warehouse_racks_org
+       ON warehouse_racks(organization_id, row_id)""",
+
+    # Internal transfer header
+    """
+    CREATE TABLE IF NOT EXISTS internal_transfers (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        doc_number      VARCHAR(50),
+        from_warehouse  INT  NOT NULL REFERENCES warehouses(id),
+        to_warehouse    INT  NOT NULL REFERENCES warehouses(id),
+        status          VARCHAR(20) NOT NULL DEFAULT 'draft',
+        notes           TEXT,
+        sent_at         TIMESTAMPTZ,
+        received_at     TIMESTAMPTZ,
+        sent_by         UUID REFERENCES users(id),
+        received_by     UUID REFERENCES users(id),
+        created_by      UUID REFERENCES users(id),
+        created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_internal_transfers_org
+       ON internal_transfers(organization_id, status)""",
+
+    # Internal transfer lines
+    # unit_id references `units` (verified: table is named `units`, not `product_units`)
+    """
+    CREATE TABLE IF NOT EXISTS internal_transfer_items (
+        id          BIGSERIAL PRIMARY KEY,
+        transfer_id UUID         NOT NULL REFERENCES internal_transfers(id) ON DELETE CASCADE,
+        product_id  UUID         NOT NULL REFERENCES products(id),
+        qty         NUMERIC(20,4) NOT NULL,
+        unit_id     INT          REFERENCES units(id),
+        cost        NUMERIC(20,4) NOT NULL DEFAULT 0
+    )
+    """,
+    # cost column guard — idempotent if table already existed without it
+    """ALTER TABLE internal_transfer_items ADD COLUMN IF NOT EXISTS cost NUMERIC(20,4) NOT NULL DEFAULT 0""",
+
+    # document_sequences — per-org sequential doc number counter (Variant B)
+    """
+    CREATE TABLE IF NOT EXISTS document_sequences (
+        organization_id UUID        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        doc_type        VARCHAR(20) NOT NULL,
+        next_value      INT         NOT NULL DEFAULT 1,
+        PRIMARY KEY (organization_id, doc_type)
+    )
+    """,
+
+    # Product requests header
+    """
+    CREATE TABLE IF NOT EXISTS product_requests (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        doc_number      VARCHAR(50),
+        from_warehouse  INT  NOT NULL REFERENCES warehouses(id),
+        to_warehouse    INT  REFERENCES warehouses(id),
+        status          VARCHAR(20) NOT NULL DEFAULT 'pending',
+        notes           TEXT,
+        requested_by    UUID REFERENCES users(id),
+        approved_by     UUID REFERENCES users(id),
+        created_at      TIMESTAMPTZ DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_product_requests_org
+       ON product_requests(organization_id, status)""",
+
+    # Product request lines
+    """
+    CREATE TABLE IF NOT EXISTS product_request_items (
+        id            BIGSERIAL PRIMARY KEY,
+        request_id    UUID         NOT NULL REFERENCES product_requests(id) ON DELETE CASCADE,
+        category_id   INT          REFERENCES product_categories(id),
+        product_id    UUID         NOT NULL REFERENCES products(id),
+        qty_requested NUMERIC(20,4) NOT NULL,
+        qty_on_hand   NUMERIC(20,4) NOT NULL DEFAULT 0
+    )
+    """,
+
+    # products: default rack location + product_type free-text field
+    """ALTER TABLE products ADD COLUMN IF NOT EXISTS default_rack_id INT REFERENCES warehouse_racks(id)""",
+    """ALTER TABLE products ADD COLUMN IF NOT EXISTS product_type VARCHAR(100)""",
+
+    # ============================================================
+    # Warehouse Sprint 2 — T-020: BOM + Cells + Pick tables
+    # Rollback (reverse FK order):
+    #   ALTER TABLE products DROP COLUMN IF EXISTS default_cell_id;
+    #   DROP TABLE IF EXISTS order_pick_messages;
+    #   DROP TABLE IF EXISTS order_pick_items;
+    #   DROP TABLE IF EXISTS warehouse_cells;
+    #   DROP TABLE IF EXISTS product_bom;
+    # ============================================================
+
+    # Bill of Materials
+    """
+    CREATE TABLE IF NOT EXISTS product_bom (
+        id                   BIGSERIAL PRIMARY KEY,
+        organization_id      UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        parent_product_id    UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        component_product_id UUID NOT NULL REFERENCES products(id),
+        quantity             NUMERIC(20,4) NOT NULL CHECK (quantity > 0),
+        unit_id              INT REFERENCES units(id),
+        notes                TEXT,
+        UNIQUE (organization_id, parent_product_id, component_product_id)
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_product_bom_org_parent
+       ON product_bom(organization_id, parent_product_id)""",
+
+    # Warehouse cells (lowest spatial unit under racks)
+    """
+    CREATE TABLE IF NOT EXISTS warehouse_cells (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        rack_id         INT  NOT NULL REFERENCES warehouse_racks(id) ON DELETE CASCADE,
+        code            VARCHAR(30) NOT NULL,
+        is_active       BOOLEAN DEFAULT TRUE,
+        UNIQUE (organization_id, rack_id, code)
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_warehouse_cells_org_rack
+       ON warehouse_cells(organization_id, rack_id)""",
+
+    # Pick workflow items
+    # item_id is BIGINT (plain column, no FK) — sale_items.id is BIGSERIAL;
+    # FK not enforced because sale_items rows may be deleted after pick.
+    """
+    CREATE TABLE IF NOT EXISTS order_pick_items (
+        id              BIGSERIAL PRIMARY KEY,
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        order_id        UUID NOT NULL,
+        item_id         BIGINT NOT NULL,
+        status          VARCHAR(20) NOT NULL DEFAULT 'pending'
+                            CHECK (status IN ('pending','picked','not_found')),
+        picked_by       UUID REFERENCES users(id),
+        picked_at       TIMESTAMPTZ,
+        UNIQUE (organization_id, order_id, item_id)
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_pick_items_org_order
+       ON order_pick_items(organization_id, order_id)""",
+
+    # Pick workflow messages (cashier <-> manager)
+    """
+    CREATE TABLE IF NOT EXISTS order_pick_messages (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        order_id        UUID NOT NULL,
+        from_user_id    UUID REFERENCES users(id),
+        kind            VARCHAR(10) NOT NULL CHECK (kind IN ('message','call')),
+        body            TEXT,
+        created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_pick_messages_org_order
+       ON order_pick_messages(organization_id, order_id)""",
+
+    # Link a product to its default pick cell
+    """ALTER TABLE products
+       ADD COLUMN IF NOT EXISTS default_cell_id UUID REFERENCES warehouse_cells(id)""",
+
+    # ============================================================
+    # Warehouse Sprint 2 QA fixes
+    # M4 — notes column for pick items (reason when not_found etc.)
+    # Rollback: ALTER TABLE order_pick_items DROP COLUMN IF EXISTS notes;
+    # ============================================================
+    """ALTER TABLE order_pick_items ADD COLUMN IF NOT EXISTS notes TEXT""",
+
+    # ============================================================
+    # Sprint 3 — T-040/T-041: BOM explode + pick bootstrap
+    # Rollback:
+    #   ALTER TABLE order_pick_items DROP COLUMN IF EXISTS parent_product_id;
+    #   ALTER TABLE order_pick_items DROP COLUMN IF EXISTS product_id;
+    #   ALTER TABLE order_pick_items DROP COLUMN IF EXISTS quantity;
+    #   ALTER TABLE order_pick_items DROP COLUMN IF EXISTS unit_id;
+    #   DROP INDEX IF EXISTS idx_pick_items_parent;
+    # ============================================================
+
+    # parent_product_id: NULL = individual item; filled = BOM leaf component
+    """ALTER TABLE order_pick_items ADD COLUMN IF NOT EXISTS parent_product_id UUID REFERENCES products(id)""",
+
+    # product_id, quantity, unit_id stored directly on pick row (needed for BOM components
+    # which have a different product than the sale_item's product)
+    """ALTER TABLE order_pick_items ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id)""",
+    """ALTER TABLE order_pick_items ADD COLUMN IF NOT EXISTS quantity NUMERIC(18,4)""",
+    """ALTER TABLE order_pick_items ADD COLUMN IF NOT EXISTS unit_id INT REFERENCES units(id)""",
+
+    # Index for bundle grouping queries
+    """CREATE INDEX IF NOT EXISTS idx_pick_items_parent ON order_pick_items(order_id, parent_product_id)""",
+
+    # ============================================================
+    # Sprint 3 QA fix B2: order_pick_items.product_id NOT NULL
+    # Backfill rows created before product_id column existed.
+    # Rollback: ALTER TABLE order_pick_items ALTER COLUMN product_id DROP NOT NULL;
+    # ============================================================
+    """
+    UPDATE order_pick_items opi
+    SET product_id = si.product_id
+    FROM sale_items si
+    WHERE opi.product_id IS NULL AND opi.item_id = si.id
+    """,
+    """
+    DO $$ BEGIN
+        ALTER TABLE order_pick_items ALTER COLUMN product_id SET NOT NULL;
+    EXCEPTION WHEN others THEN NULL; END $$
+    """,
+
+    # Drop old UNIQUE that only allowed one pick row per item_id.
+    # BOM explosion creates multiple rows per item_id (one per leaf component).
+    # New unique: (org, order, item_id, product_id) — one pick row per component per sale line.
+    """
+    DO $$
+    BEGIN
+        IF EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'order_pick_items_organization_id_order_id_item_id_key'
+        ) THEN
+            ALTER TABLE order_pick_items
+                DROP CONSTRAINT order_pick_items_organization_id_order_id_item_id_key;
+        END IF;
+    END$$
+    """,
+
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'uq_pick_items_org_order_item_product'
+        ) THEN
+            ALTER TABLE order_pick_items
+                ADD CONSTRAINT uq_pick_items_org_order_item_product
+                UNIQUE (organization_id, order_id, item_id, product_id);
+        END IF;
+    END$$
+    """,
+
+    # ============================================================
+    # Sprint 4A — T-101: MXIK product catalog (global reference table)
+    # No organization_id — shared across all tenants (reference data).
+    # Rollback:
+    #   DROP INDEX IF EXISTS idx_mxik_name_ru;
+    #   DROP INDEX IF EXISTS idx_mxik_name_uz;
+    #   DROP TABLE IF EXISTS mxik_products;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS mxik_products (
+        code         VARCHAR(20) PRIMARY KEY,
+        name_uz      TEXT NOT NULL,
+        name_ru      TEXT,
+        unit         VARCHAR(20),
+        group_code   VARCHAR(10),
+        group_name   TEXT,
+        is_active    BOOLEAN DEFAULT TRUE,
+        updated_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_mxik_name_uz
+       ON mxik_products USING gin(to_tsvector('simple', name_uz))""",
+    """CREATE INDEX IF NOT EXISTS idx_mxik_name_ru
+       ON mxik_products USING gin(to_tsvector('simple', COALESCE(name_ru, '')))""",
+
+    # ============================================================
+    # Sprint 4A — T-104: WebAuthn challenge storage (Variant A)
+    # TTL = 5 minutes, lazy cleanup on each begin call.
+    # Rollback:
+    #   DROP INDEX IF EXISTS idx_webauthn_challenges_user;
+    #   DROP TABLE IF EXISTS user_webauthn_challenges;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS user_webauthn_challenges (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        challenge   BYTEA NOT NULL,
+        purpose     VARCHAR(20) NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_user
+       ON user_webauthn_challenges(user_id, created_at)""",
+
+    # ============================================================
+    # Sprint 4C — T-123: Telegram bot command auth (Variant B)
+    # Bind token → user_telegram_bindings mapping.
+    # Rollback:
+    #   DROP INDEX IF EXISTS idx_tg_bindings_chat_org;
+    #   DROP TABLE IF EXISTS user_telegram_bindings;
+    #   ALTER TABLE users DROP COLUMN IF EXISTS tg_bind_token;
+    #   ALTER TABLE users DROP COLUMN IF EXISTS tg_bind_token_at;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS user_telegram_bindings (
+        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        org_id            UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        chat_id           BIGINT NOT NULL,
+        telegram_username VARCHAR(100),
+        bound_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        is_active         BOOLEAN NOT NULL DEFAULT TRUE,
+        UNIQUE (user_id, org_id),
+        UNIQUE (chat_id, org_id)
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_tg_bindings_chat_org
+       ON user_telegram_bindings(chat_id, org_id)""",
+
+    """ALTER TABLE users ADD COLUMN IF NOT EXISTS tg_bind_token   VARCHAR(64)""",
+    """ALTER TABLE users ADD COLUMN IF NOT EXISTS tg_bind_token_at TIMESTAMPTZ""",
+
+    # ============================================================
+    # Sprint 4D — T-132: SMS debt reminder log
+    # Rollback:
+    #   DROP INDEX IF EXISTS idx_sms_debt_org_customer;
+    #   DROP TABLE IF EXISTS sms_debt_reminders;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS sms_debt_reminders (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id     UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        customer_id         UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        user_id             UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+        phone               VARCHAR(20) NOT NULL,
+        message             TEXT NOT NULL,
+        status              VARCHAR(20) NOT NULL DEFAULT 'sent',
+        provider_message_id VARCHAR(100),
+        error               TEXT,
+        sent_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_sms_debt_org_customer
+       ON sms_debt_reminders(organization_id, customer_id, sent_at DESC)""",
+
+    # ============================================================
+    # Sprint 4 QA fix B1 — allow user_id to be NULL so ON DELETE SET NULL works.
+    # The NOT NULL + ON DELETE SET NULL combination is rejected by PostgreSQL at
+    # delete time; dropping NOT NULL lets the FK do its job without losing the row.
+    # Rollback: ALTER TABLE sms_debt_reminders ALTER COLUMN user_id SET NOT NULL;
+    # ============================================================
+    """
+    DO $$ BEGIN
+        ALTER TABLE sms_debt_reminders ALTER COLUMN user_id DROP NOT NULL;
+    EXCEPTION WHEN others THEN NULL; END $$
+    """,
 ]
 
 

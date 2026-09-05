@@ -1,10 +1,12 @@
 """
 Standard permissions catalog for Aniq ERP.
 
-Convention: permission code = "<module>.<action>"
+Convention: permission code = "<module>.<action>" (2-part)
+            or "<module>.<sub>.<action>" (3-part for sub-resource actions)
 Modules: sale, warehouse, finance, customer, supplier, hr,
          manufacturing, marketing, reference, settings, tools, audit, rbac, org
-Actions: view, create, update, delete, export, approve, cancel, pay, refund
+Actions: view, create, update, delete, export, approve, cancel, pay, refund,
+         manage, send, receive, import
 """
 from __future__ import annotations
 
@@ -17,9 +19,15 @@ class Permission(TypedDict):
     action: str
 
 
-# Helper to build a permission dict
+# Helper to build a 2-part permission dict
 def p(module: str, action: str) -> Permission:
     return {"code": f"{module}.{action}", "module": module, "action": action}
+
+
+# Helper to build a 3-part permission dict (module.sub.action).
+# `action` stores the leaf action so viewer filter (action=="view") still works.
+def p3(module: str, sub: str, action: str) -> Permission:
+    return {"code": f"{module}.{sub}.{action}", "module": module, "action": action}
 
 
 # Master catalog — what permissions exist in the system
@@ -29,15 +37,34 @@ ALL_PERMISSIONS: list[Permission] = [
     p("sale", "delete"), p("sale", "cancel"), p("sale", "pay"),
     p("sale", "refund"), p("sale", "export"), p("sale", "discount"),
 
-    # Warehouse
+    # Warehouse (broad, legacy)
     p("warehouse", "view"), p("warehouse", "create"), p("warehouse", "update"),
     p("warehouse", "delete"), p("warehouse", "inventory"), p("warehouse", "write_off"),
     p("warehouse", "transfer"), p("warehouse", "income"), p("warehouse", "export"),
+
+    # Warehouse — sub-resource permissions (3-part codes, endpoint-level enforcement)
+    p3("warehouse", "type", "view"), p3("warehouse", "type", "manage"),
+    p3("warehouse", "warehouse", "view"), p3("warehouse", "warehouse", "manage"),
+    p3("warehouse", "rack", "view"), p3("warehouse", "rack", "manage"),
+    p3("warehouse", "transfer", "view"), p3("warehouse", "transfer", "send"),
+    p3("warehouse", "transfer", "receive"), p3("warehouse", "transfer", "cancel"),
+    p3("warehouse", "request", "view"), p3("warehouse", "request", "create"),
+    p3("warehouse", "request", "approve"),
+    p3("warehouse", "product", "view"),
+    p3("warehouse", "product", "import"), p3("warehouse", "product", "export"),
+
+    # Warehouse — BOM and cells (T-021)
+    p3("warehouse", "bom", "view"), p3("warehouse", "bom", "manage"),
+    p3("warehouse", "cell", "view"), p3("warehouse", "cell", "manage"),
+
+    # Order — pick workflow (T-021)
+    p3("order", "pick", "view"), p3("order", "pick", "execute"), p3("order", "pick", "contact"),
 
     # Finance
     p("finance", "view"), p("finance", "create"), p("finance", "update"),
     p("finance", "delete"), p("finance", "cashbox_manage"),
     p("finance", "set_balance"), p("finance", "export"),
+    p("finance", "bill_payment"), p("finance", "send_sms"),
 
     # Customer
     p("customer", "view"), p("customer", "create"), p("customer", "update"),
@@ -84,6 +111,16 @@ ALL_PERMISSIONS: list[Permission] = [
 
     # Statistics / reports
     p("statistics", "view"),
+
+    # Integration Hub (T-100, DESIGN-3 §11)
+    # Names match RBAC middleware derivation: GET→view, PUT→update, POST→create
+    p("integrations", "view"),    # GET /integrations, GET /integrations/{code}
+    p("integrations", "update"),  # PUT /integrations/{code}
+    p("integrations", "create"),  # POST /integrations/{code}/test, /enable, /disable
+
+    # Sprint 4 QA M2 — MXIK catalog search and 1C export
+    p("mxik", "view"),          # GET /reference/mxik/search
+    p("finance", "export_1c"),  # GET /finance/export/1c-csv, /finance/export/1c-xml
 ]
 
 
@@ -94,6 +131,7 @@ ROLE_GRANTS: dict[str, list[str]] = {
 
     # Admin — most things including RBAC management (except superadmin tweaks)
     "admin": [pm["code"] for pm in ALL_PERMISSIONS],
+    # Note: ALL_PERMISSIONS now includes integrations.* — admin gets them automatically.
 
     # Manager — most operational things, no settings/rbac/billing
     "manager": [
@@ -102,7 +140,19 @@ ROLE_GRANTS: dict[str, list[str]] = {
         "warehouse.view", "warehouse.create", "warehouse.update",
         "warehouse.inventory", "warehouse.transfer", "warehouse.income",
         "warehouse.export",
+        # Warehouse sub-resource — all except transfer.cancel (admin only)
+        "warehouse.type.view", "warehouse.type.manage",
+        "warehouse.warehouse.view", "warehouse.warehouse.manage",
+        "warehouse.rack.view", "warehouse.rack.manage",
+        "warehouse.transfer.view", "warehouse.transfer.send", "warehouse.transfer.receive",
+        "warehouse.request.view", "warehouse.request.create", "warehouse.request.approve",
+        "warehouse.product.view", "warehouse.product.import", "warehouse.product.export",
+        "warehouse.bom.view", "warehouse.bom.manage",
+        "warehouse.cell.view", "warehouse.cell.manage",
+        "order.pick.view", "order.pick.execute", "order.pick.contact",
         "finance.view", "finance.create", "finance.update", "finance.export",
+        "finance.export_1c", "finance.send_sms",
+        "mxik.view",
         "customer.view", "customer.create", "customer.update", "customer.export",
         "supplier.view", "supplier.create", "supplier.update", "supplier.export",
         "hr.view", "hr.create", "hr.update",
@@ -112,14 +162,22 @@ ROLE_GRANTS: dict[str, list[str]] = {
         "reference.view", "reference.create", "reference.update",
         "tools.view", "tools.export", "tools.price_bulk",
         "statistics.view", "audit.view",
+        "settings.integration",
+        "integrations.view",
+        "integrations.update",
+        "integrations.create",
     ],
 
     # Accountant — finance focus, read-only on others
     "accountant": [
         "sale.view", "sale.export", "sale.pay",
         "warehouse.view", "warehouse.export",
+        "warehouse.transfer.view", "warehouse.request.view",
+        "warehouse.product.view", "warehouse.product.export",
         "finance.view", "finance.create", "finance.update",
         "finance.cashbox_manage", "finance.set_balance", "finance.export",
+        "finance.export_1c", "finance.bill_payment",
+        "mxik.view",
         "customer.view", "customer.export",
         "supplier.view", "supplier.export",
         "hr.view", "hr.salary",
@@ -132,11 +190,23 @@ ROLE_GRANTS: dict[str, list[str]] = {
     "cashier": [
         "sale.view", "sale.create", "sale.pay",
         "warehouse.view",
+        "warehouse.transfer.view", "warehouse.request.view", "warehouse.request.create",
+        "warehouse.product.view",
         "customer.view", "customer.create",
         "reference.view",
+        "order.pick.view", "order.pick.contact",
+        "finance.bill_payment",
+        "mxik.view",
+        "settings.integration",
     ],
 
-    # Viewer — read-only everywhere
+    # Viewer — read-only everywhere; also gets warehouse.product.export per ticket T-002
     "viewer": [pm["code"] for pm in ALL_PERMISSIONS
-               if pm["action"] in ("view",) and pm["module"] not in ("rbac",)],
+               if pm["action"] in ("view",) and pm["module"] not in ("rbac",)]
+              + ["warehouse.product.export"],
+
+    # Picker — warehouse pick execution (T-021; not a DB role yet, grants only)
+    "picker": [
+        "order.pick.view", "order.pick.execute", "order.pick.contact",
+    ],
 }

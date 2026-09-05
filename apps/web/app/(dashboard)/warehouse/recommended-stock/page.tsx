@@ -59,14 +59,14 @@ export default function RecommendedStockPage() {
   }, [productSearch]);
 
   async function save() {
-    if (!whId || !productId) { toast.error(t("ui__����������������_����������_��_����������_f979c12b")); return; }
+    if (!whId || !productId) { toast.error(t("ui__выберите_склад_и_товар_f979c12b")); return; }
     try {
       await api.post("/warehouse/recommended-stock", {
         warehouse_id: Number(whId), product_id: productId,
         min_qty: Number(minQty) || 0,
         max_qty: maxQty ? Number(maxQty) : null,
       });
-      toast.success(t("ui__������������������_54a59b19"));
+      toast.success(t("ui__сохранено_54a59b19"));
       setOpen(false); setProductId(""); setProductName(""); setMinQty("0"); setMaxQty("");
       load(whFilter);
     } catch (e: any) { toast.error(getErrorMessage(e, "Xato")); }
@@ -75,15 +75,15 @@ export default function RecommendedStockPage() {
   async function del(r: Row) {
     if (!confirm(`��${r.product_name}�� tavsiyasi o'chirilsinmi?`)) return;
     await api.delete(`/warehouse/recommended-stock/${r.id}`);
-    toast.success(t("ui__��������������_0c450c40")); load(whFilter);
+    toast.success(t("ui__удалено_0c450c40")); load(whFilter);
   }
 
   const belowMinCount = rows.filter((r) => r.below_min).length;
 
   const columns: Column<Row>[] = [
-    { key: "warehouse_name", header: t("ui__����������_e8bf999f"), width: "180px" },
-    { key: "product_name", header: t("ui__����������_8b35db64") },
-    { key: "current_qty", header: t("ui__������������_2c2777ef"), align: "right", width: "120px",
+    { key: "warehouse_name", header: t("ui__склад_e8bf999f"), width: "180px" },
+    { key: "product_name", header: t("ui__товар_8b35db64") },
+    { key: "current_qty", header: t("ui__сейчас_2c2777ef"), align: "right", width: "120px",
       render: (r) => (
         <span className={`font-mono ${r.below_min ? "text-red-600 font-semibold" : ""}`}>
           {fmt(r.current_qty)}
@@ -91,46 +91,46 @@ export default function RecommendedStockPage() {
         </span>
       ),
     },
-    { key: "min_qty", header: t("ui__��������������_96111129"), align: "right", width: "120px",
+    { key: "min_qty", header: t("ui__минимум_96111129"), align: "right", width: "120px",
       render: (r) => <span className="font-mono">{fmt(r.min_qty)}</span> },
-    { key: "max_qty", header: t("ui__����������������_81e223a9"), align: "right", width: "120px",
+    { key: "max_qty", header: t("ui__максимум_81e223a9"), align: "right", width: "120px",
       render: (r) => r.max_qty ? <span className="font-mono">{fmt(r.max_qty)}</span> : "���" },
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("ui__��������������������������_��������������_0de7b400")} description={t("ui__����������������������_������������������������_����������_4d1024e5")}
-        onCreate={() => setOpen(true)} createLabel={t("ui__����������������_5eba283b")} />
+      <PageHeader title={t("ui__рекомендуемые_остатки_0de7b400")} description={t("ui__минимальный_максимальный_запас_4d1024e5")}
+        onCreate={() => setOpen(true)} createLabel={t("ui__добавить_5eba283b")} />
 
       <div className="flex items-center gap-3">
-        <label className="text-sm text-slate-600 dark:text-slate-300">{t("ui__����������_2cd219ec")}</label>
+        <label className="text-sm text-slate-600 dark:text-slate-300">{t("ui__склад_2cd219ec")}</label>
         <select className={`${input} max-w-xs`} value={whFilter}
           onChange={(e) => {
             const v = e.target.value ? Number(e.target.value) : "";
             setWhFilter(v); load(v);
           }}>
-          <option value="">{t("ui__������_������������_ce2fe5e2")}</option>
+          <option value="">{t("ui__все_склады_ce2fe5e2")}</option>
           {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
 
         {belowMinCount > 0 && (
           <div className="ml-auto text-sm flex items-center gap-2 text-red-600">
-            <AlertTriangle size={16} /> {t("ui__��������_����������������_75ad865a")} <strong>{belowMinCount}</strong>
+            <AlertTriangle size={16} /> {t("ui__ниже_минимума_75ad865a")} <strong>{belowMinCount}</strong>
           </div>
         )}
       </div>
 
       <DataTable columns={columns} rows={rows} loading={loading} onDelete={del} />
 
-      <Modal open={open} onClose={() => setOpen(false)} title={t("ui__����������������_������������������������_88a580b0")}>
+      <Modal open={open} onClose={() => setOpen(false)} title={t("ui__добавить_рекомендацию_88a580b0")}>
         <div className="space-y-3">
-          <Field label={t("ui__����������_e8bf999f")} required>
+          <Field label={t("ui__склад_e8bf999f")} required>
             <select className={input} value={whId} onChange={(e) => setWhId(e.target.value ? Number(e.target.value) : "")}>
-              <option value="">{t("ui__����������������_edab92dd")}</option>
+              <option value="">{t("ui__выберите_edab92dd")}</option>
               {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
           </Field>
-          <Field label={t("ui__����������_8b35db64")} required>
+          <Field label={t("ui__товар_8b35db64")} required>
             <div className="relative">
               <input className={input} placeholder={productName || "Tovar qidirish..."}
                 value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
@@ -148,18 +148,18 @@ export default function RecommendedStockPage() {
             </div>
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={t("ui__��������������_96111129")} required>
+            <Field label={t("ui__минимум_96111129")} required>
               <input type="number" step="0.001" className={input} value={minQty}
                 onChange={(e) => setMinQty(e.target.value)} />
             </Field>
-            <Field label={t("ui__����������������_81e223a9")}>
+            <Field label={t("ui__максимум_81e223a9")}>
               <input type="number" step="0.001" className={input} value={maxQty}
                 onChange={(e) => setMaxQty(e.target.value)} />
             </Field>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__������������_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__������������������_74ea58b6")}</button>
+            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
+            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
           </div>
         </div>
       </Modal>

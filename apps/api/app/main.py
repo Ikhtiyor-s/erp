@@ -32,6 +32,7 @@ if SENTRY_DSN:
     except ImportError:
         pass  # sentry-sdk not installed yet
 from app.modules.auth.router import router as auth_router
+from app.modules.auth.webauthn_router import router as webauthn_router
 from app.modules.organization.router import router as org_router
 from app.modules.reference.router import router as ref_router
 from app.modules.finance.router import router as finance_router
@@ -52,9 +53,11 @@ from app.modules.rbac.middleware import PermissionMiddleware
 from app.modules.rbac.router import router as rbac_router
 from app.modules.rbac.seed import seed_all as seed_rbac
 from app.modules.integration.router import router as integration_router
+from app.modules.integration.integrations_router import router as integrations_hub_router
 from app.modules.assistant.router import router as assistant_router
 from app.modules.customer_portal.router import router as customer_portal_router
 from app.modules.mobile.router import router as mobile_router
+from app.modules.warehouse.pick_router import router as pick_router
 
 
 @asynccontextmanager
@@ -97,6 +100,7 @@ async def health():
 API_PREFIX = "/api/v1"
 
 app.include_router(auth_router, prefix=API_PREFIX)
+app.include_router(webauthn_router, prefix=API_PREFIX)
 app.include_router(org_router, prefix=API_PREFIX)
 app.include_router(ref_router, prefix=API_PREFIX)
 app.include_router(finance_router, prefix=API_PREFIX)
@@ -114,9 +118,11 @@ app.include_router(tasks_router, prefix=API_PREFIX)
 app.include_router(audit_router, prefix=API_PREFIX)
 app.include_router(rbac_router, prefix=API_PREFIX)
 app.include_router(integration_router, prefix=API_PREFIX)
+app.include_router(integrations_hub_router, prefix=API_PREFIX)
 app.include_router(assistant_router, prefix=API_PREFIX)
 app.include_router(customer_portal_router, prefix=API_PREFIX)
 app.include_router(mobile_router, prefix=API_PREFIX)
+app.include_router(pick_router, prefix=API_PREFIX)
 
 
 if __name__ == "__main__":

@@ -30,20 +30,20 @@ export default function WriteOffReasonPage() {
     try {
       if (editId) await api.put(`/warehouse/write-off-reasons/${editId}`, { name });
       else await api.post("/warehouse/write-off-reasons", { name });
-      toast.success(t("ui__������������������_54a59b19")); setOpen(false); setName(""); setEditId(null); load();
+      toast.success(t("ui__сохранено_54a59b19")); setOpen(false); setName(""); setEditId(null); load();
     } catch (e: any) { toast.error(getErrorMessage(e, "Xato")); }
   }
   async function del(r: Reason) {
     if (!confirm(`��${r.name}�� o'chirilsinmi?`)) return;
     await api.delete(`/warehouse/write-off-reasons/${r.id}`);
-    toast.success(t("ui__��������������_0c450c40")); load();
+    toast.success(t("ui__удалено_0c450c40")); load();
   }
 
-  const columns: Column<Reason>[] = [{ key: "name", header: t("ui__����������������_602680ed") }];
+  const columns: Column<Reason>[] = [{ key: "name", header: t("ui__название_602680ed") }];
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("ui__��������������_����������������_40650004")} description={t("ui__��������������������_������������_93b51904")}
+      <PageHeader title={t("ui__причины_списания_40650004")} description={t("ui__справочник_причин_93b51904")}
         onCreate={() => { setName(""); setEditId(null); setOpen(true); }} />
       <DataTable columns={columns} rows={rows} loading={loading}
         onEdit={(r) => { setName(r.name); setEditId(r.id); setOpen(true); }}
@@ -51,12 +51,12 @@ export default function WriteOffReasonPage() {
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Tahrirlash" : "Yangi sabab"}>
         <div className="space-y-3">
-          <Field label={t("ui__����������������_602680ed")} required>
+          <Field label={t("ui__название_602680ed")} required>
             <input className={input} value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__������������_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__������������������_74ea58b6")}</button>
+            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
+            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
           </div>
         </div>
       </Modal>
