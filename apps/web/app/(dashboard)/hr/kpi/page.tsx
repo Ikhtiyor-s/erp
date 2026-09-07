@@ -8,6 +8,10 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { StatWidget } from "@/components/ui/stat-widget";
 import { useTranslations } from "next-intl";
 
 type Row = {
@@ -37,6 +41,8 @@ export default function KpiPage() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ q: "", employee_id: "" });
   const [open, setOpen] = useState(false);
+  const [confirmItem, setConfirmItem] = useState<Row | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const empty = {
     employee_id: "",
@@ -87,11 +93,19 @@ export default function KpiPage() {
     }
   }
 
-  async function del(r: Row) {
-    if (!confirm(`${r.employee_name} uchun «${r.metric}» KPI o'chirilsinmi?`)) return;
-    await api.delete(`/hr/kpi/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40"));
-    load();
+  async function del() {
+    if (!confirmItem) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/hr/kpi/${confirmItem.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setConfirmItem(null);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const filtered = useMemo(() => {
@@ -154,18 +168,18 @@ export default function KpiPage() {
       align: "right",
       width: "100px",
       render: (r) => {
-        const t = Number(r.target_value);
-        const a = Number(r.actual_value);
-        if (!t) return "—";
-        const ratio = (a / t) * 100;
+        const target = Number(r.target_value);
+        const actual = Number(r.actual_value);
+        if (!target) return "—";
+        const ratio = (actual / target) * 100;
         return (
           <span
             className={`font-mono ${
               ratio >= 100
-                ? "text-green-700 dark:text-green-400"
+                ? "text-success-700 dark:text-success-500"
                 : ratio >= 80
-                ? "text-yellow-600 dark:text-yellow-400"
-                : "text-red-600 dark:text-red-400"
+                ? "text-warn-700 dark:text-warn-500"
+                : "text-danger-700 dark:text-danger-500"
             }`}
           >
             {ratio.toFixed(0)}%
@@ -178,18 +192,18 @@ export default function KpiPage() {
       header: t("ui__прогресс_875bb32f"),
       width: "180px",
       render: (r) => {
-        const t = Number(r.target_value);
-        const a = Number(r.actual_value);
-        if (!t) return null;
-        const ratio = Math.min((a / t) * 100, 100);
+        const target = Number(r.target_value);
+        const actual = Number(r.actual_value);
+        if (!target) return null;
+        const ratio = Math.min((actual / target) * 100, 100);
         const color =
           ratio >= 100
-            ? "bg-green-500"
+            ? "bg-success-500"
             : ratio >= 80
-            ? "bg-yellow-500"
-            : "bg-red-500";
+            ? "bg-warn-500"
+            : "bg-danger-500";
         return (
-          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+          <div className="w-full bg-ink-200 dark:bg-ink-800 rounded-full h-2">
             <div
               className={`${color} h-2 rounded-full`}
               style={{ width: `${ratio}%` }}
@@ -217,14 +231,14 @@ export default function KpiPage() {
         createLabel={t("ui__новый_kpi_a053ea17")}
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <Card padding="md" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="sm:col-span-2 relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_сотрудник_метрика_заметк_a43b1b57")}
           </label>
           <Search
             size={14}
-            className="absolute left-2.5 top-[34px] text-slate-400"
+            className="absolute left-2.5 top-[34px] text-ink-400"
           />
           <input
             className={`${input} pl-8`}
@@ -234,7 +248,7 @@ export default function KpiPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__сотрудник_8f519d66")}
           </label>
           <select
@@ -254,35 +268,30 @@ export default function KpiPage() {
           </select>
         </div>
         <div className="flex items-end justify-end">
-          <button
+          <Button
+            variant="outline"
             onClick={() => {
               setFilters({ q: "", employee_id: "" });
               setTimeout(load, 0);
             }}
-            className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
           >
             {t("ui__сброс_1b421ddb")}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        <Card label={t("ui__план_ee229f3b")} value={fmt(totals.target)} />
-        <Card label={t("ui__факт_0a982a27")} value={fmt(totals.actual)} />
-        <Card
+        <StatWidget label={t("ui__план_ee229f3b")} value={fmt(totals.target)} color="ink" mono />
+        <StatWidget label={t("ui__факт_0a982a27")} value={fmt(totals.actual)} color="info" mono />
+        <StatWidget
           label={t("ui__выполнение_b540f3a7")}
           value={`${totals.ratio.toFixed(0)}%`}
-          color={
-            totals.ratio >= 100
-              ? "text-green-700 dark:text-green-400"
-              : totals.ratio >= 80
-              ? "text-yellow-700 dark:text-yellow-400"
-              : "text-red-700 dark:text-red-400"
-          }
+          color={totals.ratio >= 100 ? "success" : totals.ratio >= 80 ? "warn" : "danger"}
+          mono
         />
       </div>
 
-      <DataTable columns={cols} rows={filtered} loading={loading} onDelete={del} />
+      <DataTable columns={cols} rows={filtered} loading={loading} onDelete={(r) => setConfirmItem(r)} />
 
       <Modal
         open={open}
@@ -357,43 +366,30 @@ export default function KpiPage() {
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
           </Field>
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button
-              onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-            >
+          <div className="flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button variant="outline" onClick={() => setOpen(false)}>
               {t("ui__отмена_987b33c6")}
-            </button>
-            <button
-              onClick={save}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
-            >
+            </Button>
+            <Button onClick={save}>
               {t("ui__сохранить_74ea58b6")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
-    </div>
-  );
-}
 
-function Card({
-  label,
-  value,
-  color = "text-slate-900 dark:text-slate-100",
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
-  return (
-    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4">
-      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase">
-        {label}
-      </div>
-      <div className={`text-2xl font-bold mt-1 ${color} font-mono`}>
-        {value}
-      </div>
+      <ConfirmDialog
+        open={confirmItem !== null}
+        onClose={() => setConfirmItem(null)}
+        onConfirm={del}
+        title="KPI yozuvini o'chirish"
+        message={
+          confirmItem
+            ? `${confirmItem.employee_name} uchun «${confirmItem.metric}» KPI o'chirilsinmi?`
+            : ""
+        }
+        confirmLabel="O'chirish"
+        loading={deleting}
+      />
     </div>
   );
 }

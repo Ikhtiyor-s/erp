@@ -9,6 +9,9 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Emp = {
@@ -52,6 +55,8 @@ export default function EmployeesPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<string | null>(null);
+  const [confirmItem, setConfirmItem] = useState<Emp | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -92,11 +97,20 @@ export default function EmployeesPage() {
       toast.error(getErrorMessage(e, "Xato"));
     }
   }
-  async function del(r: Emp) {
-    if (!confirm(`«${r.full_name}» ishdan bo'shatilsinmi?`)) return;
-    await api.delete(`/hr/employees/${r.id}`);
-    toast.success(t("ui__уволен_ea0713a7"));
-    load();
+
+  async function del() {
+    if (!confirmItem) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/hr/employees/${confirmItem.id}`);
+      toast.success(t("ui__уволен_ea0713a7"));
+      setConfirmItem(null);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const columns: Column<Emp>[] = [
@@ -105,7 +119,7 @@ export default function EmployeesPage() {
       header: t("ui__id_номер_e669322b"),
       width: "110px",
       render: (r) => (
-        <code className="text-xs text-slate-600 dark:text-slate-400">
+        <code className="text-xs text-ink-600 dark:text-ink-400">
           {r.uuid_label || "—"}
         </code>
       ),
@@ -152,10 +166,10 @@ export default function EmployeesPage() {
         const v = Number(r.balance || 0);
         const cls =
           v > 0
-            ? "text-green-700 dark:text-green-400"
+            ? "text-success-700 dark:text-success-500"
             : v < 0
-            ? "text-red-700 dark:text-red-400"
-            : "text-slate-500 dark:text-slate-400";
+            ? "text-danger-700 dark:text-danger-500"
+            : "text-ink-500 dark:text-ink-400";
         return <span className={`font-mono ${cls}`}>{fmt(v)}</span>;
       },
     },
@@ -196,14 +210,14 @@ export default function EmployeesPage() {
         }}
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <Card padding="md" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="sm:col-span-2 relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_фио_телефон_email_1064a472")}
           </label>
           <Search
             size={14}
-            className="absolute left-2.5 top-[34px] text-slate-400"
+            className="absolute left-2.5 top-[34px] text-ink-400"
           />
           <input
             className={`${input} pl-8`}
@@ -214,7 +228,7 @@ export default function EmployeesPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__должность_b9723619")}
           </label>
           <select
@@ -233,23 +247,20 @@ export default function EmployeesPage() {
           </select>
         </div>
         <div className="flex items-end gap-2">
-          <button
-            onClick={load}
-            className="px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
-          >
+          <Button onClick={load}>
             {t("ui__фильтр_2f884b41")}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => {
               setFilters({ q: "", position_id: "" });
               setTimeout(load, 0);
             }}
-            className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
           >
             {t("ui__сброс_1b421ddb")}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       <DataTable
         columns={columns}
@@ -268,7 +279,7 @@ export default function EmployeesPage() {
           setEditId(r.id);
           setOpen(true);
         }}
-        onDelete={del}
+        onDelete={(r) => setConfirmItem(r)}
       />
 
       <Modal
@@ -357,22 +368,26 @@ export default function EmployeesPage() {
               ))}
             </select>
           </Field>
-          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button
-              onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-            >
+          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button variant="outline" onClick={() => setOpen(false)}>
               {t("ui__отмена_987b33c6")}
-            </button>
-            <button
-              onClick={save}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
-            >
+            </Button>
+            <Button onClick={save}>
               {t("ui__сохранить_74ea58b6")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={confirmItem !== null}
+        onClose={() => setConfirmItem(null)}
+        onConfirm={del}
+        title="Xodimni bo'shatish"
+        message={`«${confirmItem?.full_name}» ishdan bo'shatilsinmi?`}
+        confirmLabel="Bo'shatish"
+        loading={deleting}
+      />
     </div>
   );
 }

@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { Phone, MapPin, RefreshCw, Wifi } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 type Courier = {
   employee_id: string;
@@ -43,39 +46,39 @@ export default function CourierPage() {
     <div className="space-y-5">
       <PageHeader title="Kuryerlar" description="Onlayn kuryerlar va ularning joylashuvi" />
 
-      <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-        <span className="text-sm text-slate-500">
-          <Wifi size={14} className="inline mr-1 text-emerald-600" />
+      <Card padding="md" className="flex items-center justify-between">
+        <span className="text-sm text-ink-500 dark:text-ink-400 flex items-center gap-1">
+          <Wifi size={14} className="text-success-600 dark:text-success-500" />
           Onlayn: {rows.length}
         </span>
-        <button onClick={load} className="px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded flex items-center gap-1">
-          <RefreshCw size={14} /> Yangilash
-        </button>
-      </div>
+        <Button variant="outline" size="sm" icon={RefreshCw} onClick={load}>
+          Yangilash
+        </Button>
+      </Card>
 
       {loading ? (
-        <div className="py-10 text-center text-slate-400">Yuklanmoqda...</div>
+        <div className="py-10 text-center text-ink-400 dark:text-ink-500">Yuklanmoqda...</div>
       ) : rows.length === 0 ? (
-        <div className="bg-white dark:bg-slate-800 py-16 text-center text-slate-400 rounded-lg border border-slate-200 dark:border-slate-700">
+        <Card padding="none" className="py-16 text-center text-ink-400 dark:text-ink-500">
           Hozir onlayn kuryerlar yo'q
-        </div>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {rows.map((c) => (
-            <div key={c.employee_id} className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+            <Card key={c.employee_id} padding="md">
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <div className="font-semibold">{c.employee_name}</div>
+                  <div className="font-semibold text-ink-900 dark:text-ink-100">{c.employee_name}</div>
                   {c.employee_phone && (
                     <a href={`tel:${c.employee_phone}`}
-                      className="text-xs text-slate-500 flex items-center gap-1 mt-0.5 hover:text-brand-600">
+                      className="text-xs text-ink-500 dark:text-ink-400 flex items-center gap-1 mt-0.5 hover:text-brand-600">
                       <Phone size={11} /> {c.employee_phone}
                     </a>
                   )}
                 </div>
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" title="Onlayn" />
+                <Badge tone="success" dot>Onlayn</Badge>
               </div>
-              <div className="text-xs text-slate-500">{timeAgo(c.last_seen_at)}</div>
+              <div className="text-xs text-ink-500 dark:text-ink-400">{timeAgo(c.last_seen_at)}</div>
               {c.last_lat && c.last_lng && (
                 <a href={`https://yandex.uz/maps/?ll=${c.last_lng},${c.last_lat}&z=15&pt=${c.last_lng},${c.last_lat}`}
                   target="_blank" rel="noopener"
@@ -83,7 +86,7 @@ export default function CourierPage() {
                   <MapPin size={11} /> Xaritada ko'rish
                 </a>
               )}
-            </div>
+            </Card>
           ))}
         </div>
       )}
