@@ -5,7 +5,12 @@ import { toast } from "sonner";
 import { ChevronDown, ChevronUp, Eye, EyeOff, Loader2, Wifi, WifiOff } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
+import { cn } from "@/lib/cn";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { input } from "@/components/ui/modal";
 import { useTranslations } from "next-intl";
 import type { IntegrationConfig, TestResult } from "@/lib/types/integrations";
 
@@ -104,12 +109,16 @@ function SecretInput({
         onChange={(e) => onChange(e.target.value)}
         readOnly={readOnly}
         placeholder={placeholder || "***"}
-        className="w-full border border-slate-200 rounded-md px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white disabled:bg-slate-50 disabled:text-slate-500"
+        className={cn(
+          input,
+          "pr-9",
+          readOnly && "bg-ink-50 dark:bg-ink-900 text-ink-500 dark:text-ink-400"
+        )}
       />
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
-        className="absolute right-2 text-slate-400 hover:text-slate-600"
+        className="absolute right-2 text-ink-400 hover:text-ink-600 dark:hover:text-ink-300"
         tabIndex={-1}
       >
         {visible ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -120,16 +129,11 @@ function SecretInput({
 
 function StatusBadge({ status, okLabel, failLabel }: { status: boolean | null; okLabel: string; failLabel: string }) {
   if (status === null) return null;
-  return status ? (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
-      <Wifi size={11} />
-      {okLabel}
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-full px-2 py-0.5">
-      <WifiOff size={11} />
-      {failLabel}
-    </span>
+  return (
+    <Badge tone={status ? "success" : "danger"}>
+      {status ? <Wifi size={11} /> : <WifiOff size={11} />}
+      {status ? okLabel : failLabel}
+    </Badge>
   );
 }
 
@@ -216,19 +220,15 @@ function ProviderCard({ spec }: { spec: ProviderSpec }) {
     .some((f) => config[f.key] && config[f.key].length > 0);
 
   return (
-    <div className="border border-slate-200 rounded-lg bg-white shadow-sm overflow-hidden">
+    <Card padding="none">
       <button
         type="button"
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-ink-50 dark:hover:bg-ink-900/40 transition-colors"
         onClick={() => setOpen((o) => !o)}
       >
         <div className="flex items-center gap-3">
-          <span className="font-semibold text-sm text-slate-800">{t(spec.labelKey)}</span>
-          {configured && (
-            <span className="text-xs text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">
-              {t("configured")}
-            </span>
-          )}
+          <span className="font-semibold text-sm text-ink-800 dark:text-ink-100">{t(spec.labelKey)}</span>
+          {configured && <Badge tone="neutral">{t("configured")}</Badge>}
           {lastTestOk !== null && <StatusBadge status={lastTestOk} okLabel={t("test_success")} failLabel={t("test_failed")} />}
         </div>
         <div className="flex items-center gap-3">
@@ -243,25 +243,25 @@ function ProviderCard({ spec }: { spec: ProviderSpec }) {
                 onChange={(e) => toggleEnabled(e.target.checked)}
                 className="sr-only peer"
               />
-              <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:bg-brand-600 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
+              <div className="w-9 h-5 bg-ink-200 dark:bg-ink-700 rounded-full peer peer-checked:bg-brand-600 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
             </label>
           </span>
-          {open ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+          {open ? <ChevronUp size={16} className="text-ink-400" /> : <ChevronDown size={16} className="text-ink-400" />}
         </div>
       </button>
 
       {open && (
-        <div className="border-t border-slate-100 px-4 py-4 space-y-4">
+        <div className="border-t border-ink-200/60 dark:border-ink-800/60 px-4 py-4 space-y-4">
           {loading ? (
             <div className="flex justify-center py-4">
-              <Loader2 size={20} className="animate-spin text-slate-400" />
+              <Loader2 size={20} className="animate-spin text-ink-400" />
             </div>
           ) : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {spec.fields.map((f) => (
                   <div key={f.key}>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                    <label className="block text-xs font-medium text-ink-600 dark:text-ink-400 mb-1">
                       {t(f.labelKey)}
                     </label>
                     {f.secret || f.readOnly ? (
@@ -275,7 +275,7 @@ function ProviderCard({ spec }: { spec: ProviderSpec }) {
                         type="number"
                         value={config[f.key] ?? ""}
                         onChange={(e) => setConfig({ ...config, [f.key]: e.target.value })}
-                        className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        className={input}
                         min={0}
                         max={100}
                         step={0.1}
@@ -285,7 +285,7 @@ function ProviderCard({ spec }: { spec: ProviderSpec }) {
                         type="text"
                         value={config[f.key] ?? ""}
                         onChange={(e) => setConfig({ ...config, [f.key]: e.target.value })}
-                        className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        className={input}
                       />
                     )}
                   </div>
@@ -293,42 +293,37 @@ function ProviderCard({ spec }: { spec: ProviderSpec }) {
               </div>
 
               {spec.sandboxField && (
-                <label className="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                <label className="inline-flex items-center gap-2 text-sm text-ink-700 dark:text-ink-300 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={sandbox}
                     onChange={(e) => setSandbox(e.target.checked)}
-                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    className="rounded border-ink-300 dark:border-ink-700 text-brand-600 focus:ring-brand-500"
                   />
                   {t("sandbox_mode")}
                 </label>
               )}
 
-              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={save}
-                  disabled={saving}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
-                >
-                  {saving && <Loader2 size={13} className="animate-spin" />}
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-ink-200/60 dark:border-ink-800/60">
+                <Button type="button" size="sm" onClick={save} loading={saving}>
                   {saving ? t("saving") : t("save")}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={testConnection}
-                  disabled={testing || !hasCredentials}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                  loading={testing}
+                  disabled={!hasCredentials}
                 >
-                  {testing && <Loader2 size={13} className="animate-spin" />}
                   {testing ? t("testing") : t("test_connection")}
-                </button>
+                </Button>
               </div>
             </>
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -371,27 +366,27 @@ function BillPaymentCard() {
   }
 
   return (
-    <div className="border border-slate-200 rounded-lg bg-white shadow-sm overflow-hidden">
+    <Card padding="none">
       <button
         type="button"
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-ink-50 dark:hover:bg-ink-900/40 transition-colors"
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="font-semibold text-sm text-slate-800">{t("bill_payment")}</span>
-        {open ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+        <span className="font-semibold text-sm text-ink-800 dark:text-ink-100">{t("bill_payment")}</span>
+        {open ? <ChevronUp size={16} className="text-ink-400" /> : <ChevronDown size={16} className="text-ink-400" />}
       </button>
 
       {open && (
-        <div className="border-t border-slate-100 px-4 py-4 space-y-4">
-          <p className="text-xs text-slate-500">{t("bill_payment_desc")}</p>
+        <div className="border-t border-ink-200/60 dark:border-ink-800/60 px-4 py-4 space-y-4">
+          <p className="text-xs text-ink-500 dark:text-ink-400">{t("bill_payment_desc")}</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">{t("bill_service")}</label>
+              <label className="block text-xs font-medium text-ink-600 dark:text-ink-400 mb-1">{t("bill_service")}</label>
               <select
                 value={service}
                 onChange={(e) => setService(e.target.value)}
-                className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                className={input}
               >
                 <option value="">— {t("select_service")} —</option>
                 {BILL_SERVICES.map((s) => (
@@ -400,46 +395,45 @@ function BillPaymentCard() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">{t("account_number")}</label>
+              <label className="block text-xs font-medium text-ink-600 dark:text-ink-400 mb-1">{t("account_number")}</label>
               <input
                 type="text"
                 value={account}
                 onChange={(e) => setAccount(e.target.value)}
                 placeholder="12345678"
-                className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className={input}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">{t("amount")}</label>
+              <label className="block text-xs font-medium text-ink-600 dark:text-ink-400 mb-1">{t("amount")}</label>
               <input
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="50000"
                 min={0}
-                className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className={input}
               />
             </div>
           </div>
 
-          <button
+          <Button
             type="button"
             onClick={generateLink}
-            disabled={generating || !service || !account || !amount}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
+            loading={generating}
+            disabled={!service || !account || !amount}
           >
-            {generating && <Loader2 size={13} className="animate-spin" />}
             {t("generate_link")}
-          </button>
+          </Button>
 
           {link && (
-            <div className="bg-slate-50 border border-slate-200 rounded-md p-3 break-all text-xs text-slate-700 select-all">
+            <div className="bg-ink-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-800 rounded-md p-3 break-all text-xs text-ink-700 dark:text-ink-300 select-all">
               {link}
             </div>
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 

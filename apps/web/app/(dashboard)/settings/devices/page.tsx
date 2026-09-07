@@ -8,6 +8,8 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Device = {
@@ -33,6 +35,8 @@ export default function DevicesPage() {
   const empty = { name: "", kind: "printer", connection: "usb", address: "", config: {} };
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Device | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -49,10 +53,19 @@ export default function DevicesPage() {
       toast.success(t("ui__сохранено_54a59b19")); setOpen(false); setForm(empty); setEditId(null); load();
     } catch (e: any) { toast.error(getErrorMessage(e, "Xato")); }
   }
-  async function del(r: Device) {
-    if (!confirm(`��${r.name}�� o'chirilsinmi?`)) return;
-    await api.delete(`/settings/devices/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40")); load();
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/settings/devices/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
+    } catch (e: any) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const cols: Column<Device>[] = [
@@ -69,7 +82,7 @@ export default function DevicesPage() {
         onCreate={() => { setForm(empty); setEditId(null); setOpen(true); }} />
       <DataTable columns={cols} rows={rows} loading={loading}
         onEdit={(r) => { setForm({ ...r, config: (r as any).config || {} }); setEditId(r.id); setOpen(true); }}
-        onDelete={del} />
+        onDelete={(r) => setDeleteTarget(r)} />
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Qurilmani tahrirlash" : "Yangi qurilma"}>
         <div className="space-y-3">
@@ -101,11 +114,20 @@ export default function DevicesPage() {
               value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} />
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button type="button" onClick={save}>{t("ui__сохранить_74ea58b6")}</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+        title="Qurilmani o'chirish"
+        message={deleteTarget ? `��${deleteTarget.name}�� o'chirilsinmi?` : ""}
+      />
     </div>
   );
 }

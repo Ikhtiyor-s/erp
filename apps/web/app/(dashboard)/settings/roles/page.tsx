@@ -6,6 +6,9 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 type Role = {
   id: number;
@@ -22,13 +25,13 @@ type Permission = {
   action: string;
 };
 
-const ROLE_COLORS: Record<string, string> = {
-  superadmin: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
-  admin: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
-  manager: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-  accountant: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  cashier: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
-  viewer: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+const ROLE_TONE: Record<string, "danger" | "purple" | "primary" | "warning" | "success" | "neutral"> = {
+  superadmin: "danger",
+  admin: "purple",
+  manager: "primary",
+  accountant: "warning",
+  cashier: "success",
+  viewer: "neutral",
 };
 
 const MODULE_LABELS: Record<string, string> = {
@@ -165,76 +168,70 @@ export default function RolesPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: roles list */}
-        <div className="lg:col-span-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
-          <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100">
-            Rollar
-          </div>
+        <Card padding="none" className="lg:col-span-4">
+          <CardHeader title="Rollar" />
           <div>
             {loading && (
-              <div className="p-6 text-center text-slate-400">Yuklanmoqda...</div>
+              <div className="p-6 text-center text-ink-400">Yuklanmoqda...</div>
             )}
             {roles.map((r) => (
               <button
                 key={r.id}
                 onClick={() => setSelectedRoleId(r.id)}
-                className={`w-full px-4 py-3 flex items-center justify-between border-l-2 hover:bg-slate-50 dark:hover:bg-slate-900/40 text-left ${
+                className={`w-full px-4 py-3 flex items-center justify-between border-l-2 hover:bg-ink-50 dark:hover:bg-ink-900/40 text-left ${
                   selectedRoleId === r.id
                     ? "border-brand-500 bg-brand-50/50 dark:bg-brand-900/20"
                     : "border-transparent"
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <span
-                    className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      ROLE_COLORS[r.code] || "bg-slate-100 text-slate-700"
-                    }`}
-                  >
-                    {r.code}
-                  </span>
+                  <Badge tone={ROLE_TONE[r.code] || "neutral"}>{r.code}</Badge>
                   <div>
-                    <div className="font-medium text-slate-900 dark:text-slate-100 text-sm">
+                    <div className="font-medium text-ink-900 dark:text-ink-100 text-sm">
                       {r.name}
                     </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                    <div className="text-xs text-ink-500 dark:text-ink-400">
                       {r.perm_count} ta ruxsat
                     </div>
                   </div>
                 </div>
-                <ChevronRight size={14} className="text-slate-400" />
+                <ChevronRight size={14} className="text-ink-400" />
               </button>
             ))}
           </div>
-        </div>
+        </Card>
 
         {/* Right: permissions matrix for selected role */}
-        <div className="lg:col-span-8 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
+        <Card padding="none" className="lg:col-span-8">
           {!selectedRole && (
-            <div className="p-10 text-center text-slate-400">
+            <div className="p-10 text-center text-ink-400">
               <Shield size={32} className="mx-auto mb-2 opacity-30" />
               Chap tomondan rolni tanlang
             </div>
           )}
           {selectedRole && (
             <>
-              <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-                <div>
-                  <div className="font-semibold text-slate-900 dark:text-slate-100">
-                    {selectedRole.name} ({selectedRole.code})
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    Tanlangan: {selectedRolePerms.size} / {permissions.length}
-                  </div>
+              <CardHeader
+                actions={
+                  <Button
+                    onClick={save}
+                    disabled={saving || selectedRole.code === "superadmin"}
+                    loading={saving}
+                    icon={Save}
+                    size="sm"
+                    title={selectedRole.code === "superadmin" ? "Super Admin'ni o'zgartirish mumkin emas" : undefined}
+                  >
+                    {saving ? "Saqlanmoqda..." : "Saqlash"}
+                  </Button>
+                }
+              >
+                <div className="font-semibold text-ink-900 dark:text-ink-100">
+                  {selectedRole.name} ({selectedRole.code})
                 </div>
-                <button
-                  onClick={save}
-                  disabled={saving || selectedRole.code === "superadmin"}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={selectedRole.code === "superadmin" ? "Super Admin'ni o'zgartirish mumkin emas" : ""}
-                >
-                  <Save size={14} />
-                  {saving ? "Saqlanmoqda..." : "Saqlash"}
-                </button>
-              </div>
+                <div className="text-xs text-ink-500 dark:text-ink-400">
+                  Tanlangan: {selectedRolePerms.size} / {permissions.length}
+                </div>
+              </CardHeader>
 
               <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
                 {Object.entries(byModule).map(([mod, perms]) => {
@@ -242,8 +239,8 @@ export default function RolesPage() {
                   const allSelected = allIds.every((id) => selectedRolePerms.has(id));
                   const someSelected = allIds.some((id) => selectedRolePerms.has(id));
                   return (
-                    <div key={mod} className="border border-slate-200 dark:border-slate-700 rounded-md">
-                      <div className="px-3 py-2 bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div key={mod} className="border border-ink-200/60 dark:border-ink-800/60 rounded-md">
+                      <div className="px-3 py-2 bg-ink-50 dark:bg-ink-900/40 border-b border-ink-200/60 dark:border-ink-800/60 flex items-center justify-between">
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input
                             type="checkbox"
@@ -254,11 +251,11 @@ export default function RolesPage() {
                             onChange={() => toggleModule(mod, allIds)}
                             disabled={selectedRole.code === "superadmin"}
                           />
-                          <span className="font-medium text-slate-900 dark:text-slate-100 text-sm">
+                          <span className="font-medium text-ink-900 dark:text-ink-100 text-sm">
                             {MODULE_LABELS[mod] || mod}
                           </span>
                         </label>
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-ink-500 dark:text-ink-400">
                           {allIds.filter((id) => selectedRolePerms.has(id)).length}/{allIds.length}
                         </span>
                       </div>
@@ -266,7 +263,7 @@ export default function RolesPage() {
                         {perms.map((p) => (
                           <label
                             key={p.id}
-                            className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/30 px-2 py-1 rounded"
+                            className="flex items-center gap-2 text-sm cursor-pointer hover:bg-ink-50 dark:hover:bg-ink-900/30 px-2 py-1 rounded"
                           >
                             <input
                               type="checkbox"
@@ -274,7 +271,7 @@ export default function RolesPage() {
                               onChange={() => togglePerm(p.id)}
                               disabled={selectedRole.code === "superadmin"}
                             />
-                            <span className="text-slate-700 dark:text-slate-300">
+                            <span className="text-ink-700 dark:text-ink-300">
                               {ACTION_LABELS[p.action] || p.action}
                             </span>
                           </label>
@@ -286,7 +283,7 @@ export default function RolesPage() {
               </div>
             </>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );

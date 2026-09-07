@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SettingsForm } from "@/components/settings/SettingsForm";
+import { Card, CardBody } from "@/components/ui/card";
 import { useTranslations } from "next-intl";
 import { Copy, Check } from "lucide-react";
 
@@ -26,9 +27,9 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={handleCopy}
       title={copied ? t("ui__telegram_copied") : t("ui__telegram_copy")}
-      className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+      className="p-1 rounded text-ink-400 hover:text-ink-700 dark:hover:text-ink-200 hover:bg-ink-100 dark:hover:bg-ink-800 transition-colors"
     >
-      {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+      {copied ? <Check size={14} className="text-success-600 dark:text-success-500" /> : <Copy size={14} />}
     </button>
   );
 }
@@ -36,27 +37,29 @@ function CopyButton({ text }: { text: string }) {
 function BotCommandsSection() {
   const t = useTranslations("ui");
   return (
-    <div className="bg-white border rounded-lg shadow-sm p-6 space-y-3">
-      <h3 className="text-sm font-semibold text-slate-700">
-        {t("ui__telegram_bot_commands_title")}
-      </h3>
-      <p className="text-xs text-slate-500">{t("ui__telegram_start_hint")}</p>
-      <ul className="divide-y divide-slate-100">
-        {BOT_COMMANDS.map(({ cmd, descKey }) => (
-          <li key={cmd} className="flex items-center justify-between py-2 gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <code className="text-sm font-mono bg-slate-100 px-2 py-0.5 rounded text-emerald-700 shrink-0">
-                {cmd}
-              </code>
-              <span className="text-sm text-slate-600 truncate">
-                {t(descKey as any)}
-              </span>
-            </div>
-            <CopyButton text={cmd} />
-          </li>
-        ))}
-      </ul>
-    </div>
+    <Card>
+      <CardBody className="space-y-3">
+        <h3 className="text-sm font-semibold text-ink-700 dark:text-ink-200">
+          {t("ui__telegram_bot_commands_title")}
+        </h3>
+        <p className="text-xs text-ink-500 dark:text-ink-400">{t("ui__telegram_start_hint")}</p>
+        <ul className="divide-y divide-ink-100 dark:divide-ink-800">
+          {BOT_COMMANDS.map(({ cmd, descKey }) => (
+            <li key={cmd} className="flex items-center justify-between py-2 gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <code className="text-sm font-mono bg-ink-100 dark:bg-ink-800 px-2 py-0.5 rounded text-success-700 dark:text-success-500 shrink-0">
+                  {cmd}
+                </code>
+                <span className="text-sm text-ink-600 dark:text-ink-400 truncate">
+                  {t(descKey as any)}
+                </span>
+              </div>
+              <CopyButton text={cmd} />
+            </li>
+          ))}
+        </ul>
+      </CardBody>
+    </Card>
   );
 }
 

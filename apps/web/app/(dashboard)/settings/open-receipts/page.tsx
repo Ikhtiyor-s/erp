@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
+import { Badge } from "@/components/ui/badge";
 import { useTranslations } from "next-intl";
 
 type Sale = {
@@ -32,7 +33,7 @@ export default function OpenReceiptsPage() {
     { key: "total_amount", header: t("ui__сумма_cf59ebf9"), align: "right", width: "160px",
       render: (r) => <span className="font-mono">{fmt(r.total_amount)}</span> },
     { key: "status", header: t("ui__статус_7203f7a4"), width: "120px",
-      render: (r) => <span className="text-yellow-600">{r.status}</span> },
+      render: (r) => <Badge tone="warning">{r.status}</Badge> },
   ];
 
   return (

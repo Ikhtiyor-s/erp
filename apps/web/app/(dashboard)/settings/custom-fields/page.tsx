@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
 import { Modal, Field, input } from "@/components/ui/modal";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type CF = {
   id: number;
@@ -40,6 +43,8 @@ export default function CustomFieldsPage() {
   const [filter, setFilter] = useState("product");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
+  const [deleteTarget, setDeleteTarget] = useState<CF | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function load() {
     const r = await api.get<CF[]>(`/custom-fields?entity_type=${filter}`);
@@ -59,11 +64,24 @@ export default function CustomFieldsPage() {
     load();
   }
 
-  async function del(id: number) {
-    if (!confirm("O'chirilsinmi?")) return;
-    await api.delete(`/custom-fields/${id}`);
-    load();
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/custom-fields/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      load();
+    } finally {
+      setDeleting(false);
+    }
   }
+
+  const cols: Column<CF>[] = [
+    { key: "name", header: "Nomi" },
+    { key: "field_type", header: "Tur", render: (r) => FIELD_TYPES.find((t) => t.v === r.field_type)?.l },
+    { key: "options", header: "Variantlar", render: (r) => (r.options || []).join(", ") || "—" },
+    { key: "required", header: "Majburiy", align: "center", render: (r) => (r.required ? "✓" : "—") },
+  ];
 
   return (
     <div className="space-y-5">
@@ -71,42 +89,29 @@ export default function CustomFieldsPage() {
         description="Mahsulot, mijoz va boshqa modullarga maxsus maydonlar qo'shing"
         onCreate={() => { setForm({ ...empty, entity_type: filter }); setOpen(true); }} />
 
-      <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
-        <span className="text-sm text-slate-500">Modul:</span>
-        {ENTITY_TYPES.map((e) => (
-          <button key={e.v} onClick={() => setFilter(e.v)}
-            className={`px-3 py-1.5 rounded text-sm ${filter === e.v ? "bg-brand-600 text-white" : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"}`}>
-            {e.l}
-          </button>
-        ))}
-      </div>
+      <Card padding="sm">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-ink-500 dark:text-ink-400">Modul:</span>
+          {ENTITY_TYPES.map((e) => (
+            <Button
+              key={e.v}
+              type="button"
+              variant={filter === e.v ? "primary" : "ghost"}
+              size="sm"
+              onClick={() => setFilter(e.v)}
+            >
+              {e.l}
+            </Button>
+          ))}
+        </div>
+      </Card>
 
-      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-        {rows.length === 0 ? (
-          <div className="py-10 text-center text-slate-400 text-sm">Maydonlar yo'q</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-900/40 text-xs text-slate-500 uppercase">
-              <tr><th className="text-left px-4 py-2.5">Nomi</th><th className="text-left px-4 py-2.5">Tur</th><th className="text-left px-4 py-2.5">Variantlar</th><th className="text-center w-20 px-4 py-2.5">Majburiy</th><th className="w-10"></th></tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="px-4 py-2.5">{r.name}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{FIELD_TYPES.find(t => t.v === r.field_type)?.l}</td>
-                  <td className="px-4 py-2.5 text-xs text-slate-500">{(r.options || []).join(", ") || "—"}</td>
-                  <td className="px-4 py-2.5 text-center">{r.required ? "✓" : "—"}</td>
-                  <td className="px-4 py-2.5">
-                    <button onClick={() => del(r.id)} className="text-rose-600 hover:text-rose-700">
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <DataTable
+        columns={cols}
+        rows={rows}
+        onDelete={(r) => setDeleteTarget(r)}
+        emptyText="Maydonlar yo'q"
+      />
 
       <Modal open={open} onClose={() => setOpen(false)} title="Yangi maydon">
         <div className="grid grid-cols-2 gap-3">
@@ -146,12 +151,21 @@ export default function CustomFieldsPage() {
             <input type="number" className={input} value={form.sort_order}
               onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) || 0 })} />
           </Field>
-          <div className="col-span-2 flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-700">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600">Bekor</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white">Saqlash</button>
+          <div className="col-span-2 flex justify-end gap-2 pt-3 border-t border-ink-200/60 dark:border-ink-800/60">
+            <Button variant="outline" onClick={() => setOpen(false)}>Bekor</Button>
+            <Button onClick={save}>Saqlash</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Maydonni o'chirish"
+        message={`"${deleteTarget?.name ?? ""}" maydonini o'chirishni tasdiqlaysizmi?`}
+        loading={deleting}
+      />
     </div>
   );
 }

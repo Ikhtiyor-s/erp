@@ -8,6 +8,10 @@ import {
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card, CardHeader, CardBody, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Field, input } from "@/components/ui/modal";
 import { useTranslations } from "next-intl";
 import type { IntegrationConfig, TestResult } from "@/lib/types/integrations";
 
@@ -33,12 +37,12 @@ function SecretInput({
         onChange={(e) => onChange?.(e.target.value)}
         readOnly={readOnly}
         placeholder={placeholder ?? "***"}
-        className="w-full border border-slate-200 rounded-md px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white disabled:bg-slate-50 disabled:text-slate-500"
+        className={`${input} pr-9 disabled:bg-ink-50 disabled:text-ink-500`}
       />
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
-        className="absolute right-2 text-slate-400 hover:text-slate-600"
+        className="absolute right-2 text-ink-400 hover:text-ink-600 dark:hover:text-ink-300"
         tabIndex={-1}
       >
         {visible ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -63,16 +67,16 @@ function CopyInput({ value }: { value: string }) {
         type="text"
         value={value}
         readOnly
-        className="w-full border border-slate-200 rounded-md px-3 py-2 pr-9 text-sm bg-slate-50 text-slate-500 focus:outline-none"
+        className={`${input} pr-9 bg-ink-50 dark:bg-ink-900 text-ink-500 dark:text-ink-400`}
       />
       <button
         type="button"
         onClick={copy}
-        className="absolute right-2 text-slate-400 hover:text-slate-600"
+        className="absolute right-2 text-ink-400 hover:text-ink-600 dark:hover:text-ink-300"
         tabIndex={-1}
         title="Copy"
       >
-        {copied ? <CheckCircle2 size={15} className="text-emerald-600" /> : <Copy size={15} />}
+        {copied ? <CheckCircle2 size={15} className="text-success-600 dark:text-success-500" /> : <Copy size={15} />}
       </button>
     </div>
   );
@@ -93,7 +97,7 @@ function Toggle({
         onChange={(e) => onChange(e.target.checked)}
         className="sr-only peer"
       />
-      <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:bg-brand-600 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
+      <div className="w-9 h-5 bg-ink-200 dark:bg-ink-700 rounded-full peer peer-checked:bg-brand-600 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
     </label>
   );
 }
@@ -207,7 +211,7 @@ export default function DidoxSettingsPage() {
   if (pageLoading) {
     return (
       <div className="flex justify-center py-20">
-        <Loader2 size={24} className="animate-spin text-slate-400" />
+        <Loader2 size={24} className="animate-spin text-ink-400" />
       </div>
     );
   }
@@ -219,24 +223,15 @@ export default function DidoxSettingsPage() {
       <PageHeader title={t("title")} description={t("description")} />
 
       {/* Section 1: Config Form */}
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 rounded-lg shadow-sm">
-        <div className="px-5 py-4 border-b border-slate-100">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-sm text-slate-800">{t("section_config")}</span>
-            {configured && (
-              <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-0.5">
-                {t("configured")}
-              </span>
-            )}
-          </div>
-        </div>
+      <Card padding="none">
+        <CardHeader
+          title={t("section_config")}
+          actions={configured && <Badge tone="success">{t("configured")}</Badge>}
+        />
 
-        <div className="px-5 py-4 space-y-4">
+        <CardBody className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                {t("stir")} <span className="text-rose-500">*</span>
-              </label>
+            <Field label={t("stir")} required>
               <input
                 type="text"
                 value={stir}
@@ -246,124 +241,108 @@ export default function DidoxSettingsPage() {
                 }}
                 maxLength={9}
                 placeholder="123456789"
-                className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className={input}
               />
               {stirError && (
-                <p className="text-xs text-rose-500 mt-1">{stirError}</p>
+                <p className="text-xs text-danger-500 mt-1">{stirError}</p>
               )}
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                {t("signer_pin")}
-              </label>
+            <Field label={t("signer_pin")}>
               <SecretInput
                 value={signerPin}
                 onChange={setSignerPin}
                 placeholder="123456"
               />
-            </div>
+            </Field>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">
-              {t("developer_token")} <span className="text-rose-500">*</span>
-            </label>
+          <Field label={t("developer_token")} required>
             <SecretInput value={token} onChange={setToken} />
-          </div>
+          </Field>
 
           <div className="flex items-center gap-3">
             <Toggle checked={sandbox} onChange={setSandbox} />
-            <span className="text-sm text-slate-700">{t("sandbox")}</span>
+            <span className="text-sm text-ink-700 dark:text-ink-300">{t("sandbox")}</span>
           </div>
 
           {webhookUrl && (
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                {t("webhook_url")}
-              </label>
+            <Field label={t("webhook_url")} hint={t("webhook_hint")}>
               <CopyInput value={webhookUrl} />
-              <p className="text-xs text-slate-400 mt-1">{t("webhook_hint")}</p>
-            </div>
+            </Field>
           )}
+        </CardBody>
 
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
-            >
-              {saving && <Loader2 size={13} className="animate-spin" />}
-              {saving ? t("saving") : t("save")}
-            </button>
-          </div>
-        </div>
-      </div>
+        <CardFooter className="flex flex-wrap gap-2">
+          <Button type="button" onClick={save} loading={saving}>
+            {saving ? t("saving") : t("save")}
+          </Button>
+        </CardFooter>
+      </Card>
 
       {/* Section 2: Test Connection */}
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 rounded-lg shadow-sm px-5 py-4">
+      <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="font-semibold text-sm text-slate-800">{t("section_test")}</div>
-            <div className="text-xs text-slate-500 mt-0.5">{t("section_test_hint")}</div>
+            <div className="font-semibold text-sm text-ink-800 dark:text-ink-100">{t("section_test")}</div>
+            <div className="text-xs text-ink-500 dark:text-ink-400 mt-0.5">{t("section_test_hint")}</div>
           </div>
           <div className="flex items-center gap-3">
             {testResult !== null && (
               testResult ? (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5">
+                <Badge tone="success">
                   <Wifi size={11} /> {t("test_success")}
-                </span>
+                </Badge>
               ) : (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-full px-2.5 py-0.5">
+                <Badge tone="danger">
                   <WifiOff size={11} /> {t("test_failed")}
-                </span>
+                </Badge>
               )
             )}
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={testConnection}
+              loading={testing}
               disabled={testing || !hasCredentials}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
             >
-              {testing && <Loader2 size={13} className="animate-spin" />}
               {testing ? t("testing") : t("test_connection")}
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Section 3: Enable / Disable */}
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 rounded-lg shadow-sm px-5 py-4">
+      <Card>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="font-semibold text-sm text-slate-800">
+            <div className="font-semibold text-sm text-ink-800 dark:text-ink-100">
               {enabled ? t("disable") : t("enable")}
             </div>
-            <div className="text-xs text-slate-500 mt-0.5">
+            <div className="text-xs text-ink-500 dark:text-ink-400 mt-0.5">
               {enabled ? t("disable_hint") : t("enable_hint")}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {toggling && <Loader2 size={14} className="animate-spin text-slate-400" />}
+            {toggling && <Loader2 size={14} className="animate-spin text-ink-400" />}
             <Toggle checked={enabled} onChange={toggleEnabled} />
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Section 4: Invoice History */}
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 rounded-lg shadow-sm px-5 py-4">
-        <div className="font-semibold text-sm text-slate-800 mb-3">{t("invoices_history")}</div>
-        <div className="flex items-center gap-2 text-sm text-slate-400 py-6 justify-center">
+      <Card>
+        <div className="font-semibold text-sm text-ink-800 dark:text-ink-100 mb-3">{t("invoices_history")}</div>
+        <div className="flex items-center gap-2 text-sm text-ink-400 py-6 justify-center">
           <Info size={16} />
           {t("invoices_empty")}
         </div>
-      </div>
+      </Card>
 
       {/* Section 5: Sale Integration Info */}
-      <div className="bg-brand-50 border border-brand-100 rounded-lg px-5 py-4 flex gap-3">
-        <Info size={16} className="text-brand-600 mt-0.5 shrink-0" />
-        <p className="text-sm text-brand-800">{t("sale_integration_info")}</p>
+      <div className="bg-info-50 dark:bg-info-500/15 border border-info-500/20 rounded-xl px-5 py-4 flex gap-3">
+        <Info size={16} className="text-info-600 dark:text-info-500 mt-0.5 shrink-0" />
+        <p className="text-sm text-info-700 dark:text-info-500">{t("sale_integration_info")}</p>
       </div>
     </div>
   );

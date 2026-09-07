@@ -7,6 +7,8 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Tmpl = {
@@ -43,6 +45,8 @@ export default function TemplatesPage() {
   const empty = { kind: "receipt", name: "", body: DEFAULT_BODY, is_default: false };
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Tmpl | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -67,17 +71,26 @@ export default function TemplatesPage() {
       toast.success(t("ui__сохранено_54a59b19")); setOpen(false); setForm(empty); setEditId(null); load();
     } catch (e: any) { toast.error(getErrorMessage(e, "Xato")); }
   }
-  async function del(r: Tmpl) {
-    if (!confirm(`��${r.name}�� o'chirilsinmi?`)) return;
-    await api.delete(`/settings/print-templates/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40")); load();
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/settings/print-templates/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
+    } catch (e: any) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const cols: Column<Tmpl>[] = [
     { key: "kind", header: t("ui__тип_345805b8"), width: "140px", render: (r) => kindLabel(r.kind) },
     { key: "name", header: t("ui__название_602680ed") },
     { key: "is_default", header: t("ui__по_умолч_db87fc4e"), align: "center", width: "120px",
-      render: (r) => r.is_default ? <span className="text-green-700">���</span> : <span className="text-slate-300">���</span> },
+      render: (r) => r.is_default ? <span className="text-success-600 dark:text-success-500">���</span> : <span className="text-ink-300 dark:text-ink-600">���</span> },
     { key: "updated_at", header: t("ui__обновлён_45f173d2"), width: "180px",
       render: (r) => new Date(r.updated_at).toLocaleString("ru-RU") },
   ];
@@ -86,7 +99,7 @@ export default function TemplatesPage() {
     <div className="space-y-6">
       <PageHeader title={t("ui__шаблоны_печати_0e28d151")} description={t("ui__чеки_этикетки_счета_18aa225a")}
         onCreate={() => { setForm(empty); setEditId(null); setOpen(true); }} />
-      <DataTable columns={cols} rows={rows} loading={loading} onEdit={openEdit} onDelete={del} />
+      <DataTable columns={cols} rows={rows} loading={loading} onEdit={openEdit} onDelete={(r) => setDeleteTarget(r)} />
 
       <Modal open={open} onClose={() => setOpen(false)} size="lg"
         title={editId ? "Shablonni tahrirlash" : "Yangi shablon"}>
@@ -109,7 +122,7 @@ export default function TemplatesPage() {
             <textarea className={`${input} font-mono text-xs`} rows={14} value={form.body}
               onChange={(e) => setForm({ ...form, body: e.target.value })} />
           </Field>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-ink-500 dark:text-ink-400">
             ������������������ ��������������������: {`{org_name}, {org_address}, {org_phone}, {doc_number}, {sale_date}, {items}, {total}, {paid}, {currency}, {footer}`}
           </p>
           <label className="flex items-center gap-2 text-sm">
@@ -118,11 +131,20 @@ export default function TemplatesPage() {
             {t("ui__шаблон_по_умолчанию_для_этого__eec7a43b")}
           </label>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button type="button" onClick={save}>{t("ui__сохранить_74ea58b6")}</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+        title="Shablonni o'chirish"
+        message={deleteTarget ? `��${deleteTarget.name}�� o'chirilsinmi?` : ""}
+      />
     </div>
   );
 }
