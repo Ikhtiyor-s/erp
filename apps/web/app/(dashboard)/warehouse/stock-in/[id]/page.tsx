@@ -8,6 +8,9 @@ import { ArrowLeft } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader } from "@/components/ui/card";
 
 type StockInStatus = "draft" | "confirmed" | "cancelled";
 
@@ -35,22 +38,19 @@ type StockInDetail = {
   items: StockInItem[];
 };
 
+const STATUS_TONE: Record<StockInStatus, "neutral" | "success" | "danger"> = {
+  draft: "neutral",
+  confirmed: "success",
+  cancelled: "danger",
+};
+
 function statusBadge(status: StockInStatus, t: (k: string) => string) {
-  const colorMap: Record<StockInStatus, string> = {
-    draft: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-    confirmed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-    cancelled: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
-  };
   const labelMap: Record<StockInStatus, string> = {
     draft: "status_draft",
     confirmed: "status_confirmed",
     cancelled: "status_cancelled",
   };
-  return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded text-[12px] font-medium ${colorMap[status]}`}>
-      {t(labelMap[status])}
-    </span>
-  );
+  return <Badge tone={STATUS_TONE[status]}>{t(labelMap[status])}</Badge>;
 }
 
 function fmtDate(s: string | null) {
@@ -145,13 +145,15 @@ export default function StockInDetailPage() {
   if (error || !detail) {
     return (
       <div className="space-y-4">
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={ArrowLeft}
           onClick={() => router.push("/warehouse/stock-in")}
-          className="inline-flex items-center gap-1.5 text-[13px] text-ink-500 hover:text-ink-900 dark:hover:text-ink-100"
         >
-          <ArrowLeft size={14} /> {t("back_to_list")}
-        </button>
-        <div className="rounded-md bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 px-4 py-3 text-[13px] text-rose-700 dark:text-rose-300">
+          {t("back_to_list")}
+        </Button>
+        <div className="rounded-md bg-danger-50 dark:bg-danger-500/15 border border-danger-500/30 px-4 py-3 text-[13px] text-danger-700 dark:text-danger-500">
           {error || t("error_load")}
         </div>
       </div>
@@ -169,19 +171,19 @@ export default function StockInDetailPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={ArrowLeft}
           onClick={() => router.push("/warehouse/stock-in")}
-          className="p-1.5 rounded-md hover:bg-ink-100 dark:hover:bg-ink-800 text-ink-500"
-        >
-          <ArrowLeft size={16} />
-        </button>
+        />
         <h1 className="text-[clamp(16px,2.2vw,18px)] font-semibold text-ink-900 dark:text-ink-50 tracking-tight">
           {t("detail_title")} — {detail.doc_number || detail.id.slice(0, 8)}
         </h1>
         {statusBadge(detail.status, t)}
       </div>
 
-      <div className="bg-white dark:bg-ink-950 rounded-md border border-ink-200/60 dark:border-ink-800/60 p-5">
+      <Card padding="lg">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-[13px]">
           <div>
             <span className="text-ink-500 dark:text-ink-400 block text-[11px] uppercase tracking-wider mb-0.5">{t("detail_warehouse")}</span>
@@ -226,12 +228,10 @@ export default function StockInDetailPage() {
             </div>
           )}
         </div>
-      </div>
+      </Card>
 
-      <div className="bg-white dark:bg-ink-950 rounded-md border border-ink-200/60 dark:border-ink-800/60 overflow-hidden">
-        <div className="px-5 py-3 border-b border-ink-100 dark:border-ink-800">
-          <h2 className="text-[14px] font-semibold text-ink-800 dark:text-ink-100">{t("detail_items")}</h2>
-        </div>
+      <Card padding="none">
+        <CardHeader title={t("detail_items")} />
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead className="bg-ink-50 dark:bg-ink-900">
@@ -271,39 +271,40 @@ export default function StockInDetailPage() {
             </tfoot>
           </table>
         </div>
-      </div>
+      </Card>
 
       {detail.status !== "cancelled" && (
         <div className="flex flex-wrap gap-2">
           {detail.status === "draft" && (
             <>
-              <button
+              <Button
+                variant="outline"
                 onClick={() => router.push(`/warehouse/stock-in/${id}/edit`)}
-                className="px-4 py-2 text-[13px] rounded-md border border-ink-300 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800"
               >
                 {t("btn_edit")}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="success"
                 onClick={() => setConfirmOpen(true)}
-                className="px-4 py-2 text-[13px] rounded-md bg-emerald-600 text-white hover:bg-emerald-700"
               >
                 {t("btn_confirm")}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="danger"
                 onClick={() => setDeleteOpen(true)}
-                className="px-4 py-2 text-[13px] rounded-md bg-rose-600 text-white hover:bg-rose-700"
               >
                 {t("btn_delete")}
-              </button>
+              </Button>
             </>
           )}
           {detail.status === "confirmed" && (
-            <button
+            <Button
+              variant="outline"
+              className="border-danger-500/40 text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
               onClick={() => setCancelOpen(true)}
-              className="px-4 py-2 text-[13px] rounded-md border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20"
             >
               {t("btn_cancel")}
-            </button>
+            </Button>
           )}
         </div>
       )}

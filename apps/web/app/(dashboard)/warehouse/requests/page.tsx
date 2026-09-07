@@ -10,6 +10,8 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 type RequestRow = {
   id: string;
@@ -38,11 +40,11 @@ const STATUS_KEYS: Record<string, string> = {
   fulfilled: "status_fulfilled",
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
-  approved: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
-  rejected: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400",
-  fulfilled: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400",
+const STATUS_TONE: Record<string, "warning" | "success" | "danger" | "info"> = {
+  pending: "warning",
+  approved: "success",
+  rejected: "danger",
+  fulfilled: "info",
 };
 
 const TABS = ["all", "pending", "approved", "rejected", "fulfilled"] as const;
@@ -121,15 +123,13 @@ export default function ProductRequestsPage() {
       header: tc("status"),
       width: "130px",
       render: (r) => (
-        <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${STATUS_COLORS[r.status] ?? ""}`}
-        >
+        <Badge tone={STATUS_TONE[r.status] ?? "neutral"}>
           {r.status === "pending" && <Clock size={10} />}
           {r.status === "approved" && <CheckCircle2 size={10} />}
           {r.status === "rejected" && <XCircle size={10} />}
           {r.status === "fulfilled" && <Package size={10} />}
           {t(STATUS_KEYS[r.status] ?? "status_unknown")}
-        </span>
+        </Badge>
       ),
     },
     {
@@ -150,26 +150,28 @@ export default function ProductRequestsPage() {
       render: (r) =>
         r.status === "pending" ? (
           <div className="flex gap-1">
-            <button
+            <Button
+              variant="success"
+              size="xs"
               onClick={(e) => {
                 e.stopPropagation();
                 setConfirmId(r.id);
                 setConfirmAction("approve");
               }}
-              className="px-2 py-1 text-[11px] rounded bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
             >
               {t("approve")}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="danger"
+              size="xs"
               onClick={(e) => {
                 e.stopPropagation();
                 setConfirmId(r.id);
                 setConfirmAction("reject");
               }}
-              className="px-2 py-1 text-[11px] rounded bg-rose-600 text-white hover:bg-rose-700 transition-colors"
             >
               {t("reject")}
-            </button>
+            </Button>
           </div>
         ) : null,
     },
@@ -234,11 +236,9 @@ export default function ProductRequestsPage() {
                   <span className="font-mono text-[12px] text-brand-700 dark:text-brand-400">
                     {r.doc_number || r.id.slice(0, 8)}
                   </span>
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${STATUS_COLORS[r.status] ?? ""}`}
-                  >
+                  <Badge tone={STATUS_TONE[r.status] ?? "neutral"}>
                     {t(STATUS_KEYS[r.status] ?? "status_unknown")}
-                  </span>
+                  </Badge>
                 </div>
                 <div className="text-sm text-ink-700 dark:text-ink-300">{r.from_name}</div>
                 <div className="flex items-center justify-between text-[12px] text-ink-500 dark:text-ink-400">
@@ -247,26 +247,30 @@ export default function ProductRequestsPage() {
                 </div>
                 {r.status === "pending" && (
                   <div className="flex gap-1 pt-1">
-                    <button
+                    <Button
+                      variant="success"
+                      size="sm"
+                      fullWidth
                       onClick={(e) => {
                         e.stopPropagation();
                         setConfirmId(r.id);
                         setConfirmAction("approve");
                       }}
-                      className="flex-1 py-1 text-[12px] rounded bg-emerald-600 text-white hover:bg-emerald-700"
                     >
                       {t("approve")}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      fullWidth
                       onClick={(e) => {
                         e.stopPropagation();
                         setConfirmId(r.id);
                         setConfirmAction("reject");
                       }}
-                      className="flex-1 py-1 text-[12px] rounded bg-rose-600 text-white hover:bg-rose-700"
                     >
                       {t("reject")}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </li>

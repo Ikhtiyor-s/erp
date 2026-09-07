@@ -3,11 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader } from "@/components/ui/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 
 type TransferStatus = "draft" | "sent" | "received" | "cancelled";
@@ -44,24 +46,21 @@ const STATUS_TABS: Array<{ key: "all" | TransferStatus; i18nKey: string }> = [
   { key: "cancelled", i18nKey: "status_cancelled" },
 ];
 
+const STATUS_TONE: Record<TransferStatus, "neutral" | "warning" | "success" | "danger"> = {
+  draft: "neutral",
+  sent: "warning",
+  received: "success",
+  cancelled: "danger",
+};
+
 function statusBadge(status: TransferStatus, t: (k: string) => string) {
-  const map: Record<TransferStatus, string> = {
-    draft: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-    sent: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-    received: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-    cancelled: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
-  };
   const labelMap: Record<TransferStatus, string> = {
     draft: "status_draft",
     sent: "status_sent",
     received: "status_received",
     cancelled: "status_cancelled",
   };
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${map[status]}`}>
-      {t(labelMap[status])}
-    </span>
-  );
+  return <Badge tone={STATUS_TONE[status]}>{t(labelMap[status])}</Badge>;
 }
 
 function fmtDate(s: string | null) {
@@ -174,13 +173,14 @@ export default function InternalTransfersPage() {
 
       {/* Filter panel toggle (mobile-friendly) */}
       <div>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
+          iconRight={filtersOpen ? ChevronUp : ChevronDown}
           onClick={() => setFiltersOpen((v) => !v)}
-          className="inline-flex items-center gap-1.5 text-[13px] text-ink-600 dark:text-ink-400 hover:text-ink-900 dark:hover:text-ink-100 transition-colors"
         >
           {t("filter_collapse")}
-          {filtersOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </button>
+        </Button>
 
         {filtersOpen && (
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 rounded-lg border border-ink-200 dark:border-ink-800 bg-ink-50 dark:bg-ink-900/30">
@@ -233,7 +233,7 @@ export default function InternalTransfersPage() {
         <div className="text-center py-12 text-ink-400 text-[13px]">{t("loading")}</div>
       )}
       {!loading && error && (
-        <div className="text-center py-12 text-rose-600 text-[13px]">{error}</div>
+        <div className="text-center py-12 text-danger-600 dark:text-danger-500 text-[13px]">{error}</div>
       )}
       {!loading && !error && transfers.length === 0 && (
         <div className="text-center py-12 text-ink-400 text-[13px]">{t("empty")}</div>
@@ -341,35 +341,36 @@ function RowActions({
   const t = useTranslations("warehouse.transfers");
   return (
     <div className="flex items-center gap-1 justify-end flex-wrap">
-      <button
-        onClick={onView}
-        className="px-2 py-1 text-[12px] rounded border border-ink-200 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800 text-ink-700 dark:text-ink-300 transition-colors"
-      >
+      <Button variant="outline" size="xs" onClick={onView}>
         {t("detail_title")}
-      </button>
+      </Button>
       {tr.status === "draft" && (
-        <button
+        <Button
+          variant="warning"
+          size="xs"
           onClick={() => onAction({ id: tr.id, action: "send" })}
-          className="px-2 py-1 text-[12px] rounded bg-amber-500 hover:bg-amber-600 text-white transition-colors"
         >
           {t("send_btn")}
-        </button>
+        </Button>
       )}
       {tr.status === "sent" && (
-        <button
+        <Button
+          variant="success"
+          size="xs"
           onClick={() => onAction({ id: tr.id, action: "receive" })}
-          className="px-2 py-1 text-[12px] rounded bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
         >
           {t("receive_btn")}
-        </button>
+        </Button>
       )}
       {(tr.status === "draft" || tr.status === "sent") && (
-        <button
+        <Button
+          variant="light"
+          size="xs"
+          className="bg-danger-50 hover:bg-danger-100 dark:bg-danger-500/15 dark:hover:bg-danger-500/25 text-danger-600 dark:text-danger-500"
           onClick={() => onAction({ id: tr.id, action: "cancel" })}
-          className="px-2 py-1 text-[12px] rounded bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/20 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 transition-colors"
         >
           {t("cancel_transfer_btn")}
-        </button>
+        </Button>
       )}
     </div>
   );

@@ -5,10 +5,14 @@ import { toast } from "sonner";
 import { Download, Search, Upload, ClipboardList, Printer, Archive, ArchiveRestore, Barcode } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
+import { cn } from "@/lib/cn";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { TagsInput } from "@/components/ui/tags-input";
 import { CustomFieldsEditor } from "@/components/ui/custom-fields";
 import { usePermissions } from "@/lib/permissions";
@@ -347,44 +351,32 @@ function ImportModal({
           />
         </Field>
 
-        <button
-          type="button"
-          onClick={handleUpload}
-          disabled={uploading}
-          className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-        >
-          <Upload size={14} />
+        <Button type="button" variant="primary" size="md" icon={Upload} loading={uploading} onClick={handleUpload}>
           {uploading ? tw("uploading") : tw("upload_btn")}
-        </button>
+        </Button>
 
         {result && (
           <div className="space-y-2 pt-2 border-t border-ink-200 dark:border-ink-800">
-            <div className="flex flex-wrap gap-3 text-sm">
-              <span className="text-emerald-700 dark:text-emerald-400 font-medium">
-                {tw("result_created", { n: result.created })}
-              </span>
-              <span className="text-brand-700 dark:text-brand-400 font-medium">
-                {tw("result_updated", { n: result.updated })}
-              </span>
+            <div className="flex flex-wrap gap-2">
+              <Badge tone="success">{tw("result_created", { n: result.created })}</Badge>
+              <Badge tone="primary">{tw("result_updated", { n: result.updated })}</Badge>
               {result.errors.length > 0 && (
-                <span className="inline-flex items-center gap-1 bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 text-xs font-semibold px-2 py-0.5 rounded-full">
-                  {tw("result_errors", { n: result.errors.length })}
-                </span>
+                <Badge tone="danger">{tw("result_errors", { n: result.errors.length })}</Badge>
               )}
             </div>
 
             {result.errors.length > 0 && (
               <div
-                className="overflow-auto rounded border border-rose-200 dark:border-rose-800"
+                className="overflow-auto rounded border border-danger-500/20 dark:border-danger-500/30"
                 style={{ maxHeight: 300 }}
               >
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-rose-50 dark:bg-rose-950 text-left">
-                      <th className="px-3 py-2 font-medium text-rose-700 dark:text-rose-300 w-20">
+                    <tr className="bg-danger-50 dark:bg-danger-500/15 text-left">
+                      <th className="px-3 py-2 font-medium text-danger-700 dark:text-danger-500 w-20">
                         {tw("error_row")} №
                       </th>
-                      <th className="px-3 py-2 font-medium text-rose-700 dark:text-rose-300">
+                      <th className="px-3 py-2 font-medium text-danger-700 dark:text-danger-500">
                         {tw("error_message")}
                       </th>
                     </tr>
@@ -393,9 +385,9 @@ function ImportModal({
                     {result.errors.map((err, i) => (
                       <tr
                         key={i}
-                        className="border-t border-rose-100 dark:border-rose-900 odd:bg-white dark:odd:bg-ink-950 even:bg-rose-50/40 dark:even:bg-rose-950/30"
+                        className="border-t border-danger-500/10 dark:border-danger-500/20 odd:bg-white dark:odd:bg-ink-950 even:bg-danger-50/40 dark:even:bg-danger-500/10"
                       >
-                        <td className="px-3 py-1.5 font-mono text-rose-600 dark:text-rose-400">
+                        <td className="px-3 py-1.5 font-mono text-danger-600 dark:text-danger-500">
                           {err.row}
                         </td>
                         <td className="px-3 py-1.5 text-ink-700 dark:text-ink-300">
@@ -411,13 +403,9 @@ function ImportModal({
         )}
 
         <div className="flex justify-end pt-2 border-t border-ink-200 dark:border-ink-800">
-          <button
-            type="button"
-            onClick={handleClose}
-            className="px-4 py-2 text-sm rounded-md border border-ink-300 dark:border-ink-600 hover:bg-ink-50 dark:hover:bg-ink-800"
-          >
+          <Button type="button" variant="outline" size="md" onClick={handleClose}>
             {tw("close")}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -538,20 +526,23 @@ function BarcodesModal({
               onChange={(e) => setNewBarcode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             />
-            <button
+            <Button
               type="button"
+              variant="primary"
+              size="md"
+              loading={adding}
+              disabled={!newBarcode.trim()}
               onClick={handleAdd}
-              disabled={adding || !newBarcode.trim()}
-              className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-sm font-medium px-3 py-2 rounded-md transition-colors whitespace-nowrap"
+              className="whitespace-nowrap"
             >
               {tw("barcode_add")}
-            </button>
+            </Button>
           </div>
 
           {loading ? (
-            <p className="text-sm text-slate-400 py-4 text-center">{tw("barcode_loading")}</p>
+            <p className="text-sm text-ink-400 py-4 text-center">{tw("barcode_loading")}</p>
           ) : barcodes.length === 0 ? (
-            <p className="text-sm text-slate-400 py-4 text-center">{tw("barcode_empty")}</p>
+            <p className="text-sm text-ink-400 py-4 text-center">{tw("barcode_empty")}</p>
           ) : (
             <>
               <div className="space-y-2">
@@ -561,7 +552,7 @@ function BarcodesModal({
                     className={`flex items-center gap-2 p-2 rounded border ${
                       b.is_active
                         ? "border-ink-200 dark:border-ink-700 bg-white dark:bg-ink-900"
-                        : "border-ink-100 dark:border-ink-800 bg-slate-50 dark:bg-ink-950 opacity-60"
+                        : "border-ink-100 dark:border-ink-800 bg-ink-50 dark:bg-ink-950 opacity-60"
                     }`}
                   >
                     <span
@@ -572,35 +563,39 @@ function BarcodesModal({
                       {b.barcode}
                     </span>
                     {b.is_primary && b.is_active && (
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-300">
-                        {tw("barcode_primary_badge")}
-                      </span>
+                      <Badge tone="primary">{tw("barcode_primary_badge")}</Badge>
                     )}
                     {b.is_active && !b.is_primary && (
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="xs"
                         onClick={() => handleSetPrimary(b.id)}
-                        className="text-xs text-brand-600 hover:text-brand-700 whitespace-nowrap"
+                        className="text-brand-600 hover:text-brand-700 dark:text-brand-400"
                       >
                         {tw("barcode_set_primary")}
-                      </button>
+                      </Button>
                     )}
                     {b.is_active ? (
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="xs"
                         onClick={() => setDeactivateTarget(b)}
-                        className="text-xs text-rose-600 hover:text-rose-700 whitespace-nowrap"
+                        className="text-danger-600 hover:text-danger-700 dark:text-danger-500"
                       >
                         {tw("barcode_deactivate")}
-                      </button>
+                      </Button>
                     ) : (
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="xs"
                         onClick={() => handleReactivate(b.id)}
-                        className="text-xs text-emerald-600 hover:text-emerald-700 whitespace-nowrap"
+                        className="text-success-600 hover:text-success-700 dark:text-success-500"
                       >
                         {tw("barcode_reactivate")}
-                      </button>
+                      </Button>
                     )}
                   </div>
                 ))}
@@ -619,13 +614,9 @@ function BarcodesModal({
           )}
 
           <div className="flex justify-end pt-3 border-t border-ink-200 dark:border-ink-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm rounded-md border border-ink-300 dark:border-ink-600 hover:bg-ink-50 dark:hover:bg-ink-800"
-            >
+            <Button type="button" variant="outline" size="md" onClick={onClose}>
               {tw("close")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
@@ -911,7 +902,7 @@ export default function ProductsPage() {
       header: (
         <input
           type="checkbox"
-          className="w-4 h-4 rounded border-slate-300 text-brand-600 cursor-pointer"
+          className="w-4 h-4 rounded border-ink-300 text-brand-600 cursor-pointer"
           checked={rows.length > 0 && selectedIds.size === rows.length}
           ref={(el) => {
             if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < rows.length;
@@ -925,7 +916,7 @@ export default function ProductsPage() {
       render: (r: Product) => (
         <input
           type="checkbox"
-          className="w-4 h-4 rounded border-slate-300 text-brand-600 cursor-pointer"
+          className="w-4 h-4 rounded border-ink-300 text-brand-600 cursor-pointer"
           checked={selectedIds.has(r.id)}
           onChange={(e) => { e.stopPropagation(); toggleSelect(r.id); }}
           onClick={(e) => e.stopPropagation()}
@@ -946,9 +937,7 @@ export default function ProductsPage() {
           <span className="font-mono text-xs flex items-center gap-1">
             {primary}
             {count && count > 1 && (
-              <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-1 rounded">
-                {tw("col_barcode_count", { n: count - 1 })}
-              </span>
+              <Badge tone="neutral">{tw("col_barcode_count", { n: count - 1 })}</Badge>
             )}
           </span>
         );
@@ -968,11 +957,7 @@ export default function ProductsPage() {
       render: (r) => (
         <span className="flex items-center gap-1.5">
           {r.name}
-          {r.is_archived && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-              {tw("archived")}
-            </span>
-          )}
+          {r.is_archived && <Badge tone="neutral">{tw("archived")}</Badge>}
         </span>
       ),
     },
@@ -1053,17 +1038,11 @@ export default function ProductsPage() {
       width: "100px",
       render: (r) =>
         r.is_service ? (
-          <span className="text-xs text-blue-700 dark:text-blue-400">
-            {t("ui__услуга_8bf3c249")}
-          </span>
+          <Badge tone="primary">{t("ui__услуга_8bf3c249")}</Badge>
         ) : r.is_produced ? (
-          <span className="text-xs text-purple-700 dark:text-purple-400">
-            {t("ui__произв_ea4594a1")}
-          </span>
+          <Badge tone="purple">{t("ui__произв_ea4594a1")}</Badge>
         ) : (
-          <span className="text-xs text-slate-600 dark:text-slate-400">
-            {t("ui__товар_8b35db64")}
-          </span>
+          <Badge tone="neutral">{t("ui__товар_8b35db64")}</Badge>
         ),
     },
     ...(can("warehouse.bom.view")
@@ -1074,18 +1053,20 @@ export default function ProductsPage() {
             align: "center" as const,
             width: "80px",
             render: (r: Product) => (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="xs"
+                icon={ClipboardList}
+                title={tb("tab_label")}
                 onClick={(e) => {
                   e.stopPropagation();
                   setBomTarget(r);
                 }}
-                className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-brand-300 text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-colors"
-                title={tb("tab_label")}
+                className="text-brand-600 hover:text-brand-700 dark:text-brand-400"
               >
-                <ClipboardList size={12} />
                 BOM
-              </button>
+              </Button>
             ),
           },
         ]
@@ -1096,17 +1077,18 @@ export default function ProductsPage() {
       align: "center" as const,
       width: "70px",
       render: (r: Product) => (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="xs"
+          icon={Barcode}
           title={tw("barcodes_title")}
           onClick={(e) => {
             e.stopPropagation();
             setBarcodesTarget(r);
           }}
-          className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-ink-300 dark:border-ink-600 text-ink-600 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-800 transition-colors"
-        >
-          <Barcode size={12} />
-        </button>
+          className="text-ink-600 dark:text-ink-300"
+        />
       ),
     },
     ...(can("warehouse.product_archive")
@@ -1118,29 +1100,31 @@ export default function ProductsPage() {
             width: "70px",
             render: (r: Product) =>
               r.is_archived ? (
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="xs"
+                  icon={ArchiveRestore}
                   title={tw("action_unarchive")}
                   onClick={(e) => {
                     e.stopPropagation();
                     setArchiveTarget({ product: r, action: "unarchive" });
                   }}
-                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
-                >
-                  <ArchiveRestore size={12} />
-                </button>
+                  className="text-success-600 hover:text-success-700 dark:text-success-500"
+                />
               ) : (
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="xs"
+                  icon={Archive}
                   title={tw("action_archive")}
                   onClick={(e) => {
                     e.stopPropagation();
                     setArchiveTarget({ product: r, action: "archive" });
                   }}
-                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
-                >
-                  <Archive size={12} />
-                </button>
+                  className="text-ink-500 hover:text-ink-700 dark:text-ink-400"
+                />
               ),
           },
         ]
@@ -1153,19 +1137,21 @@ export default function ProductsPage() {
       render: (r: Product) => {
         const hasBarcode = !!(r.barcode || r.sku || r.id);
         return (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="xs"
+            icon={Printer}
             disabled={!hasBarcode}
             title={hasBarcode ? tbc("row_action") : tbc("no_barcode")}
             onClick={(e) => {
               e.stopPropagation();
               setPrintTarget(r);
             }}
-            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-ink-300 dark:border-ink-600 text-ink-600 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="text-ink-600 dark:text-ink-300"
           >
-            <Printer size={12} />
             {tbc("row_action")}
-          </button>
+          </Button>
         );
       },
     },
@@ -1174,45 +1160,24 @@ export default function ProductsPage() {
   const toolbarActions = (
     <div className="flex items-center gap-2 flex-wrap">
       {selectedIds.size > 0 && can("warehouse.product_archive") && (
-        <button
-          type="button"
-          onClick={() => setBulkArchiveOpen(true)}
-          className="inline-flex items-center gap-1.5 border border-zinc-400 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-900/30 hover:bg-zinc-100 dark:hover:bg-zinc-900/50 text-zinc-700 dark:text-zinc-300 text-[clamp(12px,1.6vw,13px)] font-medium px-3 py-1.5 rounded-md transition-colors whitespace-nowrap"
-        >
-          <Archive size={14} />
+        <Button type="button" variant="outline" size="sm" icon={Archive} onClick={() => setBulkArchiveOpen(true)}>
           {tw("bulk_archive")} ({selectedIds.size})
-        </button>
+        </Button>
       )}
       {selectedIds.size > 0 && (
-        <button
-          type="button"
-          onClick={() => setBulkPrintOpen(true)}
-          className="inline-flex items-center gap-1.5 border border-brand-400 dark:border-brand-600 bg-brand-50 dark:bg-brand-950/30 hover:bg-brand-100 dark:hover:bg-brand-950/50 text-brand-700 dark:text-brand-300 text-[clamp(12px,1.6vw,13px)] font-medium px-3 py-1.5 rounded-md transition-colors whitespace-nowrap"
-        >
-          <Printer size={14} />
+        <Button type="button" variant="light" size="sm" icon={Printer} onClick={() => setBulkPrintOpen(true)}>
           {tbc("bulk_print")} ({selectedIds.size})
-        </button>
+        </Button>
       )}
       {can("warehouse.product.export") && (
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={exporting}
-          className="inline-flex items-center gap-1.5 border border-ink-300 dark:border-ink-600 bg-white dark:bg-ink-900 hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-60 text-ink-700 dark:text-ink-200 text-[clamp(12px,1.6vw,13px)] font-medium px-3 py-1.5 rounded-md transition-colors whitespace-nowrap"
-        >
-          <Download size={14} />
+        <Button type="button" variant="outline" size="sm" icon={Download} loading={exporting} onClick={handleExport}>
           {exporting ? tw("export_loading") : tw("export_btn")}
-        </button>
+        </Button>
       )}
       {can("warehouse.product.import") && (
-        <button
-          type="button"
-          onClick={() => setImportOpen(true)}
-          className="inline-flex items-center gap-1.5 border border-ink-300 dark:border-ink-600 bg-white dark:bg-ink-900 hover:bg-ink-50 dark:hover:bg-ink-800 text-ink-700 dark:text-ink-200 text-[clamp(12px,1.6vw,13px)] font-medium px-3 py-1.5 rounded-md transition-colors whitespace-nowrap"
-        >
-          <Upload size={14} />
+        <Button type="button" variant="outline" size="sm" icon={Upload} onClick={() => setImportOpen(true)}>
           {tw("import_btn")}
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -1230,70 +1195,69 @@ export default function ProductsPage() {
         }}
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="col-span-1 sm:col-span-2 relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__поиск_название_sku_штрих_код_369d9946")}
-          </label>
-          <Search size={14} className="absolute left-2.5 top-[34px] text-slate-400" />
-          <input
-            className={`${input} pl-8`}
-            placeholder={t("ui__поиск_b84a8f87")}
-            value={filters.q}
-            onChange={(e) => setFilters({ ...filters, q: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && load()}
-          />
-        </div>
-        <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__категория_c95a1e2d")}
-          </label>
-          <select
-            className={input}
-            value={filters.category_id}
-            onChange={(e) => setFilters({ ...filters, category_id: e.target.value })}
-          >
-            <option value="">{t("ui__все_a07b234e")}</option>
-            {cats.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-end gap-2 flex-col sm:flex-row">
-          <div className="flex-1 w-full">
+      <Card padding="md">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="col-span-1 sm:col-span-2 relative">
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
+              {t("ui__поиск_название_sku_штрих_код_369d9946")}
+            </label>
+            <Search size={14} className="absolute left-2.5 top-[34px] text-ink-400" />
+            <input
+              className={`${input} pl-8`}
+              placeholder={t("ui__поиск_b84a8f87")}
+              value={filters.q}
+              onChange={(e) => setFilters({ ...filters, q: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && load()}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
+              {t("ui__категория_c95a1e2d")}
+            </label>
             <select
               className={input}
-              value={filters.is_service}
-              onChange={(e) => setFilters({ ...filters, is_service: e.target.value })}
+              value={filters.category_id}
+              onChange={(e) => setFilters({ ...filters, category_id: e.target.value })}
             >
-              <option value="">{t("ui__все_типы_eb6499ca")}</option>
-              <option value="false">{t("ui__товары_2ccd69a3")}</option>
-              <option value="true">{t("ui__услуги_4e1a0e95")}</option>
+              <option value="">{t("ui__все_a07b234e")}</option>
+              {cats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </select>
           </div>
-          <button
-            onClick={load}
-            className="px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700 whitespace-nowrap"
-          >
-            {t("ui__фильтр_2f884b41")}
-          </button>
+          <div className="flex items-end gap-2 flex-col sm:flex-row">
+            <div className="flex-1 w-full">
+              <select
+                className={input}
+                value={filters.is_service}
+                onChange={(e) => setFilters({ ...filters, is_service: e.target.value })}
+              >
+                <option value="">{t("ui__все_типы_eb6499ca")}</option>
+                <option value="false">{t("ui__товары_2ccd69a3")}</option>
+                <option value="true">{t("ui__услуги_4e1a0e95")}</option>
+              </select>
+            </div>
+            <Button type="button" variant="primary" size="md" onClick={load} className="whitespace-nowrap">
+              {t("ui__фильтр_2f884b41")}
+            </Button>
+          </div>
+          <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center gap-2">
+            <label className="flex items-center gap-2 text-sm text-ink-600 dark:text-ink-400 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="w-4 h-4 rounded border-ink-300 text-brand-600 cursor-pointer"
+                checked={filters.include_archived}
+                onChange={(e) =>
+                  setFilters({ ...filters, include_archived: e.target.checked })
+                }
+              />
+              {tw("filter_include_archived")}
+            </label>
+          </div>
         </div>
-        <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center gap-2">
-          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              className="w-4 h-4 rounded border-slate-300 text-brand-600 cursor-pointer"
-              checked={filters.include_archived}
-              onChange={(e) =>
-                setFilters({ ...filters, include_archived: e.target.checked })
-              }
-            />
-            {tw("filter_include_archived")}
-          </label>
-        </div>
-      </div>
+      </Card>
 
       {/* Desktop table */}
       <div className="hidden md:block">
@@ -1309,147 +1273,158 @@ export default function ProductsPage() {
       {/* Mobile cards */}
       <ul className="md:hidden space-y-2">
         {loading && (
-          <li className="text-center text-sm text-slate-400 py-8">
+          <li className="text-center text-sm text-ink-400 py-8">
             {t("ui__загрузка_43e40d49")}
           </li>
         )}
         {!loading && rows.length === 0 && (
-          <li className="text-center text-sm text-slate-400 py-8">
+          <li className="text-center text-sm text-ink-400 py-8">
             {t("ui__нет_данных_dee9a2d8")}
           </li>
         )}
         {rows.map((r) => (
-          <li
-            key={r.id}
-            className={`bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 text-sm ${r.is_archived ? "opacity-60" : ""}`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="font-medium truncate flex items-center gap-1.5">
-                  {r.name}
-                  {r.is_archived && (
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-                      {tw("archived")}
-                    </span>
+          <li key={r.id}>
+            <Card padding="sm" className={cn("text-sm", r.is_archived && "opacity-60")}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium truncate flex items-center gap-1.5">
+                    {r.name}
+                    {r.is_archived && <Badge tone="neutral">{tw("archived")}</Badge>}
+                  </div>
+                  {r.sku && (
+                    <div className="text-xs text-ink-500 font-mono truncate">SKU: {r.sku}</div>
+                  )}
+                  {r.mxik && (
+                    <div className="text-xs text-ink-500 font-mono truncate">
+                      {t("mxik")}: {r.mxik}
+                    </div>
+                  )}
+                  {(r.primary_barcode || r.barcode) && (
+                    <div className="text-xs text-ink-500 font-mono truncate">
+                      {tw("col_barcode")}: {r.primary_barcode || r.barcode}
+                      {r.active_barcode_count && r.active_barcode_count > 1 && (
+                        <Badge tone="neutral" className="ml-1">
+                          {tw("col_barcode_count", { n: r.active_barcode_count - 1 })}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                  {r.category_name && (
+                    <div className="text-xs text-ink-400 truncate">{r.category_name}</div>
+                  )}
+                  {r.default_supplier_name && (
+                    <div className="text-xs text-ink-400 truncate">
+                      {tw("col_supplier")}: {r.default_supplier_name}
+                    </div>
+                  )}
+                  {r.product_type && (
+                    <div className="text-xs text-ink-400 truncate">{r.product_type}</div>
+                  )}
+                  {r.rack_name && (
+                    <div className="text-xs text-ink-400 truncate">
+                      {tw("col_rack")}: {r.rack_name}
+                    </div>
+                  )}
+                  {r.default_cell_code && (
+                    <div className="text-xs text-ink-400 font-mono truncate">
+                      {tw("col_cell")}: {r.default_cell_code}
+                    </div>
                   )}
                 </div>
-                {r.sku && (
-                  <div className="text-xs text-slate-500 font-mono truncate">SKU: {r.sku}</div>
-                )}
-                {r.mxik && (
-                  <div className="text-xs text-slate-500 font-mono truncate">
-                    {t("mxik")}: {r.mxik}
+                <div className="text-right shrink-0">
+                  <div className="font-mono text-sm">
+                    {fmt(r.sale_price)} {r.currency_code}
                   </div>
-                )}
-                {(r.primary_barcode || r.barcode) && (
-                  <div className="text-xs text-slate-500 font-mono truncate">
-                    {tw("col_barcode")}: {r.primary_barcode || r.barcode}
-                    {r.active_barcode_count && r.active_barcode_count > 1 && (
-                      <span className="ml-1 text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 px-1 rounded">
-                        {tw("col_barcode_count", { n: r.active_barcode_count - 1 })}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {r.category_name && (
-                  <div className="text-xs text-slate-400 truncate">{r.category_name}</div>
-                )}
-                {r.default_supplier_name && (
-                  <div className="text-xs text-slate-400 truncate">
-                    {tw("col_supplier")}: {r.default_supplier_name}
-                  </div>
-                )}
-                {r.product_type && (
-                  <div className="text-xs text-slate-400 truncate">{r.product_type}</div>
-                )}
-                {r.rack_name && (
-                  <div className="text-xs text-slate-400 truncate">
-                    {tw("col_rack")}: {r.rack_name}
-                  </div>
-                )}
-                {r.default_cell_code && (
-                  <div className="text-xs text-slate-400 font-mono truncate">
-                    {tw("col_cell")}: {r.default_cell_code}
-                  </div>
-                )}
-              </div>
-              <div className="text-right shrink-0">
-                <div className="font-mono text-sm">
-                  {fmt(r.sale_price)} {r.currency_code}
+                  <div className="text-xs text-ink-500">{r.unit_name || "—"}</div>
+                  {!r.is_service && (
+                    <div className="text-xs text-ink-400">
+                      {t("ui__остаток_9a6054b1")}: {fmt(r.total_stock)}
+                    </div>
+                  )}
                 </div>
-                <div className="text-xs text-slate-500">{r.unit_name || "—"}</div>
-                {!r.is_service && (
-                  <div className="text-xs text-slate-400">
-                    {t("ui__остаток_9a6054b1")}: {fmt(r.total_stock)}
-                  </div>
-                )}
               </div>
-            </div>
-            <div className="flex gap-3 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 flex-wrap">
-              <button
-                aria-label="Tahrirlash"
-                onClick={() => openEdit(r)}
-                className="text-xs text-brand-600 hover:text-brand-700"
-              >
-                Tahrir
-              </button>
-              <button
-                aria-label="O'chirish"
-                onClick={() => setDeleteTarget(r)}
-                className="text-xs text-rose-600 hover:text-rose-700"
-              >
-                O&apos;chir
-              </button>
-              {can("warehouse.bom.view") && (
-                <button
+              <div className="flex gap-3 mt-2 pt-2 border-t border-ink-100 dark:border-ink-700 flex-wrap">
+                <Button
                   type="button"
-                  onClick={() => setBomTarget(r)}
-                  className="text-xs text-brand-600 hover:text-brand-700 inline-flex items-center gap-1"
+                  variant="ghost"
+                  size="xs"
+                  aria-label="Tahrirlash"
+                  onClick={() => openEdit(r)}
+                  className="text-brand-600 hover:text-brand-700 dark:text-brand-400"
                 >
-                  <ClipboardList size={11} />
-                  BOM
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setBarcodesTarget(r)}
-                className="text-xs text-ink-600 dark:text-ink-300 hover:text-ink-800 inline-flex items-center gap-1"
-                title={tw("barcodes_title")}
-              >
-                <Barcode size={11} />
-                {tw("barcodes_title")}
-              </button>
-              {can("warehouse.product_archive") && (
-                r.is_archived ? (
-                  <button
+                  Tahrir
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  aria-label="O'chirish"
+                  onClick={() => setDeleteTarget(r)}
+                  className="text-danger-600 hover:text-danger-700 dark:text-danger-500"
+                >
+                  O&apos;chir
+                </Button>
+                {can("warehouse.bom.view") && (
+                  <Button
                     type="button"
-                    onClick={() => setArchiveTarget({ product: r, action: "unarchive" })}
-                    className="text-xs text-emerald-600 hover:text-emerald-700 inline-flex items-center gap-1"
+                    variant="ghost"
+                    size="xs"
+                    icon={ClipboardList}
+                    onClick={() => setBomTarget(r)}
+                    className="text-brand-600 hover:text-brand-700 dark:text-brand-400"
                   >
-                    <ArchiveRestore size={11} />
-                    {tw("action_unarchive")}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setArchiveTarget({ product: r, action: "archive" })}
-                    className="text-xs text-zinc-600 hover:text-zinc-700 inline-flex items-center gap-1"
-                  >
-                    <Archive size={11} />
-                    {tw("action_archive")}
-                  </button>
-                )
-              )}
-              <button
-                type="button"
-                onClick={() => setPrintTarget(r)}
-                className="text-xs text-ink-600 dark:text-ink-300 hover:text-ink-800 inline-flex items-center gap-1"
-                title={tbc("row_action")}
-              >
-                <Printer size={11} />
-                {tbc("row_action")}
-              </button>
-            </div>
+                    BOM
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  icon={Barcode}
+                  onClick={() => setBarcodesTarget(r)}
+                  title={tw("barcodes_title")}
+                  className="text-ink-600 dark:text-ink-300"
+                >
+                  {tw("barcodes_title")}
+                </Button>
+                {can("warehouse.product_archive") && (
+                  r.is_archived ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      icon={ArchiveRestore}
+                      onClick={() => setArchiveTarget({ product: r, action: "unarchive" })}
+                      className="text-success-600 hover:text-success-700 dark:text-success-500"
+                    >
+                      {tw("action_unarchive")}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      icon={Archive}
+                      onClick={() => setArchiveTarget({ product: r, action: "archive" })}
+                      className="text-ink-500 hover:text-ink-700 dark:text-ink-400"
+                    >
+                      {tw("action_archive")}
+                    </Button>
+                  )
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  icon={Printer}
+                  onClick={() => setPrintTarget(r)}
+                  title={tbc("row_action")}
+                  className="text-ink-600 dark:text-ink-300"
+                >
+                  {tbc("row_action")}
+                </Button>
+              </div>
+            </Card>
           </li>
         ))}
       </ul>
@@ -1611,8 +1586,8 @@ export default function ProductsPage() {
             />
           </div>
 
-          <div className="col-span-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-2 p-3 bg-slate-50 dark:bg-slate-900/40 rounded border border-slate-200 dark:border-slate-700">
-            <div className="col-span-3 text-xs font-semibold text-slate-500 uppercase">
+          <div className="col-span-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-2 p-3 bg-ink-50 dark:bg-ink-900/40 rounded border border-ink-200 dark:border-ink-700">
+            <div className="col-span-3 text-xs font-semibold text-ink-500 uppercase">
               Tur va flag&apos;lar
             </div>
             <label className="flex items-center gap-2 text-sm">
@@ -1658,8 +1633,8 @@ export default function ProductsPage() {
           </div>
 
           {editId && (
-            <div className="col-span-2 p-3 bg-slate-50 dark:bg-slate-900/40 rounded border border-slate-200 dark:border-slate-700">
-              <div className="text-xs font-semibold text-slate-500 uppercase mb-2">
+            <div className="col-span-2 p-3 bg-ink-50 dark:bg-ink-900/40 rounded border border-ink-200 dark:border-ink-700">
+              <div className="text-xs font-semibold text-ink-500 uppercase mb-2">
                 {tw("barcodes_title")}
               </div>
               <button
@@ -1678,7 +1653,7 @@ export default function ProductsPage() {
           )}
 
           <div className="col-span-2 grid grid-cols-2 gap-3 mt-2">
-            <div className="col-span-2 text-xs font-semibold text-slate-500 uppercase">
+            <div className="col-span-2 text-xs font-semibold text-ink-500 uppercase">
               Qo&apos;shimcha ma&apos;lumotlar
             </div>
             <Field label="Quti shtrix-kodi">
@@ -1699,7 +1674,7 @@ export default function ProductsPage() {
           </div>
 
           <div className="col-span-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-2">
-            <div className="col-span-1 sm:col-span-2 lg:col-span-4 text-xs font-semibold text-slate-500 uppercase">
+            <div className="col-span-1 sm:col-span-2 lg:col-span-4 text-xs font-semibold text-ink-500 uppercase">
               O&apos;lcham va vazn
             </div>
             <Field label="Uzunlik (sm)">
@@ -1762,7 +1737,7 @@ export default function ProductsPage() {
           </div>
 
           <div className="col-span-2 mt-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-2">
+            <label className="text-sm font-medium text-ink-700 dark:text-ink-300 block mb-2">
               Teglar
             </label>
             <TagsInput
@@ -1773,19 +1748,13 @@ export default function ProductsPage() {
 
           {editId && <CustomFieldsEditor entityType="product" entityId={editId} />}
 
-          <div className="col-span-2 flex justify-end gap-2 pt-3 mt-3 border-t border-slate-200 dark:border-slate-700">
-            <button
-              onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-            >
+          <div className="col-span-2 flex justify-end gap-2 pt-3 mt-3 border-t border-ink-200 dark:border-ink-700">
+            <Button type="button" variant="outline" size="md" onClick={() => setOpen(false)}>
               {t("ui__отмена_987b33c6")}
-            </button>
-            <button
-              onClick={save}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
-            >
+            </Button>
+            <Button type="button" variant="primary" size="md" onClick={save}>
               {t("ui__сохранить_74ea58b6")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>

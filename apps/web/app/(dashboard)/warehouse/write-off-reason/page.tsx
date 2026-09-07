@@ -7,17 +7,22 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Reason = { id: number; name: string };
 
 export default function WriteOffReasonPage() {
   const t = useTranslations("ui");
+  const tc = useTranslations("common");
   const [rows, setRows] = useState<Reason[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Reason | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -33,10 +38,19 @@ export default function WriteOffReasonPage() {
       toast.success(t("ui__сохранено_54a59b19")); setOpen(false); setName(""); setEditId(null); load();
     } catch (e: any) { toast.error(getErrorMessage(e, "Xato")); }
   }
-  async function del(r: Reason) {
-    if (!confirm(`��${r.name}�� o'chirilsinmi?`)) return;
-    await api.delete(`/warehouse/write-off-reasons/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40")); load();
+  async function del() {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await api.delete(`/warehouse/write-off-reasons/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
+    } catch (e: any) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleteLoading(false);
+    }
   }
 
   const columns: Column<Reason>[] = [{ key: "name", header: t("ui__название_602680ed") }];
@@ -47,7 +61,7 @@ export default function WriteOffReasonPage() {
         onCreate={() => { setName(""); setEditId(null); setOpen(true); }} />
       <DataTable columns={columns} rows={rows} loading={loading}
         onEdit={(r) => { setName(r.name); setEditId(r.id); setOpen(true); }}
-        onDelete={del} />
+        onDelete={(r) => setDeleteTarget(r)} />
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Tahrirlash" : "Yangi sabab"}>
         <div className="space-y-3">
@@ -55,11 +69,23 @@ export default function WriteOffReasonPage() {
             <input className={input} value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+            <Button variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button variant="primary" onClick={save}>{t("ui__сохранить_74ea58b6")}</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={del}
+        title={tc("delete")}
+        message={`"${deleteTarget?.name ?? ""}" o'chirilsinmi?`}
+        confirmLabel={tc("delete")}
+        cancelLabel={tc("cancel")}
+        variant="danger"
+        loading={deleteLoading}
+      />
     </div>
   );
 }

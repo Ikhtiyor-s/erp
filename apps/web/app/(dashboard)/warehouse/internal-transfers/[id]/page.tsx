@@ -7,6 +7,9 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader } from "@/components/ui/card";
 import { useTranslations } from "next-intl";
 
 type TransferStatus = "draft" | "sent" | "received" | "cancelled";
@@ -39,24 +42,21 @@ type TransferDetail = {
 
 type ActionKind = "send" | "receive" | "cancel";
 
+const STATUS_TONE: Record<TransferStatus, "neutral" | "warning" | "success" | "danger"> = {
+  draft: "neutral",
+  sent: "warning",
+  received: "success",
+  cancelled: "danger",
+};
+
 function StatusBadge({ status, t }: { status: TransferStatus; t: (k: string) => string }) {
-  const map: Record<TransferStatus, string> = {
-    draft: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-    sent: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-    received: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-    cancelled: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
-  };
   const labelMap: Record<TransferStatus, string> = {
     draft: "status_draft",
     sent: "status_sent",
     received: "status_received",
     cancelled: "status_cancelled",
   };
-  return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded text-[12px] font-semibold ${map[status]}`}>
-      {t(labelMap[status])}
-    </span>
-  );
+  return <Badge tone={STATUS_TONE[status]}>{t(labelMap[status])}</Badge>;
 }
 
 function fmtDate(s: string | null) {
@@ -132,7 +132,7 @@ export default function TransferDetailPage() {
   }
   if (error || !transfer) {
     return (
-      <div className="text-center py-12 text-rose-600 text-[13px]">
+      <div className="text-center py-12 text-danger-600 dark:text-danger-500 text-[13px]">
         {error ?? t("error_load")}
       </div>
     );
@@ -145,12 +145,13 @@ export default function TransferDetailPage() {
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
       <div className="flex items-start gap-3">
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={ArrowLeft}
           onClick={() => router.push("/warehouse/internal-transfers")}
-          className="mt-1 p-1.5 rounded hover:bg-ink-100 dark:hover:bg-ink-800 text-ink-500 transition-colors shrink-0"
-        >
-          <ArrowLeft size={16} />
-        </button>
+          className="mt-1 shrink-0"
+        />
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-[clamp(16px,2.2vw,18px)] font-semibold text-ink-900 dark:text-ink-50 tracking-tight font-mono">
@@ -168,34 +169,30 @@ export default function TransferDetailPage() {
         {/* Action buttons */}
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
           {transfer.status === "draft" && (
-            <button
-              onClick={() => setConfirm("send")}
-              className="px-3 py-1.5 text-[13px] rounded-md bg-amber-500 hover:bg-amber-600 text-white font-medium transition-colors"
-            >
+            <Button variant="warning" size="sm" onClick={() => setConfirm("send")}>
               {t("send_btn")}
-            </button>
+            </Button>
           )}
           {transfer.status === "sent" && (
-            <button
-              onClick={() => setConfirm("receive")}
-              className="px-3 py-1.5 text-[13px] rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-medium transition-colors"
-            >
+            <Button variant="success" size="sm" onClick={() => setConfirm("receive")}>
               {t("receive_btn")}
-            </button>
+            </Button>
           )}
           {(transfer.status === "draft" || transfer.status === "sent") && (
-            <button
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-danger-500/40 text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
               onClick={() => setConfirm("cancel")}
-              className="px-3 py-1.5 text-[13px] rounded-md border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 font-medium transition-colors"
             >
               {t("cancel_transfer_btn")}
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
       {/* Meta info grid */}
-      <div className="rounded-lg border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-900 p-5">
+      <Card padding="lg">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <MetaRow label={t("detail_from")} value={transfer.from_name} />
           <MetaRow label={t("detail_to")} value={transfer.to_name} />
@@ -207,12 +204,12 @@ export default function TransferDetailPage() {
           {transfer.received_by && <MetaRow label={t("detail_received_by")} value={transfer.received_by} />}
           {transfer.notes && <MetaRow label={t("detail_notes")} value={transfer.notes} />}
         </div>
-      </div>
+      </Card>
 
       {/* Items table */}
-      <div className="rounded-lg border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-900 p-5 space-y-3">
-        <h2 className="text-[14px] font-semibold text-ink-900 dark:text-ink-100">{t("detail_items")}</h2>
-
+      <Card padding="none">
+        <CardHeader title={t("detail_items")} />
+        <div className="p-4 sm:p-5 space-y-3">
         {/* Desktop */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-[13px]">
@@ -255,7 +252,8 @@ export default function TransferDetailPage() {
             </li>
           ))}
         </ul>
-      </div>
+        </div>
+      </Card>
 
       {/* Confirm dialog */}
       {confirm && (

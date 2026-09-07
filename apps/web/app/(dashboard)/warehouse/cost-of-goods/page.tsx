@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Layers, Boxes, Wallet } from "lucide-react";
 import { api } from "@/lib/api";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatWidget } from "@/components/ui/stat-widget";
 import { useTranslations } from "next-intl";
 
 type Row = { id: string; name: string; sku?: string; total_qty: string; total_cost: string };
@@ -39,35 +41,12 @@ export default function CostOfGoodsPage() {
       <PageHeader title={t("ui__себестоимость_cc32c68e")} description={t("ui__стоимость_остатков_по_всем_скл_78764062")} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        <Card label={t("ui__позиций_7366e179")} value={rows.length} />
-        <Card label={t("ui__общее_количество_6f51238e")} value={fmt(totalQty)} />
-        <Card
-          label={t("ui__стоимость_всего_5118f296")}
-          value={fmt(total)}
-          color="text-green-600 dark:text-green-400"
-        />
+        <StatWidget label={t("ui__позиций_7366e179")} value={rows.length} icon={Layers} color="ink" />
+        <StatWidget label={t("ui__общее_количество_6f51238e")} value={fmt(totalQty)} icon={Boxes} color="brand" mono />
+        <StatWidget label={t("ui__стоимость_всего_5118f296")} value={fmt(total)} icon={Wallet} color="success" mono />
       </div>
 
       <DataTable columns={columns} rows={rows} loading={loading} />
-    </div>
-  );
-}
-
-function Card({
-  label,
-  value,
-  color = "text-slate-900 dark:text-slate-100",
-}: {
-  label: string;
-  value: any;
-  color?: string;
-}) {
-  return (
-    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-4">
-      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-        {label}
-      </div>
-      <div className={`text-2xl font-bold mt-1 font-mono ${color}`}>{value}</div>
     </div>
   );
 }

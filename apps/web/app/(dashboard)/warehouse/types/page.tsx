@@ -8,6 +8,8 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useTranslations } from "next-intl";
 
 type WhType = {
@@ -107,22 +109,16 @@ export default function WarehouseTypesPage() {
       key: "code",
       header: tc("code"),
       render: (r) => r.code ? (
-        <span className="font-mono text-xs bg-ink-100 dark:bg-ink-800 px-1.5 py-0.5 rounded">
-          {r.code}
-        </span>
+        <Badge tone="neutral" className="font-mono">{r.code}</Badge>
       ) : "—",
     },
     {
       key: "is_active",
       header: tc("status"),
-      render: (r) => r.is_active ? (
-        <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-          {t("active")}
-        </span>
-      ) : (
-        <span className="text-xs font-medium text-rose-500 dark:text-rose-400">
-          {t("inactive")}
-        </span>
+      render: (r) => (
+        <Badge tone={r.is_active ? "success" : "danger"}>
+          {r.is_active ? t("active") : t("inactive")}
+        </Badge>
       ),
     },
   ];
@@ -164,23 +160,19 @@ export default function WarehouseTypesPage() {
                 {r.code && (
                   <p className="text-xs font-mono text-ink-500 dark:text-ink-400 mt-0.5">{r.code}</p>
                 )}
-                <p className={`text-xs mt-1 font-medium ${r.is_active ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400"}`}>
-                  {r.is_active ? t("active") : t("inactive")}
-                </p>
+                <div className="mt-1.5">
+                  <Badge tone={r.is_active ? "success" : "danger"}>
+                    {r.is_active ? t("active") : t("inactive")}
+                  </Badge>
+                </div>
               </div>
               <div className="flex gap-2 shrink-0">
-                <button
-                  onClick={() => openEdit(r)}
-                  className="text-xs text-brand-600 hover:text-brand-700 px-2 py-1 rounded border border-brand-200"
-                >
+                <Button variant="outline" size="xs" onClick={() => openEdit(r)}>
                   {tc("edit")}
-                </button>
-                <button
-                  onClick={() => setConfirmItem(r)}
-                  className="text-xs text-rose-600 hover:text-rose-700 px-2 py-1 rounded border border-rose-200"
-                >
+                </Button>
+                <Button variant="danger" size="xs" onClick={() => setConfirmItem(r)}>
                   {t("deactivate")}
-                </button>
+                </Button>
               </div>
             </div>
           </li>
@@ -214,20 +206,12 @@ export default function WarehouseTypesPage() {
             </select>
           </Field>
           <div className="flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
-            <button
-              onClick={() => setModalOpen(false)}
-              disabled={saving}
-              className="px-4 py-2 text-sm rounded-md border border-ink-300 dark:border-ink-600 hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-50"
-            >
+            <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               {tc("cancel")}
-            </button>
-            <button
-              onClick={save}
-              disabled={saving}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
-            >
-              {saving ? "..." : tc("save")}
-            </button>
+            </Button>
+            <Button onClick={save} loading={saving}>
+              {tc("save")}
+            </Button>
           </div>
         </div>
       </Modal>

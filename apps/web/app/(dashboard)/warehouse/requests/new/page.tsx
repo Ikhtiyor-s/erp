@@ -10,6 +10,9 @@ import { getErrorMessage } from "@/lib/api-error";
 import { Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { ProductPicker, PickerItem } from "@/components/warehouse/product-picker";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 type Warehouse = { id: number; name: string };
 
@@ -112,7 +115,7 @@ export default function NewProductRequestPage() {
     <div className="space-y-5 max-w-5xl">
       <PageHeader title={t("new_title")} description={t("new_description")} />
 
-      <div className="bg-white dark:bg-ink-950 rounded-md border border-ink-200/60 dark:border-ink-800/60 p-4 space-y-4">
+      <Card padding="md" className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label={t("from_warehouse")} required>
             <select
@@ -156,10 +159,10 @@ export default function NewProductRequestPage() {
             placeholder={t("notes_placeholder")}
           />
         </Field>
-      </div>
+      </Card>
 
       {fromWarehouse !== "" ? (
-        <div className="bg-white dark:bg-ink-950 rounded-md border border-ink-200/60 dark:border-ink-800/60 p-4 space-y-3">
+        <Card padding="md" className="space-y-3">
           <p className="text-[13px] font-medium text-ink-700 dark:text-ink-300">
             {t("items")}
           </p>
@@ -168,7 +171,7 @@ export default function NewProductRequestPage() {
             selectedIds={items.map((i) => i.product_id)}
             onAdd={handleAdd}
           />
-        </div>
+        </Card>
       ) : (
         <div className="rounded-md border border-dashed border-ink-200 dark:border-ink-800 px-4 py-8 text-center text-[13px] text-ink-400 dark:text-ink-500">
           {t("select_warehouse_first")}
@@ -176,7 +179,7 @@ export default function NewProductRequestPage() {
       )}
 
       {items.length > 0 && (
-        <div className="bg-white dark:bg-ink-950 rounded-md border border-ink-200/60 dark:border-ink-800/60 p-4 space-y-3">
+        <Card padding="md" className="space-y-3">
           <p className="text-[13px] font-medium text-ink-700 dark:text-ink-300">
             {t("selected_title")}
           </p>
@@ -206,23 +209,17 @@ export default function NewProductRequestPage() {
                   return (
                     <tr
                       key={l.product_id}
-                      className={hasError ? "bg-rose-50 dark:bg-rose-900/10" : ""}
+                      className={hasError ? "bg-danger-50 dark:bg-danger-500/10" : ""}
                     >
                       <td className="px-3 py-2 text-ink-900 dark:text-ink-100 font-medium">
                         {l.product_name}
                       </td>
                       <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${
-                            parseFloat(l.on_hand) > 0
-                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                              : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
-                          }`}
-                        >
+                        <Badge tone={parseFloat(l.on_hand) > 0 ? "success" : "danger"}>
                           {parseFloat(l.on_hand).toLocaleString("ru-RU", {
                             maximumFractionDigits: 3,
                           })}
-                        </span>
+                        </Badge>
                       </td>
                       <td className="px-3 py-2">
                         <input
@@ -233,7 +230,7 @@ export default function NewProductRequestPage() {
                           onChange={(e) => updateQty(l.product_id, e.target.value)}
                           className={`w-24 border rounded px-2 py-1 text-right text-[13px] focus:outline-none transition-colors ${
                             hasError
-                              ? "border-rose-400 bg-rose-50 dark:bg-rose-900/20 focus:border-rose-500"
+                              ? "border-danger-400 bg-danger-50 dark:bg-danger-500/15 focus:border-danger-500"
                               : "border-ink-200 dark:border-ink-700 bg-white dark:bg-ink-950 focus:border-brand-500"
                           }`}
                         />
@@ -242,14 +239,14 @@ export default function NewProductRequestPage() {
                         {l.unit_name || "—"}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          icon={Trash2}
                           onClick={() => removeItem(l.product_id)}
-                          className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"
                           aria-label={tc("delete")}
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                          className="text-danger-500 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-500/15"
+                        />
                       </td>
                     </tr>
                   );
@@ -266,7 +263,7 @@ export default function NewProductRequestPage() {
                   key={l.product_id}
                   className={`p-3 rounded-lg border bg-white dark:bg-ink-900 space-y-2 ${
                     hasError
-                      ? "border-rose-400 dark:border-rose-700"
+                      ? "border-danger-400 dark:border-danger-500/60"
                       : "border-ink-200 dark:border-ink-800"
                   }`}
                 >
@@ -274,29 +271,23 @@ export default function NewProductRequestPage() {
                     <p className="text-[13px] font-medium text-ink-900 dark:text-ink-100">
                       {l.product_name}
                     </p>
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      icon={Trash2}
                       onClick={() => removeItem(l.product_id)}
-                      className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"
                       aria-label={tc("delete")}
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                      className="text-danger-500 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-500/15"
+                    />
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${
-                        parseFloat(l.on_hand) > 0
-                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                          : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
-                      }`}
-                    >
+                    <Badge tone={parseFloat(l.on_hand) > 0 ? "success" : "danger"}>
                       {t("available")}{" "}
                       {parseFloat(l.on_hand).toLocaleString("ru-RU", {
                         maximumFractionDigits: 3,
                       })}{" "}
                       {l.unit_name}
-                    </span>
+                    </Badge>
                   </div>
                   <div className="flex items-center gap-2">
                     <label className="text-[12px] text-ink-500 dark:text-ink-400">
@@ -310,7 +301,7 @@ export default function NewProductRequestPage() {
                       onChange={(e) => updateQty(l.product_id, e.target.value)}
                       className={`w-28 border rounded px-2 py-1 text-right text-[13px] focus:outline-none transition-colors ${
                         hasError
-                          ? "border-rose-400 bg-rose-50 dark:bg-rose-900/20 focus:border-rose-500"
+                          ? "border-danger-400 bg-danger-50 dark:bg-danger-500/15 focus:border-danger-500"
                           : "border-ink-200 dark:border-ink-700 bg-white dark:bg-ink-950 focus:border-brand-500"
                       }`}
                     />
@@ -319,7 +310,7 @@ export default function NewProductRequestPage() {
               );
             })}
           </ul>
-        </div>
+        </Card>
       )}
 
       {items.length === 0 && fromWarehouse !== "" && (
@@ -329,27 +320,25 @@ export default function NewProductRequestPage() {
       )}
 
       {hasAnyError && (
-        <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-md px-3 py-2">
+        <div className="flex items-center gap-2 text-sm text-danger-600 dark:text-danger-500 bg-danger-50 dark:bg-danger-500/15 border border-danger-500/30 rounded-md px-3 py-2">
           <AlertTriangle size={14} />
           {t("qty_exceeds_error")}
         </div>
       )}
 
       <div className="flex items-center justify-end gap-2 pt-2">
-        <button
-          onClick={() => router.push("/warehouse/requests")}
-          className="px-4 py-2 text-sm rounded-md border border-ink-200 dark:border-ink-800 hover:bg-ink-50 dark:hover:bg-ink-900/40 text-ink-700 dark:text-ink-300"
-        >
+        <Button variant="outline" onClick={() => router.push("/warehouse/requests")}>
           {tc("cancel")}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="primary"
           onClick={submit}
           disabled={!canSubmit}
+          loading={submitting}
           title={hasAnyError ? t("qty_exceeds_error") : undefined}
-          className="px-4 py-2 text-sm rounded-md bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {submitting ? "..." : tc("save")}
-        </button>
+          {tc("save")}
+        </Button>
       </div>
     </div>
   );

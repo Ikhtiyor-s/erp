@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
+import { Badge } from "@/components/ui/badge";
 import { useTranslations } from "next-intl";
 
 type Supply = {
@@ -41,11 +42,11 @@ export default function IncomePage() {
       width: "120px",
       render: (r) =>
         r.status === "received" ? (
-          <span className="text-green-600 dark:text-green-400">{t("ui__принято_713e9366")}</span>
+          <Badge tone="success">{t("ui__принято_713e9366")}</Badge>
         ) : r.status === "cancelled" ? (
-          <span className="text-red-600 dark:text-red-400">{t("ui__отменено_81a04dab")}</span>
+          <Badge tone="danger">{t("ui__отменено_81a04dab")}</Badge>
         ) : (
-          <span className="text-slate-500 dark:text-slate-400">{r.status}</span>
+          <Badge tone="neutral">{r.status}</Badge>
         ),
     },
   ];
@@ -54,11 +55,11 @@ export default function IncomePage() {
     <div className="space-y-6">
       <PageHeader title={t("ui__приходы_4b3f0ea9")} description={t("ui__поступления_от_поставщиков_док_3319b62c")} />
       <div className="flex justify-end text-sm">
-        <span className="text-slate-500 dark:text-slate-400">{t("ui__сумма_всех_приходов_nbsp_de0279ea")}</span>
+        <span className="text-ink-500 dark:text-ink-400">{t("ui__сумма_всех_приходов_nbsp_de0279ea")}</span>
         <span className="font-mono font-semibold">{fmt(total)}</span>
       </div>
       <DataTable columns={columns} rows={rows} loading={loading} />
-      <div className="text-xs text-slate-400">
+      <div className="text-xs text-ink-400">
         {t("ui__создание_прихода_доступно_в_ра_674ee269")}
       </div>
     </div>

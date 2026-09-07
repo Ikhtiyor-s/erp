@@ -10,6 +10,9 @@ import { Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ProductPicker, PickerItem } from "@/components/warehouse/product-picker";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useTranslations } from "next-intl";
 
 type Warehouse = { id: number; name: string };
@@ -135,16 +138,11 @@ export default function NewTransferPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.back()}
-          className="p-1.5 rounded hover:bg-ink-100 dark:hover:bg-ink-800 text-ink-500 transition-colors"
-        >
-          <ArrowLeft size={16} />
-        </button>
+        <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={() => router.back()} />
         <PageHeader title={t("create_title")} />
       </div>
 
-      <div className="rounded-lg border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-900 p-5 space-y-4">
+      <Card padding="lg" className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label={t("from_wh_label")} required>
             <select
@@ -184,10 +182,10 @@ export default function NewTransferPage() {
             onChange={(e) => setNotes(e.target.value)}
           />
         </Field>
-      </div>
+      </Card>
 
       {items.length > 0 && (
-        <div className="rounded-lg border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-900 p-5 space-y-4">
+        <Card padding="lg" className="space-y-4">
           <h2 className="text-[14px] font-semibold text-ink-900 dark:text-ink-100">
             {t("selected_items_title")}
           </h2>
@@ -218,21 +216,15 @@ export default function NewTransferPage() {
                   return (
                     <tr
                       key={it.product_id}
-                      className={qtyErr ? "bg-rose-50 dark:bg-rose-900/10" : ""}
+                      className={qtyErr ? "bg-danger-50 dark:bg-danger-500/10" : ""}
                     >
                       <td className="px-3 py-2 text-ink-900 dark:text-ink-100">
                         {it.product_name}
                       </td>
                       <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${
-                            onHandNum > 0
-                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                              : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
-                          }`}
-                        >
+                        <Badge tone={onHandNum > 0 ? "success" : "danger"}>
                           {onHandNum.toLocaleString("ru-RU", { maximumFractionDigits: 3 })}
-                        </span>
+                        </Badge>
                       </td>
                       <td className="px-3 py-2">
                         <input
@@ -243,12 +235,12 @@ export default function NewTransferPage() {
                           onChange={(e) => updateQty(idx, e.target.value)}
                           className={`w-24 border rounded px-2 py-1 text-right text-[13px] focus:outline-none transition-colors ${
                             qtyErr
-                              ? "border-rose-400 bg-rose-50 dark:bg-rose-900/20 focus:border-rose-500"
+                              ? "border-danger-400 bg-danger-50 dark:bg-danger-500/15 focus:border-danger-500"
                               : "border-ink-200 dark:border-ink-700 bg-white dark:bg-ink-950 focus:border-brand-500"
                           }`}
                         />
                         {qtyErr && parseFloat(it.qty) > parseFloat(it.on_hand) && (
-                          <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-0.5">
+                          <p className="text-[11px] text-danger-600 dark:text-danger-500 mt-0.5">
                             {t("qty_exceeds")}
                           </p>
                         )}
@@ -257,13 +249,13 @@ export default function NewTransferPage() {
                         {it.unit_name || "—"}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          icon={Trash2}
                           onClick={() => removeItem(idx)}
-                          className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 p-1 rounded transition-colors"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                          className="text-danger-500 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-500/15"
+                        />
                       </td>
                     </tr>
                   );
@@ -271,10 +263,10 @@ export default function NewTransferPage() {
               </tbody>
             </table>
           </div>
-        </div>
+        </Card>
       )}
 
-      <div className="rounded-lg border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-900 p-5 space-y-4">
+      <Card padding="lg" className="space-y-4">
         <h2 className="text-[14px] font-semibold text-ink-900 dark:text-ink-100">
           {t("items_title")}
         </h2>
@@ -290,22 +282,20 @@ export default function NewTransferPage() {
             onAdd={handleAdd}
           />
         )}
-      </div>
+      </Card>
 
       <div className="flex items-center justify-end gap-3">
-        <button
-          onClick={() => router.back()}
-          className="px-4 py-2 text-[13px] rounded-md border border-ink-200 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800 text-ink-700 dark:text-ink-300 transition-colors"
-        >
+        <Button variant="outline" onClick={() => router.back()}>
           {t("cancel_btn")}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="primary"
           onClick={handleSave}
           disabled={saving || hasAnyError}
-          className="px-4 py-2 text-[13px] rounded-md bg-brand-600 hover:bg-brand-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          loading={saving}
         >
-          {saving ? t("loading") : t("save_btn")}
-        </button>
+          {t("save_btn")}
+        </Button>
       </div>
 
       <ConfirmDialog

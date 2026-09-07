@@ -9,6 +9,8 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 
 type InventoryStatus =
@@ -31,13 +33,13 @@ type Inv = {
 type Wh = { id: number; name: string };
 type Product = { id: string; name: string; sku?: string };
 
-const STATUS_COLORS: Record<InventoryStatus, string> = {
-  draft: "text-zinc-500",
-  in_progress: "text-amber-600",
-  paused: "text-blue-600",
-  pending_confirmation: "text-purple-600",
-  completed: "text-emerald-600",
-  cancelled: "text-rose-500",
+const STATUS_TONE: Record<InventoryStatus, "neutral" | "warning" | "info" | "purple" | "success" | "danger"> = {
+  draft: "neutral",
+  in_progress: "warning",
+  paused: "info",
+  pending_confirmation: "purple",
+  completed: "success",
+  cancelled: "danger",
 };
 
 export default function RevisionPage() {
@@ -142,9 +144,9 @@ export default function RevisionPage() {
       header: t("col_status"),
       width: "160px",
       render: (r) => (
-        <span className={`text-sm font-medium ${STATUS_COLORS[r.status] ?? ""}`}>
+        <Badge tone={STATUS_TONE[r.status] ?? "neutral"}>
           {t(`status_${r.status}` as Parameters<typeof t>[0])}
-        </span>
+        </Badge>
       ),
     },
     {
@@ -153,9 +155,7 @@ export default function RevisionPage() {
       width: "100px",
       render: (r) =>
         r.blind_count ? (
-          <span className="text-xs bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-full px-2 py-0.5">
-            {t("blind_count_badge")}
-          </span>
+          <Badge tone="neutral">{t("blind_count_badge")}</Badge>
         ) : null,
     },
     {
@@ -285,13 +285,13 @@ export default function RevisionPage() {
                         />
                       </td>
                       <td className="text-center">
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          icon={Trash2}
                           onClick={() => setItems(items.filter((_, i) => i !== idx))}
-                          className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 p-1 rounded"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                          className="text-danger-500 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-500/15"
+                        />
                       </td>
                     </tr>
                   ))}
@@ -301,21 +301,12 @@ export default function RevisionPage() {
           )}
 
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-ink-300 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800"
-            >
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("action_cancel")}
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={create}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
-            >
-              {saving ? "..." : t("new_btn")}
-            </button>
+            </Button>
+            <Button type="button" variant="primary" disabled={saving} loading={saving} onClick={create}>
+              {t("new_btn")}
+            </Button>
           </div>
         </div>
       </Modal>

@@ -9,6 +9,9 @@ import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type StockInStatus = "draft" | "confirmed" | "cancelled";
 
@@ -40,22 +43,19 @@ const STATUS_TABS: Array<{ key: "all" | StockInStatus; labelKey: string }> = [
   { key: "cancelled", labelKey: "status_cancelled" },
 ];
 
+const STATUS_TONE: Record<StockInStatus, "neutral" | "success" | "danger"> = {
+  draft: "neutral",
+  confirmed: "success",
+  cancelled: "danger",
+};
+
 function statusBadge(status: StockInStatus, t: (k: string) => string) {
-  const colorMap: Record<StockInStatus, string> = {
-    draft: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-    confirmed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-    cancelled: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
-  };
   const labelMap: Record<StockInStatus, string> = {
     draft: "status_draft",
     confirmed: "status_confirmed",
     cancelled: "status_cancelled",
   };
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${colorMap[status]}`}>
-      {t(labelMap[status])}
-    </span>
-  );
+  return <Badge tone={STATUS_TONE[status]}>{t(labelMap[status])}</Badge>;
 }
 
 function fmtDate(s: string | null) {
@@ -164,14 +164,15 @@ export default function StockInListPage() {
         ))}
       </div>
 
-      <div className="bg-white dark:bg-ink-950 rounded-md border border-ink-200/60 dark:border-ink-800/60 p-3">
-        <button
+      <Card padding="sm">
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={filtersOpen ? ChevronUp : ChevronDown}
           onClick={() => setFiltersOpen((v) => !v)}
-          className="inline-flex items-center gap-1 text-[13px] text-ink-600 dark:text-ink-400 hover:text-ink-900 dark:hover:text-ink-100"
         >
-          {filtersOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           {t("filter_date_from")} / {t("filter_date_to")}
-        </button>
+        </Button>
         {filtersOpen && (
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
@@ -204,19 +205,20 @@ export default function StockInListPage() {
               />
             </div>
             <div className="flex items-end gap-2">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => { setWarehouseFilter(""); setDateFrom(""); setDateTo(""); }}
-                className="px-3 py-1.5 text-[13px] rounded-md border border-ink-300 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800"
               >
                 Reset
-              </button>
+              </Button>
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       {error && (
-        <div className="rounded-md bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 px-4 py-3 text-[13px] text-rose-700 dark:text-rose-300">
+        <div className="rounded-md bg-danger-50 dark:bg-danger-500/15 border border-danger-500/30 px-4 py-3 text-[13px] text-danger-700 dark:text-danger-500">
           {error}
         </div>
       )}

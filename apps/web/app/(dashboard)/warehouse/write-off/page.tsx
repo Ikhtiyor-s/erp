@@ -8,6 +8,7 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 
 type WO = {
@@ -131,11 +132,11 @@ export default function WriteOffPage() {
               <input className={input} placeholder={t("ui__поиск_товара_b493d1bc")}
                 value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
               {productOptions.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border rounded-md shadow-lg max-h-48 overflow-auto">
+                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-ink-900 border border-ink-200 dark:border-ink-700 rounded-md shadow-lg max-h-48 overflow-auto">
                   {productOptions.map((p) => (
                     <button key={p.id} onClick={() => addItem(p)}
-                      className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:bg-slate-900/40">
-                      {p.name}{p.sku && <span className="text-slate-400"> ({p.sku})</span>}
+                      className="block w-full text-left px-3 py-2 text-sm hover:bg-ink-50 dark:hover:bg-ink-800">
+                      {p.name}{p.sku && <span className="text-ink-400"> ({p.sku})</span>}
                     </button>
                   ))}
                 </div>
@@ -144,9 +145,9 @@ export default function WriteOffPage() {
           </Field>
 
           {items.length > 0 && (
-            <div className="border rounded-md max-h-64 overflow-auto">
+            <div className="border border-ink-200 dark:border-ink-700 rounded-md max-h-64 overflow-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-900/40">
+                <thead className="bg-ink-50 dark:bg-ink-900/40">
                   <tr>
                     <th className="px-3 py-2 text-left">{t("ui__товар_8b35db64")}</th>
                     <th className="px-3 py-2 text-right w-32">{t("ui__количество_cb8bfd4d")}</th>
@@ -155,16 +156,21 @@ export default function WriteOffPage() {
                 </thead>
                 <tbody>
                   {items.map((it, idx) => (
-                    <tr key={it.product_id} className="border-t">
+                    <tr key={it.product_id} className="border-t border-ink-100 dark:border-ink-800">
                       <td className="px-3 py-2">{it.product_name}</td>
                       <td className="px-3 py-2 text-right">
                         <input type="number" step="0.001" value={it.quantity}
                           onChange={(e) => { const n = [...items]; n[idx].quantity = e.target.value; setItems(n); }}
-                          className="w-24 border rounded px-2 py-1 text-right text-sm" />
+                          className="w-24 border border-ink-200 dark:border-ink-700 rounded px-2 py-1 text-right text-sm bg-white dark:bg-ink-950" />
                       </td>
                       <td className="text-center">
-                        <button onClick={() => setItems(items.filter((_, i) => i !== idx))}
-                          className="text-red-600 hover:bg-red-50 p-1 rounded"><Trash2 size={14} /></button>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          icon={Trash2}
+                          onClick={() => setItems(items.filter((_, i) => i !== idx))}
+                          className="text-danger-500 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-500/15"
+                        />
                       </td>
                     </tr>
                   ))}
@@ -174,8 +180,8 @@ export default function WriteOffPage() {
           )}
 
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={create} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__списать_f8b7fd55")}</button>
+            <Button variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button variant="primary" onClick={create}>{t("ui__списать_f8b7fd55")}</Button>
           </div>
         </div>
       </Modal>
@@ -185,12 +191,12 @@ export default function WriteOffPage() {
         {view && (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-slate-500 dark:text-slate-400">{t("ui__дата_5c790abe")}</span> {view.head.write_off_date}</div>
-              <div><span className="text-slate-500 dark:text-slate-400">{t("ui__причина_ce28b881")}</span> {view.head.reason_name || "���"}</div>
+              <div><span className="text-ink-500 dark:text-ink-400">{t("ui__дата_5c790abe")}</span> {view.head.write_off_date}</div>
+              <div><span className="text-ink-500 dark:text-ink-400">{t("ui__причина_ce28b881")}</span> {view.head.reason_name || "���"}</div>
             </div>
-            <div className="border rounded-md max-h-72 overflow-auto">
+            <div className="border border-ink-200 dark:border-ink-700 rounded-md max-h-72 overflow-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-900/40">
+                <thead className="bg-ink-50 dark:bg-ink-900/40">
                   <tr>
                     <th className="px-3 py-2 text-left">{t("ui__товар_8b35db64")}</th>
                     <th className="px-3 py-2 text-right">{t("ui__кол_во_302e2bd6")}</th>
@@ -200,7 +206,7 @@ export default function WriteOffPage() {
                 </thead>
                 <tbody>
                   {view.items.map((i: any) => (
-                    <tr key={i.product_id} className="border-t">
+                    <tr key={i.product_id} className="border-t border-ink-100 dark:border-ink-800">
                       <td className="px-3 py-2">{i.name}</td>
                       <td className="px-3 py-2 text-right font-mono">{fmt(i.quantity)}</td>
                       <td className="px-3 py-2 text-right font-mono">{fmt(i.cost)}</td>

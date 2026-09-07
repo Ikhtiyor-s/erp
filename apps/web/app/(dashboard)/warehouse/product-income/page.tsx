@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DollarSign, Package, TrendingUp } from "lucide-react";
 import { api } from "@/lib/api";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatWidget } from "@/components/ui/stat-widget";
 import { useTranslations } from "next-intl";
 
 type Row = {
@@ -58,7 +60,7 @@ export default function ProductIncomePage() {
       align: "right",
       width: "150px",
       render: (r) => (
-        <span className="font-mono text-slate-600 dark:text-slate-400">
+        <span className="font-mono text-ink-600 dark:text-ink-400">
           {fmt(r.cost)}
         </span>
       ),
@@ -74,8 +76,8 @@ export default function ProductIncomePage() {
           <span
             className={`font-mono font-semibold ${
               v < 0
-                ? "text-red-700 dark:text-red-400"
-                : "text-green-700 dark:text-green-400"
+                ? "text-danger-700 dark:text-danger-500"
+                : "text-success-700 dark:text-success-500"
             }`}
           >
             {fmt(v)}
@@ -93,43 +95,30 @@ export default function ProductIncomePage() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card label={t("ui__выручка_2935dccf")} value={fmt(totalRevenue)} />
-        <Card
+        <StatWidget
+          label={t("ui__выручка_2935dccf")}
+          value={fmt(totalRevenue)}
+          icon={DollarSign}
+          color="brand"
+          mono
+        />
+        <StatWidget
           label={t("ui__себестоимость_cc32c68e")}
           value={fmt(totalCost)}
-          color="text-slate-600 dark:text-slate-300"
+          icon={Package}
+          color="ink"
+          mono
         />
-        <Card
+        <StatWidget
           label={t("ui__прибыль_23acc06e")}
           value={fmt(totalProfit)}
-          color={
-            totalProfit >= 0
-              ? "text-green-700 dark:text-green-400"
-              : "text-red-700 dark:text-red-400"
-          }
+          icon={TrendingUp}
+          color={totalProfit >= 0 ? "success" : "danger"}
+          mono
         />
       </div>
 
       <DataTable columns={cols} rows={rows} loading={loading} />
-    </div>
-  );
-}
-
-function Card({
-  label,
-  value,
-  color = "text-slate-900 dark:text-slate-100",
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
-  return (
-    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-4">
-      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-        {label}
-      </div>
-      <div className={`text-2xl font-bold mt-1 font-mono ${color}`}>{value}</div>
     </div>
   );
 }

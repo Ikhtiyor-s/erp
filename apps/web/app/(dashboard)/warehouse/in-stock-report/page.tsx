@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Layers, Boxes, Wallet } from "lucide-react";
 import { api } from "@/lib/api";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatWidget } from "@/components/ui/stat-widget";
 import { input } from "@/components/ui/modal";
 import { useTranslations } from "next-intl";
 
@@ -55,7 +57,7 @@ export default function InStockReportPage() {
       <PageHeader title={t("ui__отчёт_по_остаткам_424be55a")} description={t("ui__текущие_остатки_и_их_стоимость_b1ad9714")} />
 
       <div className="flex items-center gap-3">
-        <label className="text-sm text-slate-600 dark:text-slate-300">{t("ui__склад_2cd219ec")}</label>
+        <label className="text-sm text-ink-600 dark:text-ink-300">{t("ui__склад_2cd219ec")}</label>
         <select className={`${input} max-w-xs`} value={whFilter}
           onChange={(e) => {
             const v = e.target.value ? Number(e.target.value) : "";
@@ -67,12 +69,14 @@ export default function InStockReportPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        <Card label={t("ui__позиций_7366e179")} value={rows.length} />
-        <Card label={t("ui__общее_количество_6f51238e")} value={fmt(totalQty)} />
-        <Card
+        <StatWidget label={t("ui__позиций_7366e179")} value={rows.length} icon={Layers} color="ink" />
+        <StatWidget label={t("ui__общее_количество_6f51238e")} value={fmt(totalQty)} icon={Boxes} color="brand" mono />
+        <StatWidget
           label={t("ui__стоимость_остатков_7101cfdf")}
           value={totalValue.toLocaleString("ru", { maximumFractionDigits: 0 })}
-          color="text-green-600 dark:text-green-400"
+          icon={Wallet}
+          color="success"
+          mono
         />
       </div>
 
@@ -82,25 +86,6 @@ export default function InStockReportPage() {
         loading={loading}
         rowKey={(r) => `${r.warehouse_id}-${r.product_id}`}
       />
-    </div>
-  );
-}
-
-function Card({
-  label,
-  value,
-  color = "text-slate-900 dark:text-slate-100",
-}: {
-  label: string;
-  value: any;
-  color?: string;
-}) {
-  return (
-    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-4">
-      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-        {label}
-      </div>
-      <div className={`text-2xl font-bold mt-1 font-mono ${color}`}>{value}</div>
     </div>
   );
 }

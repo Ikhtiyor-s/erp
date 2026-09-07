@@ -9,6 +9,8 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 type Reason = {
   id: number;
@@ -108,13 +110,9 @@ export default function StockInReasonPage() {
       width: "100px",
       align: "center",
       render: (r) => (
-        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
-          r.is_active
-            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-            : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
-        }`}>
+        <Badge tone={r.is_active ? "success" : "neutral"}>
           {r.is_active ? t("is_active") : "—"}
-        </span>
+        </Badge>
       ),
     },
   ];
@@ -167,20 +165,12 @@ export default function StockInReasonPage() {
             </label>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setModalOpen(false)}
-              className="px-4 py-2 text-[13px] rounded-md border border-ink-300 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800"
-            >
+            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>
               {tc("cancel")}
-            </button>
-            <button
-              type="button"
-              onClick={save}
-              className="px-4 py-2 text-[13px] rounded-md bg-brand-600 text-white hover:bg-brand-700"
-            >
+            </Button>
+            <Button type="button" variant="primary" onClick={save}>
               {tc("save")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>

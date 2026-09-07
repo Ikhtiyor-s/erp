@@ -8,6 +8,9 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useTranslations } from "next-intl";
 
 type Row = {
@@ -27,6 +30,8 @@ export default function RecommendedStockPage() {
   const [whFilter, setWhFilter] = useState<number | "">("");
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [confirmItem, setConfirmItem] = useState<Row | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [whId, setWhId] = useState<number | "">("");
   const [productId, setProductId] = useState<string>("");
@@ -73,9 +78,17 @@ export default function RecommendedStockPage() {
   }
 
   async function del(r: Row) {
-    if (!confirm(`��${r.product_name}�� tavsiyasi o'chirilsinmi?`)) return;
-    await api.delete(`/warehouse/recommended-stock/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40")); load(whFilter);
+    setDeleting(true);
+    try {
+      await api.delete(`/warehouse/recommended-stock/${r.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setConfirmItem(null);
+      load(whFilter);
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const belowMinCount = rows.filter((r) => r.below_min).length;
@@ -85,7 +98,7 @@ export default function RecommendedStockPage() {
     { key: "product_name", header: t("ui__товар_8b35db64") },
     { key: "current_qty", header: t("ui__сейчас_2c2777ef"), align: "right", width: "120px",
       render: (r) => (
-        <span className={`font-mono ${r.below_min ? "text-red-600 font-semibold" : ""}`}>
+        <span className={`font-mono ${r.below_min ? "text-danger-600 dark:text-danger-500 font-semibold" : ""}`}>
           {fmt(r.current_qty)}
           {r.below_min && <AlertTriangle size={12} className="inline ml-1" />}
         </span>
@@ -94,7 +107,7 @@ export default function RecommendedStockPage() {
     { key: "min_qty", header: t("ui__минимум_96111129"), align: "right", width: "120px",
       render: (r) => <span className="font-mono">{fmt(r.min_qty)}</span> },
     { key: "max_qty", header: t("ui__максимум_81e223a9"), align: "right", width: "120px",
-      render: (r) => r.max_qty ? <span className="font-mono">{fmt(r.max_qty)}</span> : "���" },
+      render: (r) => r.max_qty ? <span className="font-mono">{fmt(r.max_qty)}</span> : "—" },
   ];
 
   return (
@@ -102,8 +115,8 @@ export default function RecommendedStockPage() {
       <PageHeader title={t("ui__рекомендуемые_остатки_0de7b400")} description={t("ui__минимальный_максимальный_запас_4d1024e5")}
         onCreate={() => setOpen(true)} createLabel={t("ui__добавить_5eba283b")} />
 
-      <div className="flex items-center gap-3">
-        <label className="text-sm text-slate-600 dark:text-slate-300">{t("ui__склад_2cd219ec")}</label>
+      <div className="flex items-center gap-3 flex-wrap">
+        <label className="text-sm text-ink-600 dark:text-ink-300">{t("ui__склад_2cd219ec")}</label>
         <select className={`${input} max-w-xs`} value={whFilter}
           onChange={(e) => {
             const v = e.target.value ? Number(e.target.value) : "";
@@ -114,13 +127,13 @@ export default function RecommendedStockPage() {
         </select>
 
         {belowMinCount > 0 && (
-          <div className="ml-auto text-sm flex items-center gap-2 text-red-600">
-            <AlertTriangle size={16} /> {t("ui__ниже_минимума_75ad865a")} <strong>{belowMinCount}</strong>
-          </div>
+          <Badge tone="danger" dot className="ml-auto">
+            {t("ui__ниже_минимума_75ad865a")} {belowMinCount}
+          </Badge>
         )}
       </div>
 
-      <DataTable columns={columns} rows={rows} loading={loading} onDelete={del} />
+      <DataTable columns={columns} rows={rows} loading={loading} onDelete={(r) => setConfirmItem(r)} />
 
       <Modal open={open} onClose={() => setOpen(false)} title={t("ui__добавить_рекомендацию_88a580b0")}>
         <div className="space-y-3">
@@ -135,12 +148,12 @@ export default function RecommendedStockPage() {
               <input className={input} placeholder={productName || "Tovar qidirish..."}
                 value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
               {productOptions.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border rounded-md shadow-lg max-h-48 overflow-auto">
+                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-ink-800 border border-ink-200 dark:border-ink-700 rounded-md shadow-lg max-h-48 overflow-auto">
                   {productOptions.map((p) => (
                     <button key={p.id}
                       onClick={() => { setProductId(p.id); setProductName(p.name); setProductSearch(p.name); setProductOptions([]); }}
-                      className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:bg-slate-900/40">
-                      {p.name}{p.sku && <span className="text-slate-400"> ({p.sku})</span>}
+                      className="block w-full text-left px-3 py-2 text-sm hover:bg-ink-50 dark:bg-ink-900/40">
+                      {p.name}{p.sku && <span className="text-ink-400"> ({p.sku})</span>}
                     </button>
                   ))}
                 </div>
@@ -158,11 +171,21 @@ export default function RecommendedStockPage() {
             </Field>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+            <Button variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button onClick={save}>{t("ui__сохранить_74ea58b6")}</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={confirmItem !== null}
+        onClose={() => setConfirmItem(null)}
+        onConfirm={() => { if (confirmItem) del(confirmItem); }}
+        title={t("ui__удалить_запись_12469355")}
+        message={`«${confirmItem?.product_name}» tavsiyasi o'chirilsinmi?`}
+        confirmLabel={t("ui__удалить_ed2bbfbc")}
+        loading={deleting}
+      />
     </div>
   );
 }

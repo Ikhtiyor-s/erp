@@ -11,6 +11,8 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useTranslations } from "next-intl";
 
 type Rack = {
@@ -129,12 +131,7 @@ function CellsSection({ rackId, tc }: { rackId: number; tc: ReturnType<typeof us
       header: t("col_active"),
       width: "90px",
       align: "center",
-      render: (c) =>
-        c.is_active ? (
-          <span className="text-xs text-emerald-700 dark:text-emerald-400">{tc("yes")}</span>
-        ) : (
-          <span className="text-xs text-rose-600 dark:text-rose-400">{tc("no")}</span>
-        ),
+      render: (c) => <Badge tone={c.is_active ? "success" : "danger"}>{c.is_active ? tc("yes") : tc("no")}</Badge>,
     },
   ];
 
@@ -144,12 +141,9 @@ function CellsSection({ rackId, tc }: { rackId: number; tc: ReturnType<typeof us
         <span className="text-xs font-semibold text-ink-500 dark:text-ink-400 uppercase tracking-wide">
           {t("title")}
         </span>
-        <button
-          onClick={openCreate}
-          className="text-xs text-brand-600 hover:text-brand-700 px-2 py-1 rounded border border-brand-200 dark:border-brand-800"
-        >
+        <Button variant="outline" size="xs" onClick={openCreate}>
           + {t("new_cell")}
-        </button>
+        </Button>
       </div>
 
       <div className="hidden md:block">
@@ -178,22 +172,21 @@ function CellsSection({ rackId, tc }: { rackId: number; tc: ReturnType<typeof us
             <div>
               <span className="font-mono text-sm text-ink-900 dark:text-ink-100">{c.code}</span>
               {!c.is_active && (
-                <span className="ml-2 text-xs text-rose-600 dark:text-rose-400">{tc("no")}</span>
+                <Badge tone="danger" className="ml-2">{tc("no")}</Badge>
               )}
             </div>
             <div className="flex gap-2 shrink-0">
-              <button
-                onClick={() => openEdit(c)}
-                className="text-xs text-brand-600 hover:text-brand-700 px-2 py-0.5 rounded border border-brand-200"
-              >
+              <Button variant="outline" size="xs" onClick={() => openEdit(c)}>
                 {tc("edit")}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                className="border-danger-500/40 text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
                 onClick={() => setConfirmCell(c)}
-                className="text-xs text-rose-600 hover:text-rose-700 px-2 py-0.5 rounded border border-rose-200"
               >
                 {tc("delete")}
-              </button>
+              </Button>
             </div>
           </li>
         ))}
@@ -224,20 +217,12 @@ function CellsSection({ rackId, tc }: { rackId: number; tc: ReturnType<typeof us
             </label>
           )}
           <div className="flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
-            <button
-              onClick={() => setModalOpen(false)}
-              disabled={saving}
-              className="px-4 py-2 text-sm rounded-md border border-ink-300 dark:border-ink-600 hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-50"
-            >
+            <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               {tc("cancel")}
-            </button>
-            <button
-              onClick={save}
-              disabled={saving}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
-            >
-              {saving ? "..." : tc("save")}
-            </button>
+            </Button>
+            <Button variant="primary" onClick={save} disabled={saving} loading={saving}>
+              {tc("save")}
+            </Button>
           </div>
         </div>
       </Modal>
@@ -422,18 +407,17 @@ export default function WarehouseRacksPage() {
                 {tc_cells("expand_cells")}
               </span>
               <div className="flex gap-1 shrink-0">
-                <button
-                  onClick={() => openEdit(r)}
-                  className="text-xs text-brand-600 hover:text-brand-700 px-2 py-1 rounded border border-brand-200 dark:border-brand-800"
-                >
+                <Button variant="outline" size="xs" onClick={() => openEdit(r)}>
                   {tc("edit")}
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  className="border-danger-500/40 text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
                   onClick={() => setConfirmItem(r)}
-                  className="text-xs text-rose-600 hover:text-rose-700 px-2 py-1 rounded border border-rose-200 dark:border-rose-800"
                 >
                   {tc("delete")}
-                </button>
+                </Button>
               </div>
             </div>
             {expandedRackId === r.id && (
@@ -466,18 +450,17 @@ export default function WarehouseRacksPage() {
                 </p>
               </div>
               <div className="flex gap-2 shrink-0">
-                <button
-                  onClick={() => openEdit(r)}
-                  className="text-xs text-brand-600 hover:text-brand-700 px-2 py-1 rounded border border-brand-200"
-                >
+                <Button variant="outline" size="xs" onClick={() => openEdit(r)}>
                   {tc("edit")}
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  className="border-danger-500/40 text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
                   onClick={() => setConfirmItem(r)}
-                  className="text-xs text-rose-600 hover:text-rose-700 px-2 py-1 rounded border border-rose-200"
                 >
                   {tc("delete")}
-                </button>
+                </Button>
               </div>
             </div>
             <button
@@ -520,20 +503,12 @@ export default function WarehouseRacksPage() {
             />
           </Field>
           <div className="flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
-            <button
-              onClick={() => setModalOpen(false)}
-              disabled={saving}
-              className="px-4 py-2 text-sm rounded-md border border-ink-300 dark:border-ink-600 hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-50"
-            >
+            <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               {tc("cancel")}
-            </button>
-            <button
-              onClick={save}
-              disabled={saving}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
-            >
-              {saving ? "..." : tc("save")}
-            </button>
+            </Button>
+            <Button variant="primary" onClick={save} disabled={saving} loading={saving}>
+              {tc("save")}
+            </Button>
           </div>
         </div>
       </Modal>

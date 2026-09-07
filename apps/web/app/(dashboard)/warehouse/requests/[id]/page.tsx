@@ -8,6 +8,9 @@ import { ArrowLeft, CheckCircle2, XCircle, Clock, Package } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type RequestItem = {
   id: number;
@@ -41,11 +44,11 @@ const STATUS_KEYS: Record<string, string> = {
   fulfilled: "status_fulfilled",
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
-  approved: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
-  rejected: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400",
-  fulfilled: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400",
+const STATUS_TONE: Record<string, "warning" | "success" | "danger" | "info"> = {
+  pending: "warning",
+  approved: "success",
+  rejected: "danger",
+  fulfilled: "info",
 };
 
 export default function RequestDetailPage() {
@@ -102,13 +105,10 @@ export default function RequestDetailPage() {
   if (error || !detail) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3">
-        <p className="text-rose-600 dark:text-rose-400 text-sm">{error ?? t("load_error")}</p>
-        <button
-          onClick={() => router.push("/warehouse/requests")}
-          className="text-sm text-brand-600 hover:text-brand-700"
-        >
+        <p className="text-danger-600 dark:text-danger-500 text-sm">{error ?? t("load_error")}</p>
+        <Button variant="ghost" size="sm" onClick={() => router.push("/warehouse/requests")}>
           {tc("back")}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -116,48 +116,40 @@ export default function RequestDetailPage() {
   return (
     <div className="space-y-5 max-w-4xl">
       <div className="flex items-center gap-3">
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={ArrowLeft}
           onClick={() => router.push("/warehouse/requests")}
-          className="p-1.5 rounded-md hover:bg-ink-100 dark:hover:bg-ink-800 text-ink-500 dark:text-ink-400 transition-colors"
           aria-label={tc("back")}
-        >
-          <ArrowLeft size={16} />
-        </button>
+        />
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-[clamp(15px,2vw,17px)] font-semibold text-ink-900 dark:text-ink-50 tracking-tight font-mono">
               {detail.doc_number}
             </h1>
-            <span
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${STATUS_COLORS[detail.status] ?? ""}`}
-            >
+            <Badge tone={STATUS_TONE[detail.status] ?? "neutral"}>
               {detail.status === "pending" && <Clock size={10} />}
               {detail.status === "approved" && <CheckCircle2 size={10} />}
               {detail.status === "rejected" && <XCircle size={10} />}
               {detail.status === "fulfilled" && <Package size={10} />}
               {t(STATUS_KEYS[detail.status] ?? "status_unknown")}
-            </span>
+            </Badge>
           </div>
         </div>
         {detail.status === "pending" && (
           <div className="flex gap-2 shrink-0">
-            <button
-              onClick={() => setConfirmAction("approve")}
-              className="px-3 py-1.5 text-sm rounded-md bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
-            >
+            <Button variant="success" size="sm" onClick={() => setConfirmAction("approve")}>
               {t("approve")}
-            </button>
-            <button
-              onClick={() => setConfirmAction("reject")}
-              className="px-3 py-1.5 text-sm rounded-md bg-rose-600 hover:bg-rose-700 text-white transition-colors"
-            >
+            </Button>
+            <Button variant="danger" size="sm" onClick={() => setConfirmAction("reject")}>
               {t("reject")}
-            </button>
+            </Button>
           </div>
         )}
       </div>
 
-      <div className="bg-white dark:bg-ink-950 rounded-md border border-ink-200/60 dark:border-ink-800/60 p-4">
+      <Card padding="md">
         <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
           <div>
             <dt className="text-[11px] text-ink-400 dark:text-ink-500 font-medium uppercase tracking-wider mb-0.5">
@@ -204,9 +196,9 @@ export default function RequestDetailPage() {
             </div>
           )}
         </dl>
-      </div>
+      </Card>
 
-      <div className="bg-white dark:bg-ink-950 rounded-md border border-ink-200/60 dark:border-ink-800/60 overflow-hidden">
+      <Card padding="none">
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
@@ -230,7 +222,7 @@ export default function RequestDetailPage() {
                     </td>
                     <td
                       className={`px-3 py-2 text-right font-mono font-medium ${
-                        exceedsSnapshot ? "text-rose-600 dark:text-rose-400" : ""
+                        exceedsSnapshot ? "text-danger-600 dark:text-danger-500" : ""
                       }`}
                     >
                       {parseFloat(item.qty_requested).toLocaleString()}
@@ -254,7 +246,7 @@ export default function RequestDetailPage() {
                   </span>
                   <span
                     className={`font-mono font-medium ${
-                      exceedsSnapshot ? "text-rose-600 dark:text-rose-400" : "text-ink-700 dark:text-ink-300"
+                      exceedsSnapshot ? "text-danger-600 dark:text-danger-500" : "text-ink-700 dark:text-ink-300"
                     }`}
                   >
                     {t("qty_requested")}: {parseFloat(item.qty_requested).toLocaleString()}
@@ -264,7 +256,7 @@ export default function RequestDetailPage() {
             );
           })}
         </ul>
-      </div>
+      </Card>
 
       <ConfirmDialog
         open={confirmAction === "approve"}

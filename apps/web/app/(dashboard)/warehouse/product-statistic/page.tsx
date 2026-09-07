@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Layers, TrendingUp, Package } from "lucide-react";
 import { api } from "@/lib/api";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatWidget } from "@/components/ui/stat-widget";
 import { useTranslations } from "next-intl";
 
 type Row = {
@@ -50,7 +52,7 @@ export default function ProductStatisticPage() {
       align: "right",
       width: "130px",
       render: (r) => (
-        <span className="font-mono text-green-700 dark:text-green-400">
+        <span className="font-mono text-success-700 dark:text-success-500">
           {fmt(r.sold_qty)}
         </span>
       ),
@@ -83,31 +85,12 @@ export default function ProductStatisticPage() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card label={t("ui__позиций_7366e179")} value={String(rows.length)} />
-        <Card label={t("ui__продано_всего_22de79fe")} value={fmt(totalSold)} color="text-green-700 dark:text-green-400" />
-        <Card label={t("ui__остаток_всего_9c5cd796")} value={fmt(totalStock)} color="text-brand-700 dark:text-brand-400" />
+        <StatWidget label={t("ui__позиций_7366e179")} value={rows.length} icon={Layers} color="ink" />
+        <StatWidget label={t("ui__продано_всего_22de79fe")} value={fmt(totalSold)} icon={TrendingUp} color="success" mono />
+        <StatWidget label={t("ui__остаток_всего_9c5cd796")} value={fmt(totalStock)} icon={Package} color="brand" mono />
       </div>
 
       <DataTable columns={cols} rows={rows} loading={loading} />
-    </div>
-  );
-}
-
-function Card({
-  label,
-  value,
-  color = "text-slate-900 dark:text-slate-100",
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
-  return (
-    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-4">
-      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-        {label}
-      </div>
-      <div className={`text-2xl font-bold mt-1 font-mono ${color}`}>{value}</div>
     </div>
   );
 }

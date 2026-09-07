@@ -8,6 +8,8 @@ import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 
 type InventoryStatus =
@@ -49,13 +51,13 @@ type ScanEvent = {
 
 type Product = { id: string; name: string; sku?: string };
 
-const STATUS_COLORS: Record<InventoryStatus, string> = {
-  draft: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  in_progress: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  paused: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-  pending_confirmation: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
-  completed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-  cancelled: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
+const STATUS_TONE: Record<InventoryStatus, "neutral" | "warning" | "info" | "purple" | "success" | "danger"> = {
+  draft: "neutral",
+  in_progress: "warning",
+  paused: "info",
+  pending_confirmation: "purple",
+  completed: "success",
+  cancelled: "danger",
 };
 
 const fmt = (v: string | number | null | undefined) =>
@@ -212,36 +214,27 @@ export default function InventoryDetailPage() {
 
   if (!head) {
     return (
-      <div className="flex items-center justify-center h-48 text-rose-500">
+      <div className="flex items-center justify-center h-48 text-danger-500">
         {t("detail_error")}
       </div>
     );
   }
 
   const statusLabel = t(`status_${head.status}` as Parameters<typeof t>[0]);
-  const statusClass = STATUS_COLORS[head.status] ?? STATUS_COLORS.draft;
+  const statusTone = STATUS_TONE[head.status] ?? STATUS_TONE.draft;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.back()}
-          className="p-1.5 rounded hover:bg-ink-100 dark:hover:bg-ink-800 text-ink-500"
-        >
-          <ArrowLeft size={18} />
-        </button>
+        <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={() => router.back()} />
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-lg font-semibold truncate">
               {head.doc_number || id.slice(0, 8)}
             </h1>
-            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${statusClass}`}>
-              {statusLabel}
-            </span>
+            <Badge tone={statusTone}>{statusLabel}</Badge>
             {head.blind_count && (
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
-                {t("blind_count_badge")}
-              </span>
+              <Badge tone="neutral">{t("blind_count_badge")}</Badge>
             )}
           </div>
           <p className="text-sm text-ink-500 dark:text-ink-400 mt-0.5">
@@ -253,76 +246,94 @@ export default function InventoryDetailPage() {
       {!isReadOnly && (
         <div className="flex flex-wrap gap-2">
           {head.status === "draft" && (
-            <button
+            <Button
+              variant="primary"
+              size="sm"
+              icon={Play}
               disabled={actionLoading}
               onClick={() => doAction("start", "started_ok")}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
             >
-              <Play size={14} /> {t("action_start")}
-            </button>
+              {t("action_start")}
+            </Button>
           )}
           {head.status === "in_progress" && (
             <>
-              <button
+              <Button
+                variant="outline"
+                size="sm"
+                icon={Pause}
                 disabled={actionLoading}
                 onClick={() => doAction("pause", "paused_ok")}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-ink-300 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-50"
               >
-                <Pause size={14} /> {t("action_pause")}
-              </button>
-              <button
+                {t("action_pause")}
+              </Button>
+              <Button
+                variant="warning"
+                size="sm"
+                icon={CheckCircle}
                 disabled={actionLoading}
                 onClick={() => doAction("submit", "submitted_ok")}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
               >
-                <CheckCircle size={14} /> {t("action_submit")}
-              </button>
+                {t("action_submit")}
+              </Button>
             </>
           )}
           {head.status === "paused" && (
             <>
-              <button
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Play}
                 disabled={actionLoading}
                 onClick={() => doAction("resume", "resumed_ok")}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
               >
-                <Play size={14} /> {t("action_resume")}
-              </button>
-              <button
+                {t("action_resume")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                icon={XCircle}
+                className="border-danger-500/40 text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
                 disabled={actionLoading}
                 onClick={() => setCancelOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-rose-300 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:opacity-50"
               >
-                <XCircle size={14} /> {t("action_cancel")}
-              </button>
+                {t("action_cancel")}
+              </Button>
             </>
           )}
           {head.status === "pending_confirmation" && (
             <>
-              <button
+              <Button
+                variant="success"
+                size="sm"
+                icon={CheckCircle}
                 disabled={actionLoading}
                 onClick={() => setConfirmOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
               >
-                <CheckCircle size={14} /> {t("action_confirm")}
-              </button>
-              <button
+                {t("action_confirm")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                icon={RotateCcw}
                 disabled={actionLoading}
                 onClick={() => setRejectOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-ink-300 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-50"
               >
-                <RotateCcw size={14} /> {t("action_reject")}
-              </button>
+                {t("action_reject")}
+              </Button>
             </>
           )}
           {(head.status === "draft" || head.status === "in_progress") && (
-            <button
+            <Button
+              variant="outline"
+              size="sm"
+              icon={XCircle}
+              className="border-danger-500/40 text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
               disabled={actionLoading}
               onClick={() => setCancelOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-rose-300 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:opacity-50"
             >
-              <XCircle size={14} /> {t("action_cancel")}
-            </button>
+              {t("action_cancel")}
+            </Button>
           )}
         </div>
       )}
@@ -344,7 +355,7 @@ export default function InventoryDetailPage() {
         {items.length > 0 && (
           <div className="mt-2 h-2 rounded-full bg-ink-200 dark:bg-ink-700 overflow-hidden">
             <div
-              className="h-full rounded-full bg-emerald-500 transition-all"
+              className="h-full rounded-full bg-success-500 transition-all"
               style={{ width: `${(countedItems / items.length) * 100}%` }}
             />
           </div>
@@ -355,12 +366,9 @@ export default function InventoryDetailPage() {
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-semibold">{t("items_title")}</h2>
           {canScan && (
-            <button
-              onClick={openScanModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
-            >
-              <Plus size={14} /> {t("scan_add")}
-            </button>
+            <Button variant="primary" size="sm" icon={Plus} onClick={openScanModal}>
+              {t("scan_add")}
+            </Button>
           )}
         </div>
 
@@ -383,10 +391,10 @@ export default function InventoryDetailPage() {
                   const diff = Number(item.diff_qty);
                   const diffClass =
                     diff < 0
-                      ? "text-rose-600 dark:text-rose-400"
+                      ? "text-danger-600 dark:text-danger-500"
                       : diff > 0
-                      ? "text-amber-600 dark:text-amber-400"
-                      : "text-zinc-400";
+                      ? "text-warn-600 dark:text-warn-500"
+                      : "text-ink-400";
                   return (
                     <tr key={item.product_id} className="border-t hover:bg-ink-50/50 dark:hover:bg-ink-900/20">
                       <td className="px-3 py-2 font-medium">{item.product_name}</td>
@@ -402,13 +410,13 @@ export default function InventoryDetailPage() {
                         </td>
                       )}
                       <td className="px-3 py-2 text-center">
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          icon={History}
                           onClick={() => openScanHistory(item)}
                           title={t("scan_history")}
-                          className="p-1 rounded hover:bg-ink-100 dark:hover:bg-ink-800 text-ink-400"
-                        >
-                          <History size={14} />
-                        </button>
+                        />
                       </td>
                     </tr>
                   );
@@ -423,20 +431,20 @@ export default function InventoryDetailPage() {
             const diff = Number(item.diff_qty);
             const diffClass =
               diff < 0
-                ? "text-rose-600"
+                ? "text-danger-600"
                 : diff > 0
-                ? "text-amber-600"
-                : "text-zinc-400";
+                ? "text-warn-600"
+                : "text-ink-400";
             return (
               <li key={item.product_id} className="border rounded-md px-3 py-3 space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-sm">{item.product_name}</span>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    icon={History}
                     onClick={() => openScanHistory(item)}
-                    className="p-1 rounded hover:bg-ink-100 dark:hover:bg-ink-800 text-ink-400"
-                  >
-                    <History size={14} />
-                  </button>
+                  />
                 </div>
                 <div className="flex gap-4 text-xs text-ink-500 dark:text-ink-400">
                   {!head.blind_count && (
@@ -535,13 +543,14 @@ export default function InventoryDetailPage() {
                     <td className="px-3 py-2 text-ink-400 text-xs">{ev.device_id ?? "—"}</td>
                     <td className="px-3 py-2 text-center">
                       {canScan && (
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          icon={Trash2}
                           onClick={() => setUndoTarget(ev)}
-                          className="p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 text-rose-500"
                           title={t("scan_undo")}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                          className="text-danger-500 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-500/15"
+                        />
                       )}
                     </td>
                   </tr>
@@ -617,21 +626,18 @@ export default function InventoryDetailPage() {
           </Field>
 
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setScanModalOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-ink-300 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800"
-            >
+            <Button type="button" variant="outline" onClick={() => setScanModalOpen(false)}>
               {t("action_cancel")}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="primary"
               disabled={scanSaving}
+              loading={scanSaving}
               onClick={submitScan}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
             >
-              {scanSaving ? "..." : t("scan_save_btn")}
-            </button>
+              {t("scan_save_btn")}
+            </Button>
           </div>
         </div>
       </Modal>

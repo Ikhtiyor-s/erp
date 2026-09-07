@@ -54,7 +54,7 @@ export default function StockPage() {
       <PageHeader title={t("ui__остатки_товаров_1b243158")} description={t("ui__текущие_остатки_по_складам_4345ea9c")} />
 
       <div className="flex items-center gap-3">
-        <label className="text-sm text-slate-600 dark:text-slate-300">{t("ui__склад_2cd219ec")}</label>
+        <label className="text-sm text-ink-600 dark:text-ink-300">{t("ui__склад_2cd219ec")}</label>
         <select className={`${input} max-w-xs`} value={whFilter || ""}
           onChange={(e) => {
             const v = e.target.value ? Number(e.target.value) : null;
@@ -65,7 +65,7 @@ export default function StockPage() {
         </select>
 
         <div className="ml-auto text-sm">
-          <span className="text-slate-500 dark:text-slate-400">{t("ui__общая_стоимость_остатков_a8667b78")} </span>
+          <span className="text-ink-500 dark:text-ink-400">{t("ui__общая_стоимость_остатков_a8667b78")} </span>
           <span className="font-semibold">{totalValue.toLocaleString("ru", { maximumFractionDigits: 0 })}</span>
         </div>
       </div>

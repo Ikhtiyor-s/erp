@@ -8,7 +8,9 @@ import { Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
-import { Modal, Field, input } from "@/components/ui/modal";
+import { Field, input } from "@/components/ui/modal";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 type Warehouse = { id: number; name: string };
 type Reason = { id: number; name: string; code: string | null; is_active: boolean };
@@ -102,7 +104,7 @@ export default function StockInNewPage() {
     <div className="space-y-6 max-w-4xl">
       <PageHeader title={t("create")} />
 
-      <div className="bg-white dark:bg-ink-950 rounded-md border border-ink-200/60 dark:border-ink-800/60 p-5 space-y-4">
+      <Card padding="lg" className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label={t("warehouse_label")} required>
             <select
@@ -145,9 +147,9 @@ export default function StockInNewPage() {
             placeholder={t("notes_placeholder")}
           />
         </Field>
-      </div>
+      </Card>
 
-      <div className="bg-white dark:bg-ink-950 rounded-md border border-ink-200/60 dark:border-ink-800/60 p-5 space-y-4">
+      <Card padding="lg" className="space-y-4">
         <h2 className="text-[14px] font-semibold text-ink-800 dark:text-ink-100">{t("items")}</h2>
 
         <div className="relative">
@@ -212,13 +214,14 @@ export default function StockInNewPage() {
                         />
                       </td>
                       <td className="px-2 py-1 text-center">
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
+                          size="xs"
+                          icon={Trash2}
                           onClick={() => removeItem(idx)}
-                          className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                          className="text-danger-500 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-500/15"
+                        />
                       </td>
                     </tr>
                   ))}
@@ -231,24 +234,25 @@ export default function StockInNewPage() {
         {items.length === 0 && (
           <p className="text-[13px] text-ink-400 dark:text-ink-600">{t("validation_items")}</p>
         )}
-      </div>
+      </Card>
 
       <div className="flex gap-2 justify-end">
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={() => router.push("/warehouse/stock-in")}
-          className="px-4 py-2 text-[13px] rounded-md border border-ink-300 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800"
         >
           {t("cancel_label")}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="primary"
           onClick={save}
           disabled={saving}
-          className="px-4 py-2 text-[13px] rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
+          loading={saving}
         >
-          {saving ? t("loading") : t("btn_save_draft")}
-        </button>
+          {t("btn_save_draft")}
+        </Button>
       </div>
     </div>
   );
