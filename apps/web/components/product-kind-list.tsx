@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
 import { useTranslations } from "next-intl";
 
 type Product = {
@@ -108,14 +109,14 @@ export function ProductKindList({
     <div className="space-y-6">
       <PageHeader title={title} description={description} />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 flex gap-3 items-end">
+      <Card className="flex gap-3 items-end">
         <div className="relative flex-1 max-w-md">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_bfc95980")}
           </label>
           <Search
             size={14}
-            className="absolute left-2.5 top-[34px] text-slate-400"
+            className="absolute left-2.5 top-[34px] text-ink-400"
           />
           <input
             className={`${input} pl-8`}
@@ -131,16 +132,16 @@ export function ProductKindList({
         >
           {t("ui__фильтр_2f884b41")}
         </button>
-        <div className="ml-auto text-xs text-slate-500 dark:text-slate-400">
+        <div className="ml-auto text-xs text-ink-500 dark:text-ink-400">
           Всего:{" "}
-          <span className="font-semibold text-slate-900 dark:text-slate-100">
+          <span className="font-semibold text-ink-900 dark:text-ink-100">
             {rows.length}
           </span>
         </div>
-      </div>
+      </Card>
 
       <DataTable columns={columns} rows={rows} loading={loading} />
-      <p className="text-xs text-slate-400 dark:text-slate-500">
+      <p className="text-xs text-ink-400 dark:text-ink-500">
         Управление товарами — на странице{" "}
         <a href="/warehouse/products" className="text-brand-600 dark:text-brand-400 hover:underline">
           /warehouse/products

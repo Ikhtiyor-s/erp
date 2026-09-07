@@ -432,7 +432,7 @@ export function LabelPrint({
         </div>
 
         {pdfError && (
-          <p className="text-[12px] text-rose-600 dark:text-rose-400">
+          <p className="text-[12px] text-danger-600 dark:text-danger-500">
             {pdfError}
           </p>
         )}

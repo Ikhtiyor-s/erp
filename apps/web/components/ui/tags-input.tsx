@@ -49,7 +49,7 @@ export function TagsInput({ value, onChange }: Props) {
           return (
             <button key={t.id} type="button" onClick={() => toggle(t.id)}
               className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border ${
-                active ? "text-white border-transparent" : "border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300"
+                active ? "text-white border-transparent" : "border-ink-300 dark:border-ink-600 text-ink-600 dark:text-ink-300"
               }`}
               style={active ? { backgroundColor: t.color } : {}}>
               {t.name}
@@ -59,7 +59,7 @@ export function TagsInput({ value, onChange }: Props) {
         })}
         {!creating && (
           <button type="button" onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:text-slate-700">
+            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-dashed border-ink-300 dark:border-ink-600 text-ink-500 hover:text-ink-700">
             <Plus size={11} /> Yangi tag
           </button>
         )}
@@ -69,13 +69,13 @@ export function TagsInput({ value, onChange }: Props) {
           <input value={newName} onChange={(e) => setNewName(e.target.value)}
             placeholder="Tag nomi" autoFocus
             onKeyDown={(e) => e.key === "Enter" && createTag()}
-            className="px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900" />
+            className="px-2 py-1 text-xs border border-ink-300 dark:border-ink-600 rounded bg-white dark:bg-ink-900" />
           <input type="color" value={newColor} onChange={(e) => setNewColor(e.target.value)}
             className="w-7 h-7 rounded border-none" />
           <button type="button" onClick={createTag}
             className="text-xs px-2 py-1 bg-brand-600 text-white rounded">Saqlash</button>
           <button type="button" onClick={() => setCreating(false)}
-            className="text-xs px-2 py-1 text-slate-500">Bekor</button>
+            className="text-xs px-2 py-1 text-ink-500">Bekor</button>
         </div>
       )}
     </div>

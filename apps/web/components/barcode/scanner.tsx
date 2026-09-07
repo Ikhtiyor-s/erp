@@ -201,14 +201,14 @@ export function BarcodeScanner({
   if (permission === "denied") {
     return (
       <div
-        className={`flex flex-col items-center justify-center bg-zinc-900 text-white p-8 rounded-xl min-h-[300px] ${className ?? ""}`}
+        className={`flex flex-col items-center justify-center bg-ink-900 text-white p-8 rounded-xl min-h-[300px] ${className ?? ""}`}
       >
-        <X size={40} className="mb-4 text-rose-400" />
+        <X size={40} className="mb-4 text-danger-500" />
         <p className="text-center text-sm font-medium mb-2">{t("scanner_permission_denied")}</p>
-        <p className="text-center text-xs text-zinc-400 mb-4">{t("scanner_permission_hint")}</p>
+        <p className="text-center text-xs text-ink-400 mb-4">{t("scanner_permission_hint")}</p>
         <a
           href="app-settings:"
-          className="text-xs underline text-zinc-300 flex items-center min-h-[44px]"
+          className="text-xs underline text-ink-300 flex items-center min-h-[44px]"
         >
           {t("scanner_open_settings")}
         </a>
@@ -219,9 +219,9 @@ export function BarcodeScanner({
   if (permission === "error") {
     return (
       <div
-        className={`flex flex-col items-center justify-center bg-zinc-900 text-white p-8 rounded-xl min-h-[300px] ${className ?? ""}`}
+        className={`flex flex-col items-center justify-center bg-ink-900 text-white p-8 rounded-xl min-h-[300px] ${className ?? ""}`}
       >
-        <X size={40} className="mb-4 text-rose-400" />
+        <X size={40} className="mb-4 text-danger-500" />
         <p className="text-center text-sm">{t("scanner_camera_error")}</p>
       </div>
     );
@@ -240,11 +240,11 @@ export function BarcodeScanner({
       <div className="absolute inset-0 pointer-events-none">
         <div
           aria-hidden
-          className={`absolute inset-0 transition-opacity duration-150 ${flash ? "opacity-25 bg-emerald-400" : "opacity-0"}`}
+          className={`absolute inset-0 transition-opacity duration-150 ${flash ? "opacity-25 bg-success-500" : "opacity-0"}`}
         />
         <div className="absolute inset-0 flex items-center justify-center">
           <div
-            className={`border-2 rounded-2xl w-64 h-32 transition-colors duration-150 ${flash ? "border-emerald-400" : "border-white/70"}`}
+            className={`border-2 rounded-2xl w-64 h-32 transition-colors duration-150 ${flash ? "border-success-500" : "border-white/70"}`}
           />
         </div>
       </div>

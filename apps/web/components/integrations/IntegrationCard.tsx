@@ -15,10 +15,10 @@ interface Props {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  active: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-  configured: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  not_configured: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
-  error: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  active: "bg-success-50 dark:bg-success-500/15 text-success-700 dark:text-success-500",
+  configured: "bg-info-50 dark:bg-info-500/15 text-info-700 dark:text-info-500",
+  not_configured: "bg-ink-100 dark:bg-ink-800 text-ink-600 dark:text-ink-400",
+  error: "bg-warn-50 dark:bg-warn-500/15 text-warn-700 dark:text-warn-500",
 };
 
 export function IntegrationCard({ integration, onToggle, settingsUrl }: Props) {
@@ -48,7 +48,7 @@ export function IntegrationCard({ integration, onToggle, settingsUrl }: Props) {
   }
 
   return (
-    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
+    <div className="bg-white dark:bg-ink-900 border border-ink-200 dark:border-ink-800 rounded-xl p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-ink-900 dark:text-ink-50 text-[clamp(13px,1.8vw,14px)] truncate">
@@ -71,7 +71,7 @@ export function IntegrationCard({ integration, onToggle, settingsUrl }: Props) {
         </p>
       )}
 
-      <div className="flex items-center justify-between gap-2 mt-auto pt-2 border-t border-slate-100 dark:border-slate-700">
+      <div className="flex items-center justify-between gap-2 mt-auto pt-2 border-t border-ink-100 dark:border-ink-700">
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -80,7 +80,7 @@ export function IntegrationCard({ integration, onToggle, settingsUrl }: Props) {
             onChange={handleToggle}
             aria-label={integration.name}
           />
-          <div className="w-9 h-5 bg-slate-200 dark:bg-slate-600 peer-checked:bg-brand-600 rounded-full relative transition-colors after:absolute after:top-0.5 after:left-0.5 after:bg-white after:w-4 after:h-4 after:rounded-full after:transition-all peer-checked:after:translate-x-4" />
+          <div className="w-9 h-5 bg-ink-200 dark:bg-ink-600 peer-checked:bg-brand-600 rounded-full relative transition-colors after:absolute after:top-0.5 after:left-0.5 after:bg-white after:w-4 after:h-4 after:rounded-full after:transition-all peer-checked:after:translate-x-4" />
           <span className="text-xs text-ink-600 dark:text-ink-400">
             {integration.enabled ? t("enabled") : t("disabled")}
           </span>

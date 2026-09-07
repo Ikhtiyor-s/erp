@@ -77,7 +77,7 @@ export function BarcodeScanner({ open, onClose, onDetect }: Props) {
           <div className="border-2 border-white/70 rounded-2xl w-64 h-32" />
         </div>
         {error && (
-          <div className="p-3 bg-rose-600 text-white text-sm text-center">{error}</div>
+          <div className="p-3 bg-danger-600 text-white text-sm text-center">{error}</div>
         )}
       </div>
     </div>

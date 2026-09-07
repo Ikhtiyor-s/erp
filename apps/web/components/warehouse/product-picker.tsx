@@ -267,8 +267,8 @@ export function ProductPicker({
                       <span
                         className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${
                           p.on_hand > 0
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                            : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
+                            ? "bg-success-50 dark:bg-success-500/15 text-success-700 dark:text-success-500"
+                            : "bg-danger-50 dark:bg-danger-500/15 text-danger-700 dark:text-danger-500"
                         }`}
                       >
                         {p.on_hand.toLocaleString("ru-RU", { maximumFractionDigits: 3 })}
@@ -277,7 +277,7 @@ export function ProductPicker({
                     <td className="px-3 py-2 text-ink-500 dark:text-ink-400">{p.unit_name}</td>
                     <td className="px-3 py-2 text-right">
                       {isSelected ? (
-                        <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-[12px]">
+                        <span className="inline-flex items-center gap-1 text-success-600 dark:text-success-500 text-[12px]">
                           <Check size={14} />
                           {t("added")}
                         </span>
@@ -328,8 +328,8 @@ export function ProductPicker({
                   <span
                     className={`shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${
                       p.on_hand > 0
-                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                        : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
+                        ? "bg-success-50 dark:bg-success-500/15 text-success-700 dark:text-success-500"
+                        : "bg-danger-50 dark:bg-danger-500/15 text-danger-700 dark:text-danger-500"
                     }`}
                   >
                     {p.on_hand.toLocaleString("ru-RU", { maximumFractionDigits: 3 })} {p.unit_name}
@@ -340,7 +340,7 @@ export function ProductPicker({
                 )}
                 <div>
                   {isSelected ? (
-                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-[12px]">
+                    <span className="inline-flex items-center gap-1 text-success-600 dark:text-success-500 text-[12px]">
                       <Check size={13} />
                       {t("added")}
                     </span>

@@ -241,7 +241,7 @@ export function MxikCombobox({ value, onChange }: MxikComboboxProps) {
           )}
 
           {error && (
-            <li className="px-3 py-2 text-sm text-rose-600 dark:text-rose-400 select-none">{error}</li>
+            <li className="px-3 py-2 text-sm text-danger-600 dark:text-danger-500 select-none">{error}</li>
           )}
         </ul>
       )}

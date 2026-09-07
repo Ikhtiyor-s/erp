@@ -360,7 +360,7 @@ export function BomEditorModal({ open, onClose, productId, productName }: Props)
                                   type="button"
                                   onClick={handleEdit}
                                   disabled={editSaving}
-                                  className="p-1 rounded text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950 disabled:opacity-50"
+                                  className="p-1 rounded text-success-600 hover:bg-success-50 dark:hover:bg-success-500/15 disabled:opacity-50"
                                   aria-label={tc("save")}
                                 >
                                   {editSaving ? (
@@ -407,7 +407,7 @@ export function BomEditorModal({ open, onClose, productId, productName }: Props)
                                 <button
                                   type="button"
                                   onClick={() => setDeleteTarget(row)}
-                                  className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950"
+                                  className="p-1 rounded text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
                                   aria-label={tc("delete")}
                                 >
                                   <Trash2 size={13} />
@@ -456,7 +456,7 @@ export function BomEditorModal({ open, onClose, productId, productName }: Props)
                         <button
                           type="button"
                           onClick={() => setDeleteTarget(row)}
-                          className="text-xs text-rose-600 hover:text-rose-700"
+                          className="text-xs text-danger-600 hover:text-danger-700"
                         >
                           {tc("delete")}
                         </button>

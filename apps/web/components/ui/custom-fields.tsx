@@ -59,8 +59,8 @@ export function CustomFieldsEditor({ entityType, entityId, onChange }: Props) {
   if (fields.length === 0) return null;
 
   return (
-    <div className="col-span-2 grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
-      <div className="col-span-2 text-xs font-semibold text-slate-500 uppercase">Qo'shimcha maydonlar</div>
+    <div className="col-span-2 grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-ink-200 dark:border-ink-700">
+      <div className="col-span-2 text-xs font-semibold text-ink-500 uppercase">Qo'shimcha maydonlar</div>
       {fields.map((f) => (
         <Field key={f.field_id} label={f.name}>
           {f.field_type === "text" && (
