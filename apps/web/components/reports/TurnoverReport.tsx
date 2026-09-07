@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, ArrowDownCircle, ArrowUpCircle, Scale } from "lucide-react";
 import { api } from "@/lib/api";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
 import { input } from "@/components/ui/modal";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { StatWidget } from "@/components/ui/stat-widget";
 import { useTranslations } from "next-intl";
 
 type Row = {
@@ -82,7 +85,7 @@ export function TurnoverReport({
       align: "right",
       width: "110px",
       render: (r) => (
-        <span className="font-mono text-slate-700 dark:text-slate-300">
+        <span className="font-mono text-ink-700 dark:text-ink-300">
           {r.cnt}
         </span>
       ),
@@ -93,7 +96,7 @@ export function TurnoverReport({
       align: "right",
       width: "160px",
       render: (r) => (
-        <span className="font-mono text-green-700 dark:text-green-400">
+        <span className="font-mono text-success-700 dark:text-success-500">
           {fmt(r.total_in)}
         </span>
       ),
@@ -104,7 +107,7 @@ export function TurnoverReport({
       align: "right",
       width: "160px",
       render: (r) => (
-        <span className="font-mono text-red-700 dark:text-red-400">
+        <span className="font-mono text-danger-700 dark:text-danger-500">
           {fmt(r.total_out)}
         </span>
       ),
@@ -120,10 +123,10 @@ export function TurnoverReport({
           <span
             className={`font-mono font-semibold ${
               v < 0
-                ? "text-red-700 dark:text-red-400"
+                ? "text-danger-700 dark:text-danger-500"
                 : v > 0
-                ? "text-green-700 dark:text-green-400"
-                : "text-slate-500 dark:text-slate-400"
+                ? "text-success-700 dark:text-success-500"
+                : "text-ink-500 dark:text-ink-400"
             }`}
           >
             {fmt(v)}
@@ -137,14 +140,14 @@ export function TurnoverReport({
     <div className="space-y-6">
       <PageHeader title={title} description={description} />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <Card className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="sm:col-span-2 relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_bfc95980")}
           </label>
           <Search
             size={14}
-            className="absolute left-2.5 top-[34px] text-slate-400"
+            className="absolute left-2.5 top-[34px] text-ink-400"
           />
           <input
             className={`${input} pl-8`}
@@ -154,7 +157,7 @@ export function TurnoverReport({
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__с_даты_09fc6619")}
           </label>
           <input
@@ -165,7 +168,7 @@ export function TurnoverReport({
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__по_дату_760bcfc8")}
           </label>
           <input
@@ -176,34 +179,33 @@ export function TurnoverReport({
           />
         </div>
         <div className="col-span-4 flex justify-end">
-          <button
-            onClick={load}
-            className="px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
-          >
+          <Button onClick={load}>
             {t("ui__показать_2a175c27")}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card
+        <StatWidget
           label={t("ui__приход_ebf29487")}
           value={fmt(totalIn)}
-          color="text-green-700 dark:text-green-400"
+          icon={ArrowDownCircle}
+          color="success"
+          mono
         />
-        <Card
+        <StatWidget
           label={t("ui__расход_6068400a")}
           value={fmt(totalOut)}
-          color="text-red-700 dark:text-red-400"
+          icon={ArrowUpCircle}
+          color="danger"
+          mono
         />
-        <Card
+        <StatWidget
           label={t("ui__сальдо_508d1e7a")}
           value={fmt(totalIn - totalOut)}
-          color={
-            totalIn >= totalOut
-              ? "text-green-700 dark:text-green-400"
-              : "text-red-700 dark:text-red-400"
-          }
+          icon={Scale}
+          color={totalIn >= totalOut ? "success" : "danger"}
+          mono
         />
       </div>
 
@@ -213,17 +215,6 @@ export function TurnoverReport({
         loading={loading}
         rowKey={(r) => r.entity_id}
       />
-    </div>
-  );
-}
-
-function Card({ label, value, color }: any) {
-  return (
-    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4">
-      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase">
-        {label}
-      </div>
-      <div className={`text-2xl font-bold mt-1 font-mono ${color}`}>{value}</div>
     </div>
   );
 }

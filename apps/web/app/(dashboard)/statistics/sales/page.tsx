@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { StatWidget } from "@/components/ui/stat-widget";
 import { input } from "@/components/ui/modal";
 import { useTranslations } from "next-intl";
 
@@ -36,31 +39,29 @@ export default function SalesStatsPage() {
     <div className="space-y-6">
       <PageHeader title={t("ui__динамика_продаж_d23e88a8")} description={t("ui__продажи_по_дням_за_период_8ece1006")} />
 
-      <div className="bg-white dark:bg-slate-800 border rounded-lg shadow-sm p-4 flex gap-3 items-end">
+      <Card className="flex gap-3 items-end">
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">{t("ui__с_даты_09fc6619")}</label>
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">{t("ui__с_даты_09fc6619")}</label>
           <input type="date" className={input} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">{t("ui__по_дату_760bcfc8")}</label>
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">{t("ui__по_дату_760bcfc8")}</label>
           <input type="date" className={input} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </div>
-        <button onClick={load} className="px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700">
-          {t("ui__показать_2a175c27")}
-        </button>
-      </div>
+        <Button onClick={load}>{t("ui__показать_2a175c27")}</Button>
+      </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        <Card label={t("ui__продаж_87d84378")} value={totalCnt} />
-        <Card label={t("ui__выручка_2935dccf")} value={fmt(totalRev)} color="text-blue-700" />
-        <Card label={t("ui__оплачено_6d8c0850")} value={fmt(totalPaid)} color="text-green-700" />
+        <StatWidget label={t("ui__продаж_87d84378")} value={totalCnt} color="brand" />
+        <StatWidget label={t("ui__выручка_2935dccf")} value={totalRev} color="info" mono />
+        <StatWidget label={t("ui__оплачено_6d8c0850")} value={totalPaid} color="success" mono />
       </div>
 
-      <div className="bg-white dark:bg-slate-800 border rounded-lg shadow-sm p-5 h-80">
+      <Card className="h-80">
         {loading ? (
-          <div className="text-center text-slate-400 py-10">{t("ui__загрузка_43e40d49")}</div>
+          <div className="text-center text-ink-400 py-10">{t("ui__загрузка_43e40d49")}</div>
         ) : rows.length === 0 ? (
-          <div className="text-center text-slate-400 py-10">{t("ui__нет_данных_dee9a2d8")}</div>
+          <div className="text-center text-ink-400 py-10">{t("ui__нет_данных_dee9a2d8")}</div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={rows}>
@@ -68,21 +69,12 @@ export default function SalesStatsPage() {
               <XAxis dataKey="day" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={fmt} />
               <Tooltip formatter={(v: any) => fmt(v)} />
-              <Bar dataKey="revenue" fill="#2563eb" name="Tushum" />
-              <Bar dataKey="paid" fill="#10b981" name="To'landi" />
+              <Bar dataKey="revenue" fill="#3454d1" name="Tushum" />
+              <Bar dataKey="paid" fill="#17c666" name="To'landi" />
             </BarChart>
           </ResponsiveContainer>
         )}
-      </div>
-    </div>
-  );
-}
-
-function Card({ label, value, color = "text-slate-700 dark:text-slate-200" }: any) {
-  return (
-    <div className="bg-white dark:bg-slate-800 border rounded-lg shadow-sm p-4">
-      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase">{label}</div>
-      <div className={`text-2xl font-bold mt-1 font-mono ${color}`}>{value}</div>
+      </Card>
     </div>
   );
 }

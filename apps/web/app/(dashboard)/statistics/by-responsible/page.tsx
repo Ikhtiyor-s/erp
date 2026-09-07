@@ -28,11 +28,11 @@ export default function Page() {
     { key: "responsible_name", header: t("ui__ответственный_ab60703b") },
     { key: "orders_cnt", header: t("ui__заказов_00d9a0d8"), align: "right", width: "100px" },
     { key: "completed_cnt", header: t("ui__завершено_0083ce05"), align: "right", width: "120px",
-      render: (r) => <span className="text-green-700">{r.completed_cnt}</span> },
+      render: (r) => <span className="text-success-700 dark:text-success-500">{r.completed_cnt}</span> },
     { key: "planned", header: t("ui__план_ee229f3b"), align: "right", width: "160px",
       render: (r) => <span className="font-mono">{fmt(r.planned)}</span> },
     { key: "produced", header: t("ui__факт_0a982a27"), align: "right", width: "160px",
-      render: (r) => <span className="font-mono font-semibold text-green-700">{fmt(r.produced)}</span> },
+      render: (r) => <span className="font-mono font-semibold text-success-700 dark:text-success-500">{fmt(r.produced)}</span> },
   ];
 
   return (

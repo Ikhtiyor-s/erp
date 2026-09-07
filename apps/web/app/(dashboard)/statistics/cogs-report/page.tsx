@@ -10,6 +10,10 @@ import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card, CardHeader, CardBody } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { StatWidget } from "@/components/ui/stat-widget";
+import { Badge } from "@/components/ui/badge";
 import { input } from "@/components/ui/modal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -159,26 +163,27 @@ export default function CogsReportPage() {
         description={t("description")}
         actions={
           <div className="relative">
-            <button
+            <Button
+              variant="outline"
+              size="sm"
+              icon={Download}
+              iconRight={ChevronDown}
               onClick={() => setExportOpen((v) => !v)}
               disabled={exporting || !report}
-              className="inline-flex items-center gap-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-medium px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
             >
-              <Download size={14} />
               {t("export_btn")}
-              <ChevronDown size={12} />
-            </button>
+            </Button>
             {exportOpen && (
-              <div className="absolute right-0 mt-1 w-36 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md shadow-lg z-10">
+              <div className="absolute right-0 mt-1 w-36 bg-white dark:bg-ink-800 border border-ink-200 dark:border-ink-700 rounded-md shadow-lg z-10">
                 <button
                   onClick={() => doExport("csv")}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 rounded-t-md"
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-ink-50 dark:hover:bg-ink-700 rounded-t-md"
                 >
                   {t("export_csv")}
                 </button>
                 <button
                   onClick={() => doExport("xlsx")}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 rounded-b-md"
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-ink-50 dark:hover:bg-ink-700 rounded-b-md"
                 >
                   {t("export_xlsx")}
                 </button>
@@ -189,9 +194,9 @@ export default function CogsReportPage() {
       />
 
       {/* Filter panel */}
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 flex flex-wrap gap-3 items-end">
+      <Card className="flex flex-wrap gap-3 items-end">
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("filter_date_from")}
           </label>
           <input
@@ -202,7 +207,7 @@ export default function CogsReportPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("filter_date_to")}
           </label>
           <input
@@ -213,7 +218,7 @@ export default function CogsReportPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("filter_warehouse")}
           </label>
           <select
@@ -228,7 +233,7 @@ export default function CogsReportPage() {
           </select>
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("filter_category")}
           </label>
           <select
@@ -242,97 +247,75 @@ export default function CogsReportPage() {
             ))}
           </select>
         </div>
-        <button
-          onClick={load}
-          className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-md transition-colors"
-        >
-          {t("filter_apply")}
-        </button>
-      </div>
+        <Button onClick={load}>{t("filter_apply")}</Button>
+      </Card>
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard
+        <StatWidget
           label={t("card_revenue")}
           value={report ? fmtNum(report.total_revenue) : "—"}
           loading={loading}
-          colorClass="text-brand-700 dark:text-brand-400"
-          borderClass="border-l-brand-500"
+          color="brand"
+          mono
         />
-        <SummaryCard
+        <StatWidget
           label={t("card_cogs")}
           value={report ? fmtNum(report.total_cogs) : "—"}
           loading={loading}
-          colorClass="text-amber-700 dark:text-amber-400"
-          borderClass="border-l-amber-500"
+          color="warn"
+          mono
         />
-        <SummaryCard
+        <StatWidget
           label={t("card_profit")}
           value={report ? fmtNum(report.gross_profit) : "—"}
           loading={loading}
-          colorClass={
-            profitNum >= 0
-              ? "text-emerald-700 dark:text-emerald-400"
-              : "text-rose-700 dark:text-rose-400"
-          }
-          borderClass={profitNum >= 0 ? "border-l-emerald-500" : "border-l-rose-500"}
+          color={profitNum >= 0 ? "success" : "danger"}
+          mono
         />
-        <SummaryCard
+        <StatWidget
           label={t("card_margin")}
           value={report ? `${margin.toFixed(1)}%` : "—"}
           loading={loading}
-          colorClass={
-            margin >= 0
-              ? "text-emerald-700 dark:text-emerald-400"
-              : "text-rose-700 dark:text-rose-400"
-          }
-          borderClass={margin >= 0 ? "border-l-emerald-500" : "border-l-rose-500"}
-          badge={
-            report
-              ? {
-                  label: `${margin.toFixed(1)}%`,
-                  className:
-                    margin >= 0
-                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
-                      : "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200",
-                }
-              : undefined
-          }
+          color={margin >= 0 ? "success" : "danger"}
+          mono
         />
       </div>
 
       {/* Chart — top 10 by profit */}
       {report && report.by_product.length > 0 && (
-        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-5 h-72">
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-wide">
-            {t("chart_top10")}
-          </p>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={[...report.by_product]
-                .sort((a, b) => Number(b.profit) - Number(a.profit))
-                .slice(0, 10)}
-              margin={{ top: 0, right: 0, left: 0, bottom: 40 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis
-                dataKey="product_name"
-                tick={{ fontSize: 10 }}
-                angle={-35}
-                textAnchor="end"
-                interval={0}
-              />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtNum} />
-              <Tooltip formatter={(v: unknown) => fmtNum(v as number)} />
-              <Bar dataKey="profit" name={t("col_profit")} fill="#10b981" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <Card padding="none">
+          <CardHeader title={t("chart_top10")} />
+          <CardBody>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={[...report.by_product]
+                    .sort((a, b) => Number(b.profit) - Number(a.profit))
+                    .slice(0, 10)}
+                  margin={{ top: 0, right: 0, left: 0, bottom: 40 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis
+                    dataKey="product_name"
+                    tick={{ fontSize: 10 }}
+                    angle={-35}
+                    textAnchor="end"
+                    interval={0}
+                  />
+                  <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtNum} />
+                  <Tooltip formatter={(v: unknown) => fmtNum(v as number)} />
+                  <Bar dataKey="profit" name={t("col_profit")} fill="#17c666" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardBody>
+        </Card>
       )}
 
       {/* Tabs */}
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
-        <div className="border-b border-slate-200 dark:border-slate-700 flex">
+      <Card padding="none">
+        <div className="border-b border-ink-200/60 dark:border-ink-800/60 flex">
           {(["product", "category", "warehouse"] as Tab[]).map((key) => (
             <button
               key={key}
@@ -340,7 +323,7 @@ export default function CogsReportPage() {
               className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
                 tab === key
                   ? "border-brand-600 text-brand-700 dark:text-brand-400"
-                  : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
+                  : "border-transparent text-ink-500 hover:text-ink-700 dark:hover:text-ink-200"
               }`}
             >
               {t(`tab_by_${key}`)}
@@ -350,10 +333,10 @@ export default function CogsReportPage() {
 
         <div className="p-0">
           {loading && (
-            <div className="py-16 text-center text-slate-400">{t("loading")}</div>
+            <div className="py-16 text-center text-ink-400">{t("loading")}</div>
           )}
           {!loading && error && (
-            <div className="py-16 text-center text-rose-500">{error}</div>
+            <div className="py-16 text-center text-danger-500">{error}</div>
           )}
           {!loading && !error && tab === "product" && (
             <CogsTable
@@ -380,45 +363,7 @@ export default function CogsReportPage() {
             />
           )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Summary Card ─────────────────────────────────────────────────────────────
-
-function SummaryCard({
-  label,
-  value,
-  loading,
-  colorClass,
-  borderClass,
-  badge,
-}: {
-  label: string;
-  value: string;
-  loading: boolean;
-  colorClass: string;
-  borderClass: string;
-  badge?: { label: string; className: string };
-}) {
-  return (
-    <div
-      className={`bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ${borderClass} rounded-lg shadow-sm p-4`}
-    >
-      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-        {label}
-      </div>
-      {loading ? (
-        <div className="h-7 w-24 bg-slate-100 dark:bg-slate-700 rounded animate-pulse mt-1" />
-      ) : (
-        <div className={`text-2xl font-bold font-mono ${colorClass}`}>{value}</div>
-      )}
-      {badge && !loading && (
-        <span className={`mt-2 inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${badge.className}`}>
-          {badge.label}
-        </span>
-      )}
+      </Card>
     </div>
   );
 }
@@ -444,7 +389,7 @@ function CogsTable({
 
   if (sorted.length === 0) {
     return (
-      <div className="py-16 text-center text-slate-400 text-sm">{noData}</div>
+      <div className="py-16 text-center text-ink-400 text-sm">{noData}</div>
     );
   }
 
@@ -454,23 +399,23 @@ function CogsTable({
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
-              <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-300">
+            <tr className="border-b border-ink-100 dark:border-ink-700 bg-ink-50 dark:bg-ink-900">
+              <th className="text-left px-4 py-3 font-medium text-ink-600 dark:text-ink-300">
                 {t("col_name")}
               </th>
-              <th className="text-right px-4 py-3 font-medium text-slate-600 dark:text-slate-300 w-28">
+              <th className="text-right px-4 py-3 font-medium text-ink-600 dark:text-ink-300 w-28">
                 {t("col_qty")}
               </th>
-              <th className="text-right px-4 py-3 font-medium text-slate-600 dark:text-slate-300 w-36">
+              <th className="text-right px-4 py-3 font-medium text-ink-600 dark:text-ink-300 w-36">
                 {t("col_revenue")}
               </th>
-              <th className="text-right px-4 py-3 font-medium text-slate-600 dark:text-slate-300 w-36">
+              <th className="text-right px-4 py-3 font-medium text-ink-600 dark:text-ink-300 w-36">
                 {t("col_cogs")}
               </th>
-              <th className="text-right px-4 py-3 font-medium text-slate-600 dark:text-slate-300 w-36">
+              <th className="text-right px-4 py-3 font-medium text-ink-600 dark:text-ink-300 w-36">
                 {t("col_profit")}
               </th>
-              <th className="text-right px-4 py-3 font-medium text-slate-600 dark:text-slate-300 w-24">
+              <th className="text-right px-4 py-3 font-medium text-ink-600 dark:text-ink-300 w-24">
                 {t("col_margin")}
               </th>
             </tr>
@@ -482,39 +427,33 @@ function CogsTable({
               return (
                 <tr
                   key={i}
-                  className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
+                  className="border-b border-ink-100 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-700/40 transition-colors"
                 >
-                  <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">
+                  <td className="px-4 py-3 font-medium text-ink-800 dark:text-ink-100">
                     {String(row[nameKey] ?? "")}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-slate-600 dark:text-slate-300">
+                  <td className="px-4 py-3 text-right font-mono text-ink-600 dark:text-ink-300">
                     {fmtNum(Number(row.sold_qty ?? 0))}
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-brand-700 dark:text-brand-400">
                     {fmtNum(row.revenue as string)}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-amber-700 dark:text-amber-400">
+                  <td className="px-4 py-3 text-right font-mono text-warn-700 dark:text-warn-500">
                     {fmtNum(row.cogs as string)}
                   </td>
                   <td
                     className={`px-4 py-3 text-right font-mono font-semibold ${
                       profit >= 0
-                        ? "text-emerald-700 dark:text-emerald-400"
-                        : "text-rose-700 dark:text-rose-400"
+                        ? "text-success-700 dark:text-success-500"
+                        : "text-danger-700 dark:text-danger-500"
                     }`}
                   >
                     {fmtNum(row.profit as string)}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <span
-                      className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        margin >= 0
-                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
-                          : "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200"
-                      }`}
-                    >
+                    <Badge tone={margin >= 0 ? "success" : "danger"}>
                       {margin.toFixed(1)}%
-                    </span>
+                    </Badge>
                   </td>
                 </tr>
               );
@@ -524,51 +463,45 @@ function CogsTable({
       </div>
 
       {/* Mobile cards */}
-      <ul className="md:hidden divide-y divide-slate-100 dark:divide-slate-700">
+      <ul className="md:hidden divide-y divide-ink-100 dark:divide-ink-700">
         {sorted.map((row, i) => {
           const profit = Number(row.profit ?? 0);
           const margin = Number(row.margin_pct ?? 0);
           return (
             <li key={i} className="p-4 space-y-2">
-              <div className="font-medium text-slate-800 dark:text-slate-100">
+              <div className="font-medium text-ink-800 dark:text-ink-100">
                 {String(row[nameKey] ?? "")}
               </div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                <span className="text-slate-500 dark:text-slate-400">{t("col_qty")}</span>
+                <span className="text-ink-500 dark:text-ink-400">{t("col_qty")}</span>
                 <span className="font-mono text-right">{fmtNum(Number(row.sold_qty ?? 0))}</span>
 
-                <span className="text-slate-500 dark:text-slate-400">{t("col_revenue")}</span>
+                <span className="text-ink-500 dark:text-ink-400">{t("col_revenue")}</span>
                 <span className="font-mono text-right text-brand-700 dark:text-brand-400">
                   {fmtNum(row.revenue as string)}
                 </span>
 
-                <span className="text-slate-500 dark:text-slate-400">{t("col_cogs")}</span>
-                <span className="font-mono text-right text-amber-700 dark:text-amber-400">
+                <span className="text-ink-500 dark:text-ink-400">{t("col_cogs")}</span>
+                <span className="font-mono text-right text-warn-700 dark:text-warn-500">
                   {fmtNum(row.cogs as string)}
                 </span>
 
-                <span className="text-slate-500 dark:text-slate-400">{t("col_profit")}</span>
+                <span className="text-ink-500 dark:text-ink-400">{t("col_profit")}</span>
                 <span
                   className={`font-mono text-right font-semibold ${
                     profit >= 0
-                      ? "text-emerald-700 dark:text-emerald-400"
-                      : "text-rose-700 dark:text-rose-400"
+                      ? "text-success-700 dark:text-success-500"
+                      : "text-danger-700 dark:text-danger-500"
                   }`}
                 >
                   {fmtNum(row.profit as string)}
                 </span>
 
-                <span className="text-slate-500 dark:text-slate-400">{t("col_margin")}</span>
+                <span className="text-ink-500 dark:text-ink-400">{t("col_margin")}</span>
                 <span className="text-right">
-                  <span
-                    className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${
-                      margin >= 0
-                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
-                        : "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200"
-                    }`}
-                  >
+                  <Badge tone={margin >= 0 ? "success" : "danger"}>
                     {margin.toFixed(1)}%
-                  </span>
+                  </Badge>
                 </span>
               </div>
             </li>

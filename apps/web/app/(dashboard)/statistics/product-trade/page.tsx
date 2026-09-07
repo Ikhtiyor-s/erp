@@ -39,7 +39,7 @@ export default function ProductTradePage() {
       align: "right",
       width: "130px",
       render: (r) => (
-        <span className="font-mono text-blue-700 dark:text-blue-400">
+        <span className="font-mono text-info-700 dark:text-info-500">
           {fmt(r.purchased_qty)}
         </span>
       ),
@@ -50,7 +50,7 @@ export default function ProductTradePage() {
       align: "right",
       width: "130px",
       render: (r) => (
-        <span className="font-mono text-green-700 dark:text-green-400">
+        <span className="font-mono text-success-700 dark:text-success-500">
           {fmt(r.sold_qty)}
         </span>
       ),

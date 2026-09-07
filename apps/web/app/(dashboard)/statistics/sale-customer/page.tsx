@@ -6,6 +6,7 @@ import { Search, Eye } from "lucide-react";
 import { api } from "@/lib/api";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
 import { input } from "@/components/ui/modal";
 import { useTranslations } from "next-intl";
 
@@ -57,7 +58,7 @@ export default function SaleCustomerPage() {
       align: "right",
       width: "180px",
       render: (r) => (
-        <span className="font-mono text-slate-900 dark:text-slate-100">
+        <span className="font-mono text-ink-900 dark:text-ink-100">
           {fmt(r.revenue)}
         </span>
       ),
@@ -70,7 +71,7 @@ export default function SaleCustomerPage() {
       render: (r) => (
         <button
           onClick={() => router.push(`/customer/customers/${r.id}`)}
-          className="text-brand-600 dark:text-brand-400 hover:text-brand-700"
+          className="text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300"
           title={t("ui__профиль_a46c3723")}
           aria-label={`${r.name} profilini ko'rish`}
         >
@@ -87,14 +88,14 @@ export default function SaleCustomerPage() {
         description={t("ui__суммы_продаж_по_каждому_клиент_3150187f")}
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 flex gap-3 items-end">
+      <Card className="flex gap-3 items-end">
         <div className="relative flex-1 max-w-md">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_клиента_a3f1695e")}
           </label>
           <Search
             size={14}
-            className="absolute left-2.5 top-[34px] text-slate-400"
+            className="absolute left-2.5 top-[34px] text-ink-400"
           />
           <input
             className={`${input} pl-8`}
@@ -103,13 +104,13 @@ export default function SaleCustomerPage() {
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
-        <div className="ml-auto text-sm text-slate-500 dark:text-slate-400">
+        <div className="ml-auto text-sm text-ink-500 dark:text-ink-400">
           Сумма:{" "}
-          <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">
+          <span className="font-mono font-semibold text-ink-900 dark:text-ink-100">
             {fmt(total)}
           </span>
         </div>
-      </div>
+      </Card>
 
       <DataTable columns={cols} rows={filtered} loading={loading} />
     </div>

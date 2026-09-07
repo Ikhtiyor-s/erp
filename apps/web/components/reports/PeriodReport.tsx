@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
 import { input } from "@/components/ui/modal";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -57,11 +59,11 @@ export function PeriodReport<T extends Record<string, any>>({
     <div className="space-y-6">
       <PageHeader title={title} description={description} />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 flex gap-3 items-end">
+      <Card className="flex gap-3 items-end">
         {!noDateRange && (
           <>
             <div>
-              <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+              <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
                 {t("ui__с_даты_09fc6619")}
               </label>
               <input
@@ -72,7 +74,7 @@ export function PeriodReport<T extends Record<string, any>>({
               />
             </div>
             <div>
-              <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+              <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
                 {t("ui__по_дату_760bcfc8")}
               </label>
               <input
@@ -82,23 +84,17 @@ export function PeriodReport<T extends Record<string, any>>({
                 onChange={(e) => setDateTo(e.target.value)}
               />
             </div>
-            <button
-              onClick={load}
-              className="px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
-            >
+            <Button onClick={load}>
               {t("ui__показать_2a175c27")}
-            </button>
+            </Button>
           </>
         )}
         {exportName && (
-          <button
-            onClick={exportCsv}
-            className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
-          >
-            <Download size={14} /> {t("ui__экспорт_csv_bfd8aa98")}
-          </button>
+          <Button onClick={exportCsv} variant="outline" icon={Download} className="ml-auto">
+            {t("ui__экспорт_csv_bfd8aa98")}
+          </Button>
         )}
-      </div>
+      </Card>
 
       <DataTable columns={columns} rows={rows} loading={loading} rowKey={rowKey} />
     </div>

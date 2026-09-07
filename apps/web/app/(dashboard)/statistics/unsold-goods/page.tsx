@@ -21,8 +21,8 @@ export default function Page() {
       render: (r) => r.sale_price ? <span className="font-mono">{fmt(r.sale_price)}</span> : "—" },
     { key: "last_sale", header: t("ui__последняя_продажа_b96efd6d"), width: "180px",
       render: (r) => r.last_sale
-        ? <span className="text-yellow-700">{new Date(r.last_sale).toLocaleDateString("ru-RU")}</span>
-        : <span className="text-red-700">{t("ui__не_продавался_7155b67d")}</span> },
+        ? <span className="text-warn-700 dark:text-warn-500">{new Date(r.last_sale).toLocaleDateString("ru-RU")}</span>
+        : <span className="text-danger-700 dark:text-danger-500">{t("ui__не_продавался_7155b67d")}</span> },
   ];
 
   return <PeriodReport<Row>

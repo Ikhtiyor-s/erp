@@ -18,11 +18,11 @@ export default function Page() {
     { key: "revenue", header: t("ui__выручка_2935dccf"), align: "right", width: "160px",
       render: (r) => <span className="font-mono">{fmt(r.revenue)}</span> },
     { key: "paid", header: t("ui__оплачено_6d8c0850"), align: "right", width: "150px",
-      render: (r) => <span className="font-mono text-green-700">{fmt(r.paid)}</span> },
+      render: (r) => <span className="font-mono text-success-700 dark:text-success-500">{fmt(r.paid)}</span> },
     { key: "debt", header: t("ui__долг_7e49b743"), align: "right", width: "150px",
       render: (r) => {
         const v = Number(r.debt);
-        return <span className={`font-mono ${v > 0 ? "text-red-700" : "text-slate-400"}`}>{fmt(v)}</span>;
+        return <span className={`font-mono ${v > 0 ? "text-danger-700 dark:text-danger-500" : "text-ink-400"}`}>{fmt(v)}</span>;
       } },
   ];
 

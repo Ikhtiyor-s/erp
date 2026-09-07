@@ -19,7 +19,12 @@ export default function Page() {
     { key: "days_inactive", header: t("ui__дней_без_покупок_0477d576"), align: "right", width: "150px",
       render: (r) => {
         if (r.days_inactive === null || r.days_inactive === undefined) return "—";
-        return <span className={`font-mono ${r.days_inactive > 60 ? "text-red-700" : r.days_inactive > 30 ? "text-yellow-600" : "text-green-700"}`}>
+        const tone = r.days_inactive > 60
+          ? "text-danger-700 dark:text-danger-500"
+          : r.days_inactive > 30
+          ? "text-warn-700 dark:text-warn-500"
+          : "text-success-700 dark:text-success-500";
+        return <span className={`font-mono ${tone}`}>
           {r.days_inactive}
         </span>;
       } },

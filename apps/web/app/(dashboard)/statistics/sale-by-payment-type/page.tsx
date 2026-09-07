@@ -13,7 +13,7 @@ export default function Page() {
     { key: "payment_type", header: t("ui__тип_оплаты_a6dd9595") },
     { key: "payments_cnt", header: t("ui__операций_f680ce84"), align: "right", width: "120px" },
     { key: "total", header: t("ui__сумма_cf59ebf9"), align: "right", width: "180px",
-      render: (r) => <span className="font-mono font-semibold text-green-700">{fmt(r.total)}</span> },
+      render: (r) => <span className="font-mono font-semibold text-success-700 dark:text-success-500">{fmt(r.total)}</span> },
   ];
 
   return <PeriodReport<Row>

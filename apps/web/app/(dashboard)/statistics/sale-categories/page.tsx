@@ -15,7 +15,7 @@ export default function Page() {
     { key: "qty", header: t("ui__количество_cb8bfd4d"), align: "right", width: "140px",
       render: (r) => <span className="font-mono">{fmt(r.qty)}</span> },
     { key: "revenue", header: t("ui__выручка_2935dccf"), align: "right", width: "160px",
-      render: (r) => <span className="font-mono font-semibold text-green-700">{fmt(r.revenue)}</span> },
+      render: (r) => <span className="font-mono font-semibold text-success-700 dark:text-success-500">{fmt(r.revenue)}</span> },
   ];
 
   return <PeriodReport<Row>

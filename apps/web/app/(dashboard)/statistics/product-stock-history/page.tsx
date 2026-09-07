@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { input } from "@/components/ui/modal";
 import { useTranslations } from "next-intl";
 
@@ -49,7 +51,7 @@ export default function StockHistoryPage() {
     { key: "net_change", header: t("ui__изменение_остатка_275f6eb2"), align: "right",
       render: (r) => {
         const v = Number(r.net_change);
-        return <span className={`font-mono ${v < 0 ? "text-red-700" : "text-green-700"}`}>
+        return <span className={`font-mono ${v < 0 ? "text-danger-700 dark:text-danger-500" : "text-success-700 dark:text-success-500"}`}>
           {v > 0 ? "+" : ""}{fmt(v)}
         </span>;
       } },
@@ -59,17 +61,17 @@ export default function StockHistoryPage() {
     <div className="space-y-6">
       <PageHeader title={t("ui__история_остатков_83f6b923")} description={t("ui__изменения_остатков_продажи_и_п_9431ea77")} />
 
-      <div className="bg-white dark:bg-slate-800 border rounded-lg shadow-sm p-4 flex gap-3 items-end">
+      <Card className="flex gap-3 items-end">
         <div className="flex-1 max-w-md relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">{t("ui__фильтр_по_товару_6865709f")}</label>
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">{t("ui__фильтр_по_товару_6865709f")}</label>
           <input className={input} placeholder={productName || "Tovar qidirish..."}
             value={search} onChange={(e) => setSearch(e.target.value)} />
           {products.length > 0 && (
-            <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border rounded-md shadow-lg max-h-48 overflow-auto">
+            <div className="absolute z-10 mt-1 w-full bg-white dark:bg-ink-800 border border-ink-200 dark:border-ink-700 rounded-md shadow-lg max-h-48 overflow-auto">
               {products.map((p) => (
                 <button key={p.id}
                   onClick={() => { setProductId(p.id); setProductName(p.name); setSearch(p.name); setProducts([]); }}
-                  className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:bg-slate-900/40">
+                  className="block w-full text-left px-3 py-2 text-sm hover:bg-ink-50 dark:bg-ink-900/40">
                   {p.name}
                 </button>
               ))}
@@ -77,12 +79,14 @@ export default function StockHistoryPage() {
           )}
         </div>
         {productId && (
-          <button onClick={() => { setProductId(""); setProductName(""); setSearch(""); }}
-            className="px-3 py-2 text-sm border rounded-md hover:bg-slate-50 dark:bg-slate-900/40">
+          <Button
+            variant="outline"
+            onClick={() => { setProductId(""); setProductName(""); setSearch(""); }}
+          >
             {t("ui__сбросить_02d901c1")}
-          </button>
+          </Button>
         )}
-      </div>
+      </Card>
 
       <DataTable columns={cols} rows={rows} loading={loading}
         rowKey={(r) => `${r.day}-${r.product_id}`} />

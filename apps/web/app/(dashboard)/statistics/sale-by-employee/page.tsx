@@ -15,7 +15,7 @@ export default function Page() {
     { key: "avg_check", header: t("ui__средний_чек_fb07a082"), align: "right", width: "160px",
       render: (r) => <span className="font-mono">{fmt(r.avg_check)}</span> },
     { key: "revenue", header: t("ui__выручка_2935dccf"), align: "right", width: "180px",
-      render: (r) => <span className="font-mono font-semibold text-green-700">{fmt(r.revenue)}</span> },
+      render: (r) => <span className="font-mono font-semibold text-success-700 dark:text-success-500">{fmt(r.revenue)}</span> },
   ];
 
   return <PeriodReport<Row>
