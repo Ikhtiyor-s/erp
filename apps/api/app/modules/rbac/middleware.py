@@ -85,7 +85,11 @@ SKIP_PATHS_PREFIX = (
     "/api/v1/integration/uzum/webhook",
     "/api/v1/integration/multicard/webhook",
     "/api/v1/integration/rahmat/webhook",
+    "/api/v1/integration/didox/webhook",
     "/api/v1/customer-portal/",
+    # Didox e-invoice — endpoint-level require_permission("settings.integration") takes over;
+    # middleware also checks settings.create (which admin has) as secondary gate.
+    "/api/v1/integration/didox/invoice",
 )
 
 
@@ -95,6 +99,9 @@ def _is_skipped(path: str) -> bool:
     if any(path.startswith(p) for p in SKIP_PATHS_PREFIX):
         return True
     if path.startswith("/api/v1/organizations/") and path.endswith("/switch"):
+        return True
+    # Delivery courier webhooks are public callbacks (no auth from courier side).
+    if path.startswith("/api/v1/integrations/delivery/") and path.endswith("/webhook"):
         return True
     return False
 

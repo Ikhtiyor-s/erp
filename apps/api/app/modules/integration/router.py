@@ -322,7 +322,7 @@ async def telegram_bind_unbind(
 _SCAFFOLD_NOTE = {"note": "SCAFFOLD — credentials pending", "stubbed": True}
 
 
-@router.post("/didox/invoice/create")
+@router.post("/didox/invoice/create", dependencies=[Depends(require_permission("settings.integration"))])
 async def didox_create_invoice(
     payload: dict = Body(default={}),
     org_id: str = Depends(get_current_org_id),
@@ -345,7 +345,7 @@ async def didox_create_invoice(
     }
 
 
-@router.post("/didox/invoice/{invoice_id}/send")
+@router.post("/didox/invoice/{invoice_id}/send", dependencies=[Depends(require_permission("settings.integration"))])
 async def didox_send_invoice(
     invoice_id: str,
     org_id: str = Depends(get_current_org_id),
@@ -359,7 +359,7 @@ async def didox_send_invoice(
     return {"invoice_id": invoice_id, "status": "sent", **_SCAFFOLD_NOTE}
 
 
-@router.get("/didox/invoice/{invoice_id}")
+@router.get("/didox/invoice/{invoice_id}", dependencies=[Depends(require_permission("settings.integration"))])
 async def didox_get_invoice_status(
     invoice_id: str,
     org_id: str = Depends(get_current_org_id),

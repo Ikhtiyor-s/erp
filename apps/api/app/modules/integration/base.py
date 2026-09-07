@@ -20,7 +20,7 @@ _ENC_PREFIX = "fernet:"
 # Field names that must be encrypted at rest.
 SECRET_FIELD_SUFFIXES = (
     "key", "secret", "token", "password", "merchant_id",
-    "client_secret", "terminal_id",
+    "client_secret",
 )
 
 

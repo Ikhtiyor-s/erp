@@ -41,7 +41,8 @@ ALL_PERMISSIONS: list[Permission] = [
     # Warehouse (broad, legacy)
     p("warehouse", "view"), p("warehouse", "create"), p("warehouse", "update"),
     p("warehouse", "delete"), p("warehouse", "inventory"), p("warehouse", "write_off"),
-    p("warehouse", "transfer"), p("warehouse", "income"), p("warehouse", "export"),
+    p("warehouse", "transfer"), p("warehouse", "income"),
+    p("warehouse", "export"), p("warehouse", "import"),
 
     # Warehouse — sub-resource permissions (3-part codes, endpoint-level enforcement)
     p3("warehouse", "type", "view"), p3("warehouse", "type", "manage"),
@@ -96,6 +97,7 @@ ALL_PERMISSIONS: list[Permission] = [
 
     # Settings
     p("settings", "view"), p("settings", "update"),
+    p("settings", "create"), p("settings", "delete"),
     p("settings", "subscription"), p("settings", "integration"),
 
     # Tools (price update, export center)
@@ -160,7 +162,7 @@ ROLE_GRANTS: dict[str, list[str]] = {
         "sale.change_warehouse",
         "warehouse.view", "warehouse.create", "warehouse.update",
         "warehouse.inventory", "warehouse.transfer", "warehouse.income",
-        "warehouse.export",
+        "warehouse.export", "warehouse.import",
         # Warehouse sub-resource — all except transfer.cancel (admin only)
         "warehouse.type.view", "warehouse.type.manage",
         "warehouse.warehouse.view", "warehouse.warehouse.manage",
