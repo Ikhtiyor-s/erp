@@ -8,5 +8,5 @@ export default function LegacyEmployeeBalance() {
   useEffect(() => {
     router.replace("/finance/balances?tab=employee");
   }, [router]);
-  return <div className="p-6 text-slate-500">Redirecting...</div>;
+  return <div className="p-6 text-ink-500">Redirecting...</div>;
 }

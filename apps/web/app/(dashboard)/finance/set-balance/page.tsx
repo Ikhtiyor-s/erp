@@ -9,6 +9,8 @@ import { getErrorMessage } from "@/lib/api-error";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Card, CardBody, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 
 type EntityType = "cashbox" | "customer" | "employee" | "supplier" | "person";
@@ -259,13 +261,13 @@ function SetBalanceContent() {
 
       <div
         role="alert"
-        className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-300"
+        className="flex items-start gap-2 rounded-md border border-warn-500/30 bg-warn-50 dark:bg-warn-500/15 px-4 py-3 text-sm text-warn-700 dark:text-warn-500"
       >
         <span className="shrink-0 mt-0.5">⚠</span>
         <span>{t("warning")}</span>
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-700">
+      <div className="flex flex-wrap gap-1 border-b border-ink-200 dark:border-ink-800">
         {TABS.map(({ key, label }) => (
           <button
             key={key}
@@ -273,7 +275,7 @@ function SetBalanceContent() {
             className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
               tab === key
                 ? "border-brand-600 text-brand-600 dark:border-brand-400 dark:text-brand-400"
-                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                : "border-transparent text-ink-500 hover:text-ink-700 dark:text-ink-400 dark:hover:text-ink-200"
             }`}
           >
             {label}
@@ -285,11 +287,11 @@ function SetBalanceContent() {
         <PersonForm onSaved={() => {}} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-1 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-4 h-fit">
+          <Card padding="md" className="md:col-span-1 h-fit">
             <div className="relative mb-3">
               <Search
                 size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"
               />
               <input
                 className={`${input} pl-9`}
@@ -302,26 +304,26 @@ function SetBalanceContent() {
               />
             </div>
             {loading ? (
-              <div className="text-center py-6 text-sm text-slate-400">
+              <div className="text-center py-6 text-sm text-ink-400">
                 ...
               </div>
             ) : (
-              <ul className="divide-y divide-slate-200 dark:divide-slate-700 max-h-[60vh] overflow-auto -mx-2">
+              <ul className="divide-y divide-ink-200 dark:divide-ink-800 max-h-[60vh] overflow-auto -mx-2">
                 {list.map((item) => (
                   <li key={item.id}>
                     <button
                       onClick={() => pickItem(item)}
-                      className={`w-full text-left px-2 py-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 ${
+                      className={`w-full text-left px-2 py-2 hover:bg-ink-50 dark:hover:bg-ink-800/50 ${
                         selected?.id === item.id
                           ? "bg-brand-50 dark:bg-brand-900/30"
                           : ""
                       }`}
                     >
-                      <div className="font-medium text-sm text-slate-900 dark:text-slate-100">
+                      <div className="font-medium text-sm text-ink-900 dark:text-ink-100">
                         {item.label}
                       </div>
                       {item.sub && (
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                        <div className="text-xs text-ink-500 dark:text-ink-400">
                           {item.sub}
                         </div>
                       )}
@@ -329,49 +331,46 @@ function SetBalanceContent() {
                   </li>
                 ))}
                 {list.length === 0 && (
-                  <li className="text-center py-6 text-sm text-slate-400">
+                  <li className="text-center py-6 text-sm text-ink-400">
                     —
                   </li>
                 )}
               </ul>
             )}
-          </div>
+          </Card>
 
-          <div className="md:col-span-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+          <Card padding="lg" className="md:col-span-2">
             {!selected ? (
-              <div className="text-center text-slate-400 dark:text-slate-500 py-20">
+              <div className="text-center text-ink-400 dark:text-ink-500 py-20">
                 {t("select_entity")}
               </div>
             ) : (
               <div className="space-y-6">
-                <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                <h2 className="text-xl font-bold text-ink-900 dark:text-ink-100">
                   {selected.label}
                 </h2>
                 <div>
-                  <div className="text-sm text-slate-500 dark:text-slate-400">
+                  <div className="text-sm text-ink-500 dark:text-ink-400">
                     {t("new_balance")}
                   </div>
                   <div
                     className={`text-4xl font-bold font-mono ${
                       Number(bal?.balance) < 0
-                        ? "text-red-600 dark:text-red-400"
+                        ? "text-danger-600 dark:text-danger-500"
                         : Number(bal?.balance) > 0
-                        ? "text-green-600 dark:text-green-400"
-                        : "text-slate-700 dark:text-slate-300"
+                        ? "text-success-600 dark:text-success-500"
+                        : "text-ink-700 dark:text-ink-300"
                     }`}
                   >
                     {bal ? fmt(bal.balance) : "—"}
                   </div>
                 </div>
-                <button
-                  onClick={openModal}
-                  className="px-5 py-2 bg-brand-600 text-white rounded-md hover:bg-brand-700"
-                >
+                <Button type="button" variant="primary" size="md" onClick={openModal}>
                   {t("save")}
-                </button>
+                </Button>
               </div>
             )}
-          </div>
+          </Card>
         </div>
       )}
 
@@ -399,18 +398,12 @@ function SetBalanceContent() {
             />
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-            >
+            <Button type="button" variant="outline" size="md" onClick={() => setOpen(false)}>
               {t("cancel")}
-            </button>
-            <button
-              onClick={requestConfirm}
-              className="px-4 py-2 text-sm rounded-md bg-amber-600 text-white hover:bg-amber-700"
-            >
+            </Button>
+            <Button type="button" variant="warning" size="md" onClick={requestConfirm}>
               {t("save")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
@@ -474,40 +467,41 @@ function PersonForm({ onSaved }: { onSaved: () => void }) {
   }
 
   return (
-    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-6 max-w-2xl space-y-4">
-      <Field label={t("select_entity")} required>
-        <input
-          className={input}
-          value={form.subject_id}
-          onChange={(e) => setForm({ ...form, subject_id: e.target.value })}
-          placeholder="UUID"
-        />
-      </Field>
-      <Field label={t("new_balance")} required>
-        <input
-          type="number"
-          step="0.01"
-          className={input}
-          value={form.fact_amount}
-          onChange={(e) => setForm({ ...form, fact_amount: e.target.value })}
-        />
-      </Field>
-      <Field label={t("note")} required>
-        <textarea
-          className={input}
-          rows={2}
-          value={form.notes}
-          onChange={(e) => setForm({ ...form, notes: e.target.value })}
-        />
-      </Field>
-      <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
-        <button
-          onClick={requestConfirm}
-          className="px-5 py-2 bg-brand-600 text-white rounded-md hover:bg-brand-700"
-        >
-          {t("save")}
-        </button>
-      </div>
+    <>
+      <Card padding="none" className="max-w-2xl">
+        <CardBody padding="lg" className="space-y-4">
+          <Field label={t("select_entity")} required>
+            <input
+              className={input}
+              value={form.subject_id}
+              onChange={(e) => setForm({ ...form, subject_id: e.target.value })}
+              placeholder="UUID"
+            />
+          </Field>
+          <Field label={t("new_balance")} required>
+            <input
+              type="number"
+              step="0.01"
+              className={input}
+              value={form.fact_amount}
+              onChange={(e) => setForm({ ...form, fact_amount: e.target.value })}
+            />
+          </Field>
+          <Field label={t("note")} required>
+            <textarea
+              className={input}
+              rows={2}
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+          </Field>
+        </CardBody>
+        <CardFooter>
+          <Button type="button" variant="primary" size="md" onClick={requestConfirm}>
+            {t("save")}
+          </Button>
+        </CardFooter>
+      </Card>
 
       <ConfirmDialog
         open={confirm}
@@ -520,7 +514,7 @@ function PersonForm({ onSaved }: { onSaved: () => void }) {
         variant="warning"
         loading={saving}
       />
-    </div>
+    </>
   );
 }
 

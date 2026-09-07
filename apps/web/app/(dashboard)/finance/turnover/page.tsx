@@ -59,7 +59,7 @@ function TurnoverTabs() {
     <div className="space-y-6">
       <PageHeader title={t("title")} description={t("description")} />
 
-      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
+      <div className="flex gap-1 border-b border-ink-200 dark:border-ink-800 overflow-x-auto">
         {ENTITY_TYPES.map((tab) => (
           <button
             key={tab}
@@ -67,7 +67,7 @@ function TurnoverTabs() {
             className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
               activeTab === tab
                 ? "border-brand-600 text-brand-700 dark:text-brand-400"
-                : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                : "border-transparent text-ink-500 dark:text-ink-400 hover:text-ink-700 dark:hover:text-ink-300"
             }`}
           >
             {TAB_LABELS[tab]}
@@ -90,7 +90,7 @@ export default function TurnoverPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-40 text-slate-400">
+        <div className="flex items-center justify-center h-40 text-ink-400">
           <span>Yuklanmoqda...</span>
         </div>
       }

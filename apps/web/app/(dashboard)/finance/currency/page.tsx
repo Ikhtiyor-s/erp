@@ -8,6 +8,8 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Currency = {
@@ -26,11 +28,14 @@ export default function CurrencyPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<number | null>(null);
+  const [delTarget, setDelTarget] = useState<Currency | null>(null);
 
   // Rates modal
   const [ratesFor, setRatesFor] = useState<Currency | null>(null);
   const [rates, setRates] = useState<Rate[]>([]);
   const [rateForm, setRateForm] = useState({ rate: "", rate_date: today() });
+  const [delRateTarget, setDelRateTarget] = useState<Rate | null>(null);
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -59,10 +64,12 @@ export default function CurrencyPage() {
     }
   }
 
-  async function del(row: Currency) {
-    if (!confirm(`«${row.name}» o'chirilsinmi?`)) return;
-    await api.delete(`/reference/currencies/${row.id}`);
-    toast.success(t("ui__удалено_0c450c40")); load();
+  async function del() {
+    if (!delTarget) return;
+    await api.delete(`/reference/currencies/${delTarget.id}`);
+    toast.success(t("ui__удалено_0c450c40"));
+    setDelTarget(null);
+    load();
   }
 
   async function openRates(row: Currency) {
@@ -88,12 +95,12 @@ export default function CurrencyPage() {
   }
 
   async function importCbu() {
-    if (!confirm("cbu.uz dan bugungi kurslarni yuklab olishni xohlaysizmi?")) return;
     try {
       const { data } = await api.post<{ imported: number; date: string }>(
         "/reference/currencies/rates/import-cbu",
       );
       toast.success(`${data.date} sanasiga ${data.imported} kurs import qilindi`);
+      setImportConfirmOpen(false);
       if (ratesFor) {
         const { data: r } = await api.get<Rate[]>(`/reference/currencies/${ratesFor.id}/rates`);
         setRates(r);
@@ -103,10 +110,10 @@ export default function CurrencyPage() {
     }
   }
 
-  async function delRate(r: Rate) {
-    if (!ratesFor) return;
-    if (!confirm(`${r.rate_date} kursi o'chirilsinmi?`)) return;
-    await api.delete(`/reference/currencies/${ratesFor.id}/rates/${r.id}`);
+  async function delRate() {
+    if (!ratesFor || !delRateTarget) return;
+    await api.delete(`/reference/currencies/${ratesFor.id}/rates/${delRateTarget.id}`);
+    setDelRateTarget(null);
     const { data } = await api.get<Rate[]>(`/reference/currencies/${ratesFor.id}/rates`);
     setRates(data);
   }
@@ -118,15 +125,23 @@ export default function CurrencyPage() {
     { key: "decimals", header: t("ui__знаков_ec6d2974"), align: "right", width: "100px" },
     {
       key: "is_base", header: t("ui__базовая_09825af7"), align: "center", width: "100px",
-      render: (r) => (r.is_base ? <span className="text-green-600">●</span> : <span className="text-slate-300">○</span>),
+      render: (r) => (r.is_base ? <span className="text-success-500">●</span> : <span className="text-ink-300">○</span>),
     },
     {
       key: "actions" as any, header: t("ui__курсы_b91cb712"), align: "center", width: "100px",
       render: (r) => (
-        <button onClick={() => openRates(r)} className="inline-flex items-center gap-1 text-brand-600 hover:text-brand-700 text-xs">
-          <TrendingUp size={14} /> {t("ui__курсы_b91cb712")}
-        </button>
+        <Button variant="ghost" size="xs" icon={TrendingUp} onClick={() => openRates(r)}>
+          {t("ui__курсы_b91cb712")}
+        </Button>
       ),
+    },
+  ];
+
+  const rateColumns: Column<Rate>[] = [
+    { key: "rate_date", header: t("ui__дата_8cdd8bb7") },
+    {
+      key: "rate", header: t("ui__курс_d2b74163"), align: "right",
+      render: (r) => <span className="font-mono">{Number(r.rate).toLocaleString("ru-RU", { maximumFractionDigits: 4 })}</span>,
     },
   ];
 
@@ -136,12 +151,11 @@ export default function CurrencyPage() {
         <PageHeader title={t("ui__валюты_8febaf3d")} description={t("ui__справочник_валют_и_курсы_131b5469")} onCreate={openCreate} />
       </div>
       <div className="-mt-3">
-        <button onClick={importCbu}
-          className="inline-flex items-center gap-2 text-sm px-3 py-1.5 rounded-md border border-brand-200 text-brand-700 hover:bg-brand-50">
-          <Download size={14} /> {t("ui__загрузить_курсы_с_cbu_uz_a2eee229")}
-        </button>
+        <Button variant="outline" size="sm" icon={Download} onClick={() => setImportConfirmOpen(true)}>
+          {t("ui__загрузить_курсы_с_cbu_uz_a2eee229")}
+        </Button>
       </div>
-      <DataTable columns={columns} rows={rows} loading={loading} onEdit={openEdit} onDelete={del} />
+      <DataTable columns={columns} rows={rows} loading={loading} onEdit={openEdit} onDelete={(r) => setDelTarget(r)} />
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Valyutani tahrirlash" : "Yangi valyuta"}>
         <div className="space-y-3">
@@ -162,8 +176,8 @@ export default function CurrencyPage() {
             {t("ui__базовая_валюта_293eb9b7")}
           </label>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button type="button" onClick={save}>{t("ui__сохранить_74ea58b6")}</Button>
           </div>
         </div>
       </Modal>
@@ -180,38 +194,52 @@ export default function CurrencyPage() {
               <input type="number" step="0.0001" className={input} value={rateForm.rate}
                 onChange={(e) => setRateForm({ ...rateForm, rate: e.target.value })} />
             </Field>
-            <button onClick={saveRate}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 whitespace-nowrap">
+            <Button onClick={saveRate} className="whitespace-nowrap">
               {t("ui__добавить_5eba283b")}
-            </button>
+            </Button>
           </div>
 
-          <div className="border rounded-md max-h-72 overflow-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 sticky top-0">
-                <tr>
-                  <th className="px-3 py-2 text-left">{t("ui__дата_8cdd8bb7")}</th>
-                  <th className="px-3 py-2 text-right">{t("ui__курс_d2b74163")}</th>
-                  <th className="w-12"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rates.length === 0 ? (
-                  <tr><td colSpan={3} className="text-center py-6 text-slate-400">{t("ui__нет_данных_dee9a2d8")}</td></tr>
-                ) : rates.map((r) => (
-                  <tr key={r.id} className="border-t">
-                    <td className="px-3 py-2">{r.rate_date}</td>
-                    <td className="px-3 py-2 text-right font-mono">{Number(r.rate).toLocaleString("ru-RU", { maximumFractionDigits: 4 })}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button onClick={() => delRate(r)} className="text-red-600 hover:text-red-700 text-xs">✕</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="max-h-72 overflow-auto">
+            <DataTable
+              columns={rateColumns}
+              rows={rates}
+              rowKey={(r) => r.id}
+              emptyText={t("ui__нет_данных_dee9a2d8")}
+              onDelete={(r) => setDelRateTarget(r)}
+            />
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!delTarget}
+        onClose={() => setDelTarget(null)}
+        onConfirm={del}
+        title="Valyutani o'chirish"
+        message={delTarget ? `«${delTarget.name}» o'chirilsinmi?` : ""}
+        confirmLabel={t("ui__удалено_0c450c40")}
+        variant="danger"
+      />
+
+      <ConfirmDialog
+        open={!!delRateTarget}
+        onClose={() => setDelRateTarget(null)}
+        onConfirm={delRate}
+        title="Kursni o'chirish"
+        message={delRateTarget ? `${delRateTarget.rate_date} kursi o'chirilsinmi?` : ""}
+        confirmLabel={t("ui__удалено_0c450c40")}
+        variant="danger"
+      />
+
+      <ConfirmDialog
+        open={importConfirmOpen}
+        onClose={() => setImportConfirmOpen(false)}
+        onConfirm={importCbu}
+        title="Kurslarni yuklash"
+        message="cbu.uz dan bugungi kurslarni yuklab olishni xohlaysizmi?"
+        confirmLabel={t("ui__загрузить_курсы_с_cbu_uz_a2eee229")}
+        variant="warning"
+      />
     </div>
   );
 }

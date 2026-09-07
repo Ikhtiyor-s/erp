@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
-import { Calendar, User, CheckCircle, Clock, AlertCircle } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
-import { Modal, Field, input } from "@/components/ui/modal";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { DataTable, type Column } from "@/components/ui/data-table";
 
 type Plan = {
   id: string;
@@ -23,11 +24,11 @@ type Plan = {
 
 const fmt = (v: any) => Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 
-const STATUS: Record<string, { l: string; c: string }> = {
-  active: { l: "Faol", c: "bg-blue-100 text-blue-700" },
-  completed: { l: "Yakunlangan", c: "bg-emerald-100 text-emerald-700" },
-  defaulted: { l: "Qarz", c: "bg-rose-100 text-rose-700" },
-  cancelled: { l: "Bekor", c: "bg-slate-100 text-slate-600" },
+const STATUS: Record<string, { l: string; tone: "info" | "success" | "danger" | "neutral" }> = {
+  active: { l: "Faol", tone: "info" },
+  completed: { l: "Yakunlangan", tone: "success" },
+  defaulted: { l: "Qarz", tone: "danger" },
+  cancelled: { l: "Bekor", tone: "neutral" },
 };
 
 export default function InstallmentsPage() {
@@ -40,66 +41,61 @@ export default function InstallmentsPage() {
   }
   useEffect(() => { load(); }, [filter]);
 
+  const columns: Column<Plan>[] = [
+    { key: "customer_name", header: "Mijoz" },
+    { key: "start_date", header: "Boshlanish", width: "120px", render: (p) => <span className="text-ink-500">{p.start_date}</span> },
+    { key: "total_amount", header: "Jami", align: "right", width: "140px", render: (p) => <span className="font-mono">{fmt(p.total_amount)}</span> },
+    {
+      key: "paid_amount",
+      header: "To'langan",
+      align: "right",
+      width: "160px",
+      render: (p) => {
+        const pct = Number(p.total_amount) ? Math.round((Number(p.paid_amount) / Number(p.total_amount)) * 100) : 0;
+        return (
+          <div>
+            <div className="font-mono">{fmt(p.paid_amount)}</div>
+            <div className="h-1 bg-ink-100 dark:bg-ink-800 rounded mt-1">
+              <div className="h-1 bg-brand-600 rounded" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        );
+      },
+    },
+    { key: "paid_count", header: "Oy", align: "center", width: "90px", render: (p) => `${p.paid_count}/${p.months}` },
+    { key: "interest_pct", header: "% foiz", align: "center", width: "90px", render: (p) => `${p.interest_pct}%` },
+    {
+      key: "status",
+      header: "Holat",
+      align: "center",
+      width: "120px",
+      render: (p) => <Badge tone={STATUS[p.status]?.tone || "neutral"}>{STATUS[p.status]?.l || p.status}</Badge>,
+    },
+  ];
+
   return (
     <div className="space-y-5">
       <PageHeader title="Bo'lib to'lash"
         description="Mijozlar uchun ochilgan bo'lib to'lash rejalari" />
 
-      <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
-        <span className="text-sm text-slate-500">Holat:</span>
-        {Object.entries(STATUS).map(([k, v]) => (
-          <button key={k} onClick={() => setFilter(k)}
-            className={`px-3 py-1.5 rounded text-sm ${filter === k ? "bg-brand-600 text-white" : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"}`}>
-            {v.l}
-          </button>
-        ))}
-      </div>
+      <Card padding="sm">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-ink-500">Holat:</span>
+          {Object.entries(STATUS).map(([k, v]) => (
+            <Button key={k} size="sm" variant={filter === k ? "primary" : "ghost"} onClick={() => setFilter(k)}>
+              {v.l}
+            </Button>
+          ))}
+        </div>
+      </Card>
 
-      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-        {rows.length === 0 ? (
-          <div className="py-16 text-center text-slate-400">Bo'lib to'lash yo'q</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-900/40 text-xs text-slate-500 uppercase">
-              <tr>
-                <th className="text-left px-4 py-2.5">Mijoz</th>
-                <th className="text-left px-4 py-2.5">Boshlanish</th>
-                <th className="text-right px-4 py-2.5">Jami</th>
-                <th className="text-right px-4 py-2.5">To'langan</th>
-                <th className="text-center px-4 py-2.5">Oy</th>
-                <th className="text-center px-4 py-2.5">% foiz</th>
-                <th className="text-center px-4 py-2.5">Holat</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {rows.map((p) => {
-                const pct = Number(p.total_amount) ? Math.round((Number(p.paid_amount) / Number(p.total_amount)) * 100) : 0;
-                return (
-                  <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/40 cursor-pointer"
-                    onClick={() => location.href = `/finance/installments/${p.id}`}>
-                    <td className="px-4 py-2.5">{p.customer_name}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{p.start_date}</td>
-                    <td className="px-4 py-2.5 text-right font-mono">{fmt(p.total_amount)}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <div className="font-mono">{fmt(p.paid_amount)}</div>
-                      <div className="h-1 bg-slate-100 dark:bg-slate-700 rounded mt-1">
-                        <div className="h-1 bg-brand-600 rounded" style={{ width: `${pct}%` }} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5 text-center">{p.paid_count}/{p.months}</td>
-                    <td className="px-4 py-2.5 text-center">{p.interest_pct}%</td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span className={`text-xs px-2 py-0.5 rounded ${STATUS[p.status]?.c || "bg-slate-100"}`}>
-                        {STATUS[p.status]?.l || p.status}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(p) => p.id}
+        emptyText="Bo'lib to'lash yo'q"
+        onRowClick={(p) => { location.href = `/finance/installments/${p.id}`; }}
+      />
     </div>
   );
 }

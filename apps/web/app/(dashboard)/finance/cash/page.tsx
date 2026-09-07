@@ -8,6 +8,9 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Cashbox = {
@@ -58,6 +61,7 @@ export default function CashPage() {
   const [cbOpen, setCbOpen] = useState(false);
   const [cbForm, setCbForm] = useState<any>(emptyCB);
   const [cbEditId, setCbEditId] = useState<number | null>(null);
+  const [cbDelTarget, setCbDelTarget] = useState<Cashbox | null>(null);
 
   const [mvOpen, setMvOpen] = useState(false);
   const [mvForm, setMvForm] = useState<any>(emptyMV);
@@ -94,10 +98,12 @@ export default function CashPage() {
       toast.success(t("ui__сохранено_54a59b19")); setCbOpen(false); setCbForm(emptyCB); setCbEditId(null); loadBoxes();
     } catch (e) { toast.error(getErrorMessage(e, "Xato")); }
   }
-  async function delCashbox(r: Cashbox) {
-    if (!confirm(`«${r.name}» kassasi yopilsinmi?`)) return;
-    await api.delete(`/finance/cashboxes/${r.id}`);
-    toast.success(t("ui__закрыто_82809576")); loadBoxes();
+  async function delCashbox() {
+    if (!cbDelTarget) return;
+    await api.delete(`/finance/cashboxes/${cbDelTarget.id}`);
+    toast.success(t("ui__закрыто_82809576"));
+    setCbDelTarget(null);
+    loadBoxes();
   }
 
   async function saveMovement() {
@@ -160,8 +166,8 @@ export default function CashPage() {
         <span
           className={`font-mono ${
             Number(r.balance) < 0
-              ? "text-red-600 dark:text-red-400"
-              : "text-green-700 dark:text-green-400"
+              ? "text-danger-600 dark:text-danger-500"
+              : "text-success-700 dark:text-success-500"
           }`}
         >
           {fmt(r.balance)} {r.currency_code || curCode(r.currency_id)}
@@ -175,13 +181,9 @@ export default function CashPage() {
       width: "100px",
       render: (r) =>
         r.is_active ? (
-          <span className="text-green-600 dark:text-green-400 text-xs font-medium">
-            {t("ui__активна_047e75c5")}
-          </span>
+          <Badge tone="success">{t("ui__активна_047e75c5")}</Badge>
         ) : (
-          <span className="text-slate-400 dark:text-slate-500 text-xs">
-            {t("ui__закрыта_e17fe6d2")}
-          </span>
+          <Badge tone="neutral">{t("ui__закрыта_e17fe6d2")}</Badge>
         ),
     },
   ];
@@ -213,11 +215,11 @@ export default function CashPage() {
       width: "110px",
       render: (r) =>
         r.direction === "in" ? (
-          <span className="text-green-600 dark:text-green-400 inline-flex items-center gap-1">
+          <span className="text-success-600 dark:text-success-500 inline-flex items-center gap-1">
             <ArrowDownCircle size={14} /> {t("ui__приход_ebf29487")}
           </span>
         ) : (
-          <span className="text-red-600 dark:text-red-400 inline-flex items-center gap-1">
+          <span className="text-danger-600 dark:text-danger-500 inline-flex items-center gap-1">
             <ArrowUpCircle size={14} /> {t("ui__расход_6068400a")}
           </span>
         ),
@@ -231,8 +233,8 @@ export default function CashPage() {
         <span
           className={`font-mono ${
             r.direction === "in"
-              ? "text-green-700 dark:text-green-400"
-              : "text-red-700 dark:text-red-400"
+              ? "text-success-700 dark:text-success-500"
+              : "text-danger-700 dark:text-danger-500"
           }`}
         >
           {r.direction === "in" ? "+" : "−"}
@@ -262,10 +264,10 @@ export default function CashPage() {
 
       <DataTable columns={boxCols} rows={boxes} loading={loading}
         onEdit={(r) => { setCbForm({ name: r.name, currency_id: r.currency_id, warehouse_id: r.warehouse_id ?? null }); setCbEditId(r.id); setCbOpen(true); }}
-        onDelete={delCashbox} />
+        onDelete={(r) => setCbDelTarget(r)} />
 
       <div className="flex items-center justify-between mt-8">
-        <h2 className="text-lg font-semibold">{t("ui__операции_1e7f2e5c")}</h2>
+        <h2 className="text-[14px] font-semibold text-ink-800 dark:text-ink-100">{t("ui__операции_1e7f2e5c")}</h2>
         <div className="flex gap-2">
           <select className={`${input} max-w-xs`} value={filterCB || ""}
             onChange={(e) => {
@@ -275,14 +277,12 @@ export default function CashPage() {
             <option value="">{t("ui__все_кассы_c22bb516")}</option>
             {boxes.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
-          <button onClick={() => { setTrForm(emptyTR); setTrOpen(true); }}
-            className="inline-flex items-center gap-1.5 border border-brand-300 text-brand-700 px-3 py-2 rounded-md text-sm hover:bg-brand-50">
-            <ArrowLeftRight size={14} /> {t("ui__перевод_b93e8b66")}
-          </button>
-          <button onClick={() => { setMvForm(emptyMV); setMvOpen(true); }}
-            className="bg-brand-600 text-white px-4 py-2 rounded-md text-sm hover:bg-brand-700">
+          <Button variant="outline" size="sm" icon={ArrowLeftRight} onClick={() => { setTrForm(emptyTR); setTrOpen(true); }}>
+            {t("ui__перевод_b93e8b66")}
+          </Button>
+          <Button size="sm" onClick={() => { setMvForm(emptyMV); setMvOpen(true); }}>
             {t("ui__новая_операция_f4eae07b")}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -302,7 +302,7 @@ export default function CashPage() {
           </Field>
           <Field label={tCB("warehouse_label")} required={!cbEditId}>
             <select
-              className={`${input} ${!cbEditId && !cbForm.warehouse_id ? "border-red-300 focus:border-red-400 focus:ring-red-300/30" : ""}`}
+              className={`${input} ${!cbEditId && !cbForm.warehouse_id ? "border-danger-300 focus:border-danger-500 focus:ring-danger-300/30" : ""}`}
               value={cbForm.warehouse_id || ""}
               onChange={(e) => setCbForm({ ...cbForm, warehouse_id: e.target.value ? Number(e.target.value) : null })}
             >
@@ -310,18 +310,18 @@ export default function CashPage() {
               {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
             {!cbEditId && !cbForm.warehouse_id && (
-              <p className="text-xs text-red-500 mt-0.5">{tCB("warehouse_required")}</p>
+              <p className="text-xs text-danger-500 mt-0.5">{tCB("warehouse_required")}</p>
             )}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setCbOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button
+            <Button type="button" variant="outline" onClick={() => setCbOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button
+              type="button"
               onClick={saveCashbox}
               disabled={!cbEditId && !cbForm.warehouse_id}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t("ui__сохранить_74ea58b6")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
@@ -337,16 +337,14 @@ export default function CashPage() {
           </Field>
           <Field label={t("ui__тип_операции_43ca5509")} required>
             <div className="flex gap-2">
-              <button type="button"
-                onClick={() => setMvForm({ ...mvForm, direction: "in" })}
-                className={`flex-1 py-2 rounded-md border text-sm ${mvForm.direction === "in" ? "bg-green-50 border-green-400 text-green-700" : "bg-white dark:bg-slate-800"}`}>
+              <Button type="button" fullWidth variant={mvForm.direction === "in" ? "success" : "outline"}
+                onClick={() => setMvForm({ ...mvForm, direction: "in" })}>
                 {t("ui__приход_ebf29487")}
-              </button>
-              <button type="button"
-                onClick={() => setMvForm({ ...mvForm, direction: "out" })}
-                className={`flex-1 py-2 rounded-md border text-sm ${mvForm.direction === "out" ? "bg-red-50 border-red-400 text-red-700" : "bg-white dark:bg-slate-800"}`}>
+              </Button>
+              <Button type="button" fullWidth variant={mvForm.direction === "out" ? "danger" : "outline"}
+                onClick={() => setMvForm({ ...mvForm, direction: "out" })}>
                 {t("ui__расход_6068400a")}
-              </button>
+              </Button>
             </div>
           </Field>
           <Field label={t("ui__сумма_cf59ebf9")} required>
@@ -358,8 +356,8 @@ export default function CashPage() {
               onChange={(e) => setMvForm({ ...mvForm, description: e.target.value })} />
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setMvOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={saveMovement} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__провести_569058f4")}</button>
+            <Button type="button" variant="outline" onClick={() => setMvOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button type="button" onClick={saveMovement}>{t("ui__провести_569058f4")}</Button>
           </div>
         </div>
       </Modal>
@@ -389,11 +387,21 @@ export default function CashPage() {
               onChange={(e) => setTrForm({ ...trForm, description: e.target.value })} />
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setTrOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={saveTransfer} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__перевести_844df3cf")}</button>
+            <Button type="button" variant="outline" onClick={() => setTrOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button type="button" onClick={saveTransfer}>{t("ui__перевести_844df3cf")}</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!cbDelTarget}
+        onClose={() => setCbDelTarget(null)}
+        onConfirm={delCashbox}
+        title="Kassani yopish"
+        message={cbDelTarget ? `«${cbDelTarget.name}» kassasi yopilsinmi?` : ""}
+        confirmLabel="Yopish"
+        variant="danger"
+      />
     </div>
   );
 }

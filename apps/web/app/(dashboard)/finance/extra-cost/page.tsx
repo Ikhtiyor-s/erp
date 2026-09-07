@@ -2,12 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Search } from "lucide-react";
+import { Search, Wallet, Tag, ListOrdered } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { StatWidget } from "@/components/ui/stat-widget";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Cost = {
@@ -43,6 +47,7 @@ export default function ExtraCostPage() {
     date_to: today(),
   });
   const [open, setOpen] = useState(false);
+  const [delTarget, setDelTarget] = useState<Cost | null>(null);
 
   const empty = {
     cost_date: today(),
@@ -99,10 +104,11 @@ export default function ExtraCostPage() {
       toast.error(getErrorMessage(e, "Xato"));
     }
   }
-  async function del(r: Cost) {
-    if (!confirm(`«${r.category}» chiqimi o'chirilsinmi?`)) return;
-    await api.delete(`/finance/extra-costs/${r.id}`);
+  async function del() {
+    if (!delTarget) return;
+    await api.delete(`/finance/extra-costs/${delTarget.id}`);
     toast.success(t("ui__удалено_0c450c40"));
+    setDelTarget(null);
     load();
   }
 
@@ -149,7 +155,7 @@ export default function ExtraCostPage() {
       align: "right",
       width: "180px",
       render: (r) => (
-        <span className="font-mono text-red-700 dark:text-red-400">
+        <span className="font-mono text-danger-700 dark:text-danger-500">
           −{fmt(r.amount)} {r.currency_code}
         </span>
       ),
@@ -167,73 +173,83 @@ export default function ExtraCostPage() {
         }}
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="sm:col-span-2 relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__поиск_категория_описание_23bd63c5")}
-          </label>
-          <Search
-            size={14}
-            className="absolute left-2.5 top-[34px] text-slate-400"
-          />
-          <input
-            className={`${input} pl-8`}
-            placeholder={t("ui__поиск_b84a8f87")}
-            value={filters.q}
-            onChange={(e) => setFilters({ ...filters, q: e.target.value })}
-          />
+      <Card padding="md">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="sm:col-span-2 relative">
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
+              {t("ui__поиск_категория_описание_23bd63c5")}
+            </label>
+            <Search
+              size={14}
+              className="absolute left-2.5 top-[34px] text-ink-400"
+            />
+            <input
+              className={`${input} pl-8`}
+              placeholder={t("ui__поиск_b84a8f87")}
+              value={filters.q}
+              onChange={(e) => setFilters({ ...filters, q: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
+              {t("ui__с_даты_09fc6619")}
+            </label>
+            <input
+              type="date"
+              className={input}
+              value={filters.date_from}
+              onChange={(e) =>
+                setFilters({ ...filters, date_from: e.target.value })
+              }
+            />
+          </div>
+          <div>
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
+              {t("ui__по_дату_760bcfc8")}
+            </label>
+            <input
+              type="date"
+              className={input}
+              value={filters.date_to}
+              onChange={(e) =>
+                setFilters({ ...filters, date_to: e.target.value })
+              }
+            />
+          </div>
+          <div className="flex items-end">
+            <Button fullWidth onClick={load}>
+              {t("ui__применить_2cd84411")}
+            </Button>
+          </div>
         </div>
-        <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__с_даты_09fc6619")}
-          </label>
-          <input
-            type="date"
-            className={input}
-            value={filters.date_from}
-            onChange={(e) =>
-              setFilters({ ...filters, date_from: e.target.value })
-            }
-          />
-        </div>
-        <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__по_дату_760bcfc8")}
-          </label>
-          <input
-            type="date"
-            className={input}
-            value={filters.date_to}
-            onChange={(e) =>
-              setFilters({ ...filters, date_to: e.target.value })
-            }
-          />
-        </div>
-        <div className="flex items-end">
-          <button
-            onClick={load}
-            className="w-full px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
-          >
-            {t("ui__применить_2cd84411")}
-          </button>
-        </div>
-      </div>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card label={t("ui__сумма_cf59ebf9")} value={fmt(total)} sub={`${filtered.length} ta yozuv`} />
-        <Card
+        <StatWidget
+          label={t("ui__сумма_cf59ebf9")}
+          value={fmt(total)}
+          subValue={`${filtered.length} ta yozuv`}
+          icon={Wallet}
+          color="danger"
+          mono
+        />
+        <StatWidget
           label={t("ui__топ_категория_75409665")}
           value={byCategory[0]?.[0] || "—"}
-          sub={byCategory[0] ? fmt(byCategory[0][1]) : ""}
+          subValue={byCategory[0] ? fmt(byCategory[0][1]) : ""}
+          icon={Tag}
+          color="warn"
         />
-        <Card
+        <StatWidget
           label={t("ui__категорий_4c2c134b")}
           value={String(byCategory.length)}
-          sub="turli"
+          subValue="turli"
+          icon={ListOrdered}
+          color="ink"
         />
       </div>
 
-      <DataTable columns={cols} rows={filtered} loading={loading} onDelete={del} />
+      <DataTable columns={cols} rows={filtered} loading={loading} onDelete={(r) => setDelTarget(r)} />
 
       <Modal
         open={open}
@@ -321,46 +337,26 @@ export default function ExtraCostPage() {
               }
             />
           </Field>
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button
-              onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-            >
+          <div className="flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("ui__отмена_987b33c6")}
-            </button>
-            <button
-              onClick={save}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
-            >
+            </Button>
+            <Button type="button" onClick={save}>
               {t("ui__сохранить_74ea58b6")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
-    </div>
-  );
-}
 
-function Card({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-}) {
-  return (
-    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-4">
-      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-        {label}
-      </div>
-      <div className="text-2xl font-bold mt-1 text-slate-900 dark:text-slate-100 font-mono">
-        {value}
-      </div>
-      <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-        {sub}
-      </div>
+      <ConfirmDialog
+        open={!!delTarget}
+        onClose={() => setDelTarget(null)}
+        onConfirm={del}
+        title="Chiqimni o'chirish"
+        message={delTarget ? `«${delTarget.category}» chiqimi o'chirilsinmi?` : ""}
+        confirmLabel={t("ui__удалено_0c450c40")}
+        variant="danger"
+      />
     </div>
   );
 }

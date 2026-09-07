@@ -7,6 +7,8 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type PT = { id: number; code: string; name: string; is_cash: boolean; is_active: boolean };
@@ -19,6 +21,7 @@ export default function PaymentTypePage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<number | null>(null);
+  const [delTarget, setDelTarget] = useState<PT | null>(null);
 
   async function load() {
     setLoading(true);
@@ -34,10 +37,12 @@ export default function PaymentTypePage() {
       toast.success(t("ui__сохранено_54a59b19")); setOpen(false); load();
     } catch (e) { toast.error(getErrorMessage(e, "Xato")); }
   }
-  async function del(r: PT) {
-    if (!confirm(`«${r.name}» o'chirilsinmi?`)) return;
-    await api.delete(`/reference/payment-types/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40")); load();
+  async function del() {
+    if (!delTarget) return;
+    await api.delete(`/reference/payment-types/${delTarget.id}`);
+    toast.success(t("ui__удалено_0c450c40"));
+    setDelTarget(null);
+    load();
   }
 
   const columns: Column<PT>[] = [
@@ -55,7 +60,7 @@ export default function PaymentTypePage() {
         onCreate={() => { setForm(empty); setEditId(null); setOpen(true); }} />
       <DataTable columns={columns} rows={rows} loading={loading}
         onEdit={(r) => { setForm({ code: r.code, name: r.name, is_cash: r.is_cash }); setEditId(r.id); setOpen(true); }}
-        onDelete={del} />
+        onDelete={(r) => setDelTarget(r)} />
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Tahrirlash" : "Yangi to'lov turi"}>
         <div className="space-y-3">
@@ -70,11 +75,21 @@ export default function PaymentTypePage() {
             {t("ui__наличные_2f0b3c5f")}
           </label>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button type="button" onClick={save}>{t("ui__сохранить_74ea58b6")}</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!delTarget}
+        onClose={() => setDelTarget(null)}
+        onConfirm={del}
+        title="To'lov turini o'chirish"
+        message={delTarget ? `«${delTarget.name}» o'chirilsinmi?` : ""}
+        confirmLabel={t("ui__удалено_0c450c40")}
+        variant="danger"
+      />
     </div>
   );
 }

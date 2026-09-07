@@ -7,6 +7,9 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Inv = {
@@ -15,13 +18,15 @@ type Inv = {
 };
 type Customer = { id: string; name: string };
 type Currency = { id: number; code: string };
+type StatusTone = "neutral" | "info" | "success" | "danger";
 
 const fmt = (v: any) => Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 const today = () => new Date().toISOString().slice(0, 10);
-const statusColor = (s: string) => ({
-  draft: "text-slate-500 dark:text-slate-400", sent: "text-blue-600",
-  paid: "text-green-600", overdue: "text-red-600", cancelled: "text-red-600",
-}[s] || "");
+const statusTone = (s: string): StatusTone =>
+  ({
+    draft: "neutral", sent: "info",
+    paid: "success", overdue: "danger", cancelled: "danger",
+  } as Record<string, StatusTone>)[s] || "neutral";
 
 export default function InvoicePage() {
   const t = useTranslations("ui");
@@ -31,6 +36,7 @@ export default function InvoicePage() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [delTarget, setDelTarget] = useState<Inv | null>(null);
 
   const empty = {
     customer_id: "", doc_number: "", issue_date: today(), due_date: "",
@@ -65,10 +71,12 @@ export default function InvoicePage() {
     } catch (e) { toast.error(getErrorMessage(e, "Xato")); }
   }
 
-  async function del(r: Inv) {
-    if (!confirm(`«${r.doc_number || r.id.slice(0, 8)}» hisobi bekor qilinsinmi?`)) return;
-    await api.delete(`/sale/invoices/${r.id}`);
-    toast.success(t("ui__отменено_81a04dab")); load();
+  async function del() {
+    if (!delTarget) return;
+    await api.delete(`/sale/invoices/${delTarget.id}`);
+    toast.success(t("ui__отменено_81a04dab"));
+    setDelTarget(null);
+    load();
   }
 
   const columns: Column<Inv>[] = [
@@ -79,9 +87,9 @@ export default function InvoicePage() {
     { key: "total_amount", header: t("ui__сумма_cf59ebf9"), align: "right", width: "140px",
       render: (r) => <span className="font-mono">{fmt(r.total_amount)}</span> },
     { key: "paid_amount", header: t("ui__оплачено_6d8c0850"), align: "right", width: "140px",
-      render: (r) => <span className="font-mono text-green-700">{fmt(r.paid_amount)}</span> },
+      render: (r) => <span className="font-mono text-success-700 dark:text-success-500">{fmt(r.paid_amount)}</span> },
     { key: "status", header: t("ui__статус_7203f7a4"), width: "100px",
-      render: (r) => <span className={statusColor(r.status)}>{r.status}</span> },
+      render: (r) => <Badge tone={statusTone(r.status)}>{r.status}</Badge> },
   ];
 
   return (
@@ -97,7 +105,7 @@ export default function InvoicePage() {
           });
           setEditId(r.id); setOpen(true);
         }}
-        onDelete={del} />
+        onDelete={(r) => setDelTarget(r)} />
 
       <Modal open={open} onClose={() => setOpen(false)} size="lg" title={editId ? "Hisobni tahrirlash" : "Yangi hisob"}>
         <div className="grid grid-cols-2 gap-3">
@@ -132,11 +140,21 @@ export default function InvoicePage() {
             </select>
           </Field>
           <div className="col-span-2 flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button type="button" onClick={save}>{t("ui__сохранить_74ea58b6")}</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!delTarget}
+        onClose={() => setDelTarget(null)}
+        onConfirm={del}
+        title="Hisobni bekor qilish"
+        message={delTarget ? `«${delTarget.doc_number || delTarget.id.slice(0, 8)}» hisobi bekor qilinsinmi?` : ""}
+        confirmLabel={t("ui__отменено_81a04dab")}
+        variant="danger"
+      />
     </div>
   );
 }

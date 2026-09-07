@@ -7,6 +7,9 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Ct = {
@@ -15,12 +18,14 @@ type Ct = {
 };
 type Customer = { id: string; name: string };
 type Currency = { id: number; code: string };
+type StatusTone = "success" | "info" | "danger" | "neutral";
 
 const fmt = (v: any) => Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
-const statusColor = (s: string) => ({
-  active: "text-green-600", draft: "text-slate-500 dark:text-slate-400",
-  closed: "text-blue-600", cancelled: "text-red-600",
-}[s] || "");
+const statusTone = (s: string): StatusTone =>
+  ({
+    active: "success", draft: "neutral",
+    closed: "info", cancelled: "danger",
+  } as Record<string, StatusTone>)[s] || "neutral";
 
 export default function ContractPage() {
   const t = useTranslations("ui");
@@ -30,6 +35,7 @@ export default function ContractPage() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [delTarget, setDelTarget] = useState<Ct | null>(null);
 
   const empty = {
     customer_id: "", doc_number: "", start_date: "", end_date: "",
@@ -64,10 +70,12 @@ export default function ContractPage() {
     } catch (e: any) { toast.error(getErrorMessage(e, "Shartnoma saqlashda xato")); }
   }
 
-  async function del(r: Ct) {
-    if (!confirm(`«${r.doc_number || r.id.slice(0, 8)}» shartnomasi bekor qilinsinmi?`)) return;
-    await api.delete(`/sale/contracts/${r.id}`);
-    toast.success(t("ui__отменено_81a04dab")); load();
+  async function del() {
+    if (!delTarget) return;
+    await api.delete(`/sale/contracts/${delTarget.id}`);
+    toast.success(t("ui__отменено_81a04dab"));
+    setDelTarget(null);
+    load();
   }
 
   const columns: Column<Ct>[] = [
@@ -78,7 +86,7 @@ export default function ContractPage() {
     { key: "total_amount", header: t("ui__сумма_cf59ebf9"), align: "right", width: "150px",
       render: (r) => <span className="font-mono">{fmt(r.total_amount)}</span> },
     { key: "status", header: t("ui__статус_7203f7a4"), width: "120px",
-      render: (r) => <span className={statusColor(r.status)}>{r.status}</span> },
+      render: (r) => <Badge tone={statusTone(r.status)}>{r.status}</Badge> },
   ];
 
   return (
@@ -94,7 +102,7 @@ export default function ContractPage() {
           });
           setEditId(r.id); setOpen(true);
         }}
-        onDelete={del} />
+        onDelete={(r) => setDelTarget(r)} />
 
       <Modal open={open} onClose={() => setOpen(false)} size="lg" title={editId ? "Shartnomani tahrirlash" : "Yangi shartnoma"}>
         <div className="grid grid-cols-2 gap-3">
@@ -135,11 +143,21 @@ export default function ContractPage() {
             </Field>
           </div>
           <div className="col-span-2 flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button type="button" onClick={save}>{t("ui__сохранить_74ea58b6")}</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!delTarget}
+        onClose={() => setDelTarget(null)}
+        onConfirm={del}
+        title="Shartnomani bekor qilish"
+        message={delTarget ? `«${delTarget.doc_number || delTarget.id.slice(0, 8)}» shartnomasi bekor qilinsinmi?` : ""}
+        confirmLabel={t("ui__отменено_81a04dab")}
+        variant="danger"
+      />
     </div>
   );
 }
