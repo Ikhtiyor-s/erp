@@ -8,6 +8,9 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Order = {
@@ -42,11 +45,11 @@ const statusLabel = (s: string) =>
 
 const statusColor = (s: string) =>
   ({
-    new: "text-slate-700 dark:text-slate-300",
-    confirmed: "text-blue-700 dark:text-blue-400",
-    shipped: "text-yellow-700 dark:text-yellow-400",
-    delivered: "text-green-700 dark:text-green-400",
-    cancelled: "text-red-700 dark:text-red-400",
+    new: "text-ink-700 dark:text-ink-300",
+    confirmed: "text-info-700 dark:text-info-500",
+    shipped: "text-warn-700 dark:text-warn-500",
+    delivered: "text-success-700 dark:text-success-500",
+    cancelled: "text-danger-700 dark:text-danger-500",
   }[s] || "");
 
 export default function CustomerOrdersPage() {
@@ -57,6 +60,8 @@ export default function CustomerOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ q: "", status: "" });
   const [open, setOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Order | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({
     customer_id: "",
     delivery_date: "",
@@ -142,11 +147,23 @@ export default function CustomerOrdersPage() {
     }
   }
 
-  async function del(r: Order) {
-    if (!confirm(`Buyurtma №${r.doc_number} o'chirilsinmi?`)) return;
-    await api.delete(`/customer/orders/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40"));
-    load();
+  function del(r: Order) {
+    setDeleteTarget(r);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/customer/orders/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const cols: Column<Order>[] = [
@@ -177,7 +194,7 @@ export default function CustomerOrdersPage() {
       align: "right",
       width: "150px",
       render: (r) => (
-        <span className="font-mono text-slate-900 dark:text-slate-100">
+        <span className="font-mono text-ink-900 dark:text-ink-100">
           {fmt(r.total_amount)}
         </span>
       ),
@@ -190,7 +207,7 @@ export default function CustomerOrdersPage() {
         <select
           value={r.status}
           onChange={(e) => setStatus(r, e.target.value)}
-          className={`${statusColor(r.status)} bg-transparent border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs`}
+          className={`${statusColor(r.status)} bg-transparent border border-ink-300 dark:border-ink-700 rounded px-2 py-1 text-xs`}
         >
           <option value="new">{statusLabel("new")}</option>
           <option value="confirmed">{statusLabel("confirmed")}</option>
@@ -211,12 +228,12 @@ export default function CustomerOrdersPage() {
         createLabel={t("ui__новый_заказ_9a1a009d")}
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <Card className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="col-span-2 relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_или_клиент_a47c4d31")}
           </label>
-          <Search size={14} className="absolute left-2.5 top-[34px] text-slate-400" />
+          <Search size={14} className="absolute left-2.5 top-[34px] text-ink-400" />
           <input
             className={`${input} pl-8`}
             placeholder={t("ui__поиск_b84a8f87")}
@@ -226,7 +243,7 @@ export default function CustomerOrdersPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__статус_7203f7a4")}
           </label>
           <select
@@ -243,14 +260,11 @@ export default function CustomerOrdersPage() {
           </select>
         </div>
         <div className="flex items-end">
-          <button
-            onClick={load}
-            className="w-full px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
-          >
+          <Button onClick={load} fullWidth>
             {t("ui__фильтр_2f884b41")}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       <DataTable columns={cols} rows={rows} loading={loading} onDelete={del} />
 
@@ -281,9 +295,9 @@ export default function CustomerOrdersPage() {
             </Field>
           </div>
 
-          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+          <div className="border border-ink-200 dark:border-ink-800 rounded-lg overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900/40 text-slate-700 dark:text-slate-300">
+              <thead className="bg-ink-50 dark:bg-ink-900/40 text-ink-700 dark:text-ink-300">
                 <tr>
                   <th className="text-left px-3 py-2">{t("ui__товар_8b35db64")}</th>
                   <th className="text-right px-3 py-2 w-28">{t("ui__кол_во_302e2bd6")}</th>
@@ -294,7 +308,7 @@ export default function CustomerOrdersPage() {
               </thead>
               <tbody>
                 {form.items.map((it, idx) => (
-                  <tr key={idx} className="border-t border-slate-200 dark:border-slate-700">
+                  <tr key={idx} className="border-t border-ink-200 dark:border-ink-800">
                     <td className="px-3 py-2">
                       <select
                         className={input}
@@ -315,7 +329,7 @@ export default function CustomerOrdersPage() {
                         step="0.001"
                         value={it.quantity}
                         onChange={(e) => setLine(idx, "quantity", e.target.value)}
-                        className="w-24 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 rounded px-2 py-1 text-right text-sm"
+                        className={`${input} w-24 text-right`}
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -324,10 +338,10 @@ export default function CustomerOrdersPage() {
                         step="0.01"
                         value={it.price}
                         onChange={(e) => setLine(idx, "price", e.target.value)}
-                        className="w-28 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 rounded px-2 py-1 text-right text-sm"
+                        className={`${input} w-28 text-right`}
                       />
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-900 dark:text-slate-100">
+                    <td className="px-3 py-2 text-right font-mono text-ink-900 dark:text-ink-100">
                       {fmt(Number(it.quantity) * Number(it.price))}
                     </td>
                     <td className="text-center">
@@ -338,7 +352,7 @@ export default function CustomerOrdersPage() {
                             items: form.items.filter((_, i) => i !== idx),
                           })
                         }
-                        className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 p-1 rounded"
+                        className="text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15 p-1 rounded"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -369,22 +383,25 @@ export default function CustomerOrdersPage() {
             />
           </Field>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button
-              onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-            >
+          <div className="flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("ui__отмена_987b33c6")}
-            </button>
-            <button
-              onClick={save}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
-            >
+            </Button>
+            <Button type="button" onClick={save}>
               {t("ui__сохранить_74ea58b6")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title={t("ui__удалено_0c450c40")}
+        message={`Buyurtma №${deleteTarget?.doc_number} o'chirilsinmi?`}
+        loading={deleting}
+      />
     </div>
   );
 }

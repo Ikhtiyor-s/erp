@@ -9,6 +9,10 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Customer = {
@@ -53,6 +57,8 @@ export default function CustomersPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -87,11 +93,20 @@ export default function CustomersPage() {
       toast.error(getErrorMessage(e, "Xato"));
     }
   }
-  async function del(r: Customer) {
-    if (!confirm(`«${r.name}» o'chirilsinmi?`)) return;
-    await api.delete(`/customer/customers/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40"));
-    load();
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await api.delete(`/customer/customers/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleteLoading(false);
+    }
   }
 
   const fileRef = useRef<HTMLInputElement>(null);
@@ -134,7 +149,7 @@ export default function CustomersPage() {
       header: t("ui__id_номер_e669322b"),
       width: "120px",
       render: (r) => (
-        <code className="text-xs text-slate-600 dark:text-slate-400">
+        <code className="text-xs text-ink-600 dark:text-ink-400">
           {r.uuid_label}
         </code>
       ),
@@ -156,7 +171,8 @@ export default function CustomersPage() {
       key: "category_name",
       header: t("ui__категория_c95a1e2d"),
       width: "140px",
-      render: (r) => r.category_name || "—",
+      render: (r) =>
+        r.category_name ? <Badge tone="neutral">{r.category_name}</Badge> : "—",
     },
     {
       key: "location_name",
@@ -173,10 +189,10 @@ export default function CustomersPage() {
         const v = Number(r.balance || 0);
         const cls =
           v < 0
-            ? "text-red-700 dark:text-red-400"
+            ? "text-danger-700 dark:text-danger-500"
             : v > 0
-            ? "text-green-700 dark:text-green-400"
-            : "text-slate-500 dark:text-slate-400";
+            ? "text-success-700 dark:text-success-500"
+            : "text-ink-500 dark:text-ink-400";
         return <span className={`font-mono ${cls}`}>{fmt(v)}</span>;
       },
     },
@@ -195,17 +211,19 @@ export default function CustomersPage() {
       align: "center",
       width: "50px",
       render: (r) => (
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          icon={Eye}
           onClick={(e) => {
             e.stopPropagation();
             router.push(`/customer/customers/${r.id}`);
           }}
-          className="text-brand-600 dark:text-brand-400 hover:text-brand-700"
           title={t("ui__профиль_a46c3723")}
           aria-label={`${r.name} profilini ko'rish`}
-        >
-          <Eye size={14} aria-hidden="true" />
-        </button>
+          className="text-brand-600 dark:text-brand-400 hover:text-brand-700"
+        />
       ),
     },
   ];
@@ -223,14 +241,14 @@ export default function CustomersPage() {
       />
 
       {/* Filters */}
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <Card className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="sm:col-span-2 relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_имя_телефон_код_инн_47148610")}
           </label>
           <Search
             size={14}
-            className="absolute left-2.5 top-[34px] text-slate-400"
+            className="absolute left-2.5 top-[34px] text-ink-400"
           />
           <input
             className={`${input} pl-8`}
@@ -241,7 +259,7 @@ export default function CustomersPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__категория_c95a1e2d")}
           </label>
           <select
@@ -260,26 +278,23 @@ export default function CustomersPage() {
           </select>
         </div>
         <div className="flex items-end gap-2">
-          <button
-            onClick={load}
-            className="px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
-          >
+          <Button type="button" onClick={load} size="md">
             {t("ui__фильтр_2f884b41")}
-          </button>
+          </Button>
         </div>
         <div className="flex items-end gap-2 justify-end">
-          <button
-            onClick={exportCsv}
-            className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 inline-flex items-center gap-1.5"
-          >
-            <Download size={14} /> CSV
-          </button>
-          <button
+          <Button type="button" variant="outline" size="sm" icon={Download} onClick={exportCsv}>
+            CSV
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            icon={Upload}
             onClick={() => fileRef.current?.click()}
-            className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 inline-flex items-center gap-1.5"
           >
-            <Upload size={14} /> {t("ui__импорт_d0cee49f")}
-          </button>
+            {t("ui__импорт_d0cee49f")}
+          </Button>
           <input
             ref={fileRef}
             type="file"
@@ -292,7 +307,7 @@ export default function CustomersPage() {
             }}
           />
         </div>
-      </div>
+      </Card>
 
       {/* Desktop table */}
       <div className="hidden md:block">
@@ -314,49 +329,82 @@ export default function CustomersPage() {
             setEditId(r.id);
             setOpen(true);
           }}
-          onDelete={del}
+          onDelete={(r) => setDeleteTarget(r)}
         />
       </div>
 
       {/* Mobile cards */}
-      <ul className="md:hidden space-y-3">
-        {loading && <li className="text-center text-sm text-slate-400 py-8">{t("ui__загрузка_43e40d49")}</li>}
-        {!loading && rows.length === 0 && <li className="text-center text-sm text-slate-400 py-8">{t("ui__нет_данных_dee9a2d8")}</li>}
-        {rows.map((r) => (
-          <li key={r.id} className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-slate-900 dark:text-slate-100 truncate">{r.name}</p>
-                {r.phone && <p className="text-sm text-slate-500 dark:text-slate-400">{r.phone}</p>}
-                {r.category_name && <p className="text-xs text-slate-400 dark:text-slate-500">{r.category_name}</p>}
-                <p className={`text-xs font-mono mt-0.5 ${Number(r.balance || 0) < 0 ? "text-red-600" : Number(r.balance || 0) > 0 ? "text-green-600" : "text-slate-400"}`}>
-                  {t("ui__баланс_95dcad97")}: {fmt(r.balance)}
-                </p>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <button
-                  aria-label="Ko'rish"
-                  onClick={() => router.push(`/customer/customers/${r.id}`)}
-                  className="text-xs text-brand-600 hover:text-brand-700 px-2 py-1 rounded border border-brand-200"
-                >
-                  Ko&apos;rish
-                </button>
-                <button
-                  aria-label="Tahrirlash"
-                  onClick={() => {
-                    setForm({ name: r.name, code: r.code || "", phone: r.phone || "", email: r.email || "", address: r.address || "", tin: r.tin || "", category_id: r.category_id || null, notes: "" });
-                    setEditId(r.id);
-                    setOpen(true);
-                  }}
-                  className="text-xs text-slate-600 hover:text-slate-700 px-2 py-1 rounded border border-slate-200"
-                >
-                  Tahrir
-                </button>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {loading ? (
+        <div className="md:hidden text-center text-sm text-ink-400 py-8">
+          {t("ui__загрузка_43e40d49")}
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="md:hidden text-center text-sm text-ink-400 py-8">
+          {t("ui__нет_данных_dee9a2d8")}
+        </div>
+      ) : (
+        <Card padding="none" className="md:hidden">
+          <ul className="divide-y divide-ink-100 dark:divide-ink-800">
+            {rows.map((r) => (
+              <li key={r.id} className="p-4 flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-ink-900 dark:text-ink-100 truncate">{r.name}</p>
+                  {r.phone && <p className="text-sm text-ink-500 dark:text-ink-400">{r.phone}</p>}
+                  {r.category_name && (
+                    <div className="mt-1">
+                      <Badge tone="neutral">{r.category_name}</Badge>
+                    </div>
+                  )}
+                  <p
+                    className={`text-xs font-mono mt-1 ${
+                      Number(r.balance || 0) < 0
+                        ? "text-danger-600 dark:text-danger-500"
+                        : Number(r.balance || 0) > 0
+                        ? "text-success-600 dark:text-success-500"
+                        : "text-ink-400"
+                    }`}
+                  >
+                    {t("ui__баланс_95dcad97")}: {fmt(r.balance)}
+                  </p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    aria-label="Ko'rish"
+                    onClick={() => router.push(`/customer/customers/${r.id}`)}
+                  >
+                    Ko&apos;rish
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    aria-label="Tahrirlash"
+                    onClick={() => {
+                      setForm({
+                        name: r.name,
+                        code: r.code || "",
+                        phone: r.phone || "",
+                        email: r.email || "",
+                        address: r.address || "",
+                        tin: r.tin || "",
+                        category_id: r.category_id || null,
+                        notes: "",
+                      });
+                      setEditId(r.id);
+                      setOpen(true);
+                    }}
+                  >
+                    Tahrir
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <Modal
         open={open}
@@ -443,22 +491,26 @@ export default function CustomersPage() {
               />
             </Field>
           </div>
-          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button
-              onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-            >
+          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("ui__отмена_987b33c6")}
-            </button>
-            <button
-              onClick={save}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
-            >
+            </Button>
+            <Button type="button" onClick={save}>
               {t("ui__сохранить_74ea58b6")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="O'chirish"
+        message={`«${deleteTarget?.name}» o'chirilsinmi?`}
+        variant="danger"
+        loading={deleteLoading}
+      />
     </div>
   );
 }

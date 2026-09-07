@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatWidget } from "@/components/ui/stat-widget";
+import { input } from "@/components/ui/modal";
 import { useTranslations } from "next-intl";
 
 type Row = {
@@ -40,7 +42,7 @@ export default function CashbackTurnoverPage() {
       align: "right",
       width: "180px",
       render: (r) => (
-        <span className="font-mono text-green-700 dark:text-green-400">
+        <span className="font-mono text-success-700 dark:text-success-500">
           {fmt((Number(r.turnover) * pct) / 100)}
         </span>
       ),
@@ -52,7 +54,7 @@ export default function CashbackTurnoverPage() {
       <PageHeader title={t("ui__кэшбэк_оборот_клиентов_f31df9ea")} description={t("ui__расчёт_потенциального_кэшбэка__10c72eff")} />
       <div className="flex flex-wrap items-end gap-4">
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 uppercase tracking-wide block mb-1">
             {t("ui__ставка_кэшбэка_e827bf34")}
           </label>
           <input
@@ -62,45 +64,31 @@ export default function CashbackTurnoverPage() {
             max="100"
             value={pct}
             onChange={(e) => setPct(Number(e.target.value) || 0)}
-            className="w-24 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-md px-3 py-2 text-sm"
+            className={`${input} w-24`}
           />
         </div>
-        <Card
+        <StatWidget
+          className="flex-1 min-w-[160px]"
           label={t("ui__клиентов_a8c15ba0")}
           value={rows.length}
-          color="text-slate-900 dark:text-slate-100"
+          color="ink"
         />
-        <Card
+        <StatWidget
+          className="flex-1 min-w-[160px]"
           label={t("ui__оборот_всего_9a1b2af4")}
           value={fmt(total)}
-          color="text-slate-900 dark:text-slate-100"
+          color="ink"
+          mono
         />
-        <Card
+        <StatWidget
+          className="flex-1 min-w-[160px]"
           label={t("ui__кэшбэк_всего_8dad600a")}
           value={fmt(cashTotal)}
-          color="text-green-600 dark:text-green-400"
+          color="success"
+          mono
         />
       </div>
       <DataTable columns={columns} rows={rows} loading={loading} />
-    </div>
-  );
-}
-
-function Card({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: any;
-  color: string;
-}) {
-  return (
-    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-3 flex-1 min-w-[160px]">
-      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-        {label}
-      </div>
-      <div className={`text-xl font-bold mt-1 font-mono ${color}`}>{value}</div>
     </div>
   );
 }
