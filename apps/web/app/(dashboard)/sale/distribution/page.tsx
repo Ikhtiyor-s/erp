@@ -6,6 +6,9 @@ import { MapPin, User, CheckCircle, Clock } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
 import { Modal, Field, input } from "@/components/ui/modal";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 type Visit = {
   id: string;
@@ -20,11 +23,14 @@ type Visit = {
 type Customer = { id: string; name: string; phone?: string };
 type Employee = { id: string; full_name: string };
 
-const STATUS_LABEL: Record<string, { l: string; c: string }> = {
-  planned: { l: "Rejada", c: "bg-slate-100 text-slate-700" },
-  in_progress: { l: "Boshlandi", c: "bg-blue-100 text-blue-700" },
-  completed: { l: "Yakunlandi", c: "bg-emerald-100 text-emerald-700" },
-  skipped: { l: "O'tkazib yuborildi", c: "bg-amber-100 text-amber-700" },
+const STATUS_LABEL: Record<
+  string,
+  { l: string; tone: "neutral" | "info" | "success" | "warning" }
+> = {
+  planned: { l: "Rejada", tone: "neutral" },
+  in_progress: { l: "Boshlandi", tone: "info" },
+  completed: { l: "Yakunlandi", tone: "success" },
+  skipped: { l: "O'tkazib yuborildi", tone: "warning" },
 };
 
 export default function DistributionPage() {
@@ -59,40 +65,40 @@ export default function DistributionPage() {
         description="Dala xodimlari uchun marshrut va rejalashtirilgan vizitlar"
         onCreate={() => { setForm({ ...form, visit_date: date }); setOpen(true); }} />
 
-      <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-2">
-        <span className="text-sm text-slate-500">Sana:</span>
+      <Card padding="sm" className="flex items-center gap-2">
+        <span className="text-sm text-ink-500">Sana:</span>
         <input type="date" className={`${input} max-w-xs`} value={date}
           onChange={(e) => setDate(e.target.value)} />
         <a href="/sale/visits" className="ml-auto text-sm text-brand-600 hover:underline">
           Yakunlangan vizitlar →
         </a>
-      </div>
+      </Card>
 
-      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+      <Card padding="none">
         {visits.length === 0 ? (
-          <div className="py-16 text-center text-slate-400">
+          <div className="py-16 text-center text-ink-400">
             <MapPin size={48} className="mx-auto mb-3 opacity-40" />
             Bu kunda vizitlar rejalashtirilmagan
           </div>
         ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-700">
+          <ul className="divide-y divide-ink-100 dark:divide-ink-800">
             {visits.map((v) => (
               <li key={v.id} className="px-4 py-3 flex items-center justify-between">
                 <div className="flex-1">
-                  <div className="font-medium">{v.customer_name}</div>
-                  <div className="text-xs text-slate-500 flex items-center gap-3 mt-0.5">
+                  <div className="font-medium text-ink-900 dark:text-ink-100">{v.customer_name}</div>
+                  <div className="text-xs text-ink-500 flex items-center gap-3 mt-0.5">
                     {v.customer_phone && <span>{v.customer_phone}</span>}
                     <span className="flex items-center gap-1"><User size={11} /> {v.employee_name}</span>
                   </div>
                 </div>
-                <span className={`text-xs px-2 py-0.5 rounded ${STATUS_LABEL[v.status]?.c}`}>
+                <Badge tone={STATUS_LABEL[v.status]?.tone}>
                   {STATUS_LABEL[v.status]?.l}
-                </span>
+                </Badge>
               </li>
             ))}
           </ul>
         )}
-      </div>
+      </Card>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Yangi vizit rejasi">
         <div className="grid grid-cols-2 gap-3">
@@ -122,9 +128,9 @@ export default function DistributionPage() {
             <input type="number" className={input} value={form.sort_order}
               onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) || 0 })} />
           </Field>
-          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded">Bekor</button>
-            <button onClick={create} className="px-4 py-2 text-sm bg-brand-600 text-white rounded">Saqlash</button>
+          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Bekor</Button>
+            <Button type="button" onClick={create}>Saqlash</Button>
           </div>
         </div>
       </Modal>

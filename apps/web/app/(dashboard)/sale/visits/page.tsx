@@ -5,6 +5,8 @@ import { Camera, MapPin, User, Clock } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
 import { input } from "@/components/ui/modal";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 type Visit = {
   id: string;
@@ -35,19 +37,19 @@ export default function VisitsPage() {
     <div className="space-y-5">
       <PageHeader title="Vizitlar tarixi" description="Yakunlangan vizitlar va xodimlar harakati" />
 
-      <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+      <Card padding="sm" className="flex items-center gap-2">
         <input type="date" className={`${input} max-w-xs`} value={dateFrom}
           onChange={(e) => setDateFrom(e.target.value)} />
-        <span className="text-slate-400">—</span>
+        <span className="text-ink-400">—</span>
         <input type="date" className={`${input} max-w-xs`} value={dateTo}
           onChange={(e) => setDateTo(e.target.value)} />
-      </div>
+      </Card>
 
-      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+      <Card padding="none">
         {rows.length === 0 ? (
-          <div className="py-16 text-center text-slate-400">Vizitlar yo'q</div>
+          <div className="py-16 text-center text-ink-400">Vizitlar yo'q</div>
         ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-700">
+          <ul className="divide-y divide-ink-100 dark:divide-ink-800">
             {rows.map((v) => {
               const dur = v.check_out_at
                 ? Math.round((new Date(v.check_out_at).getTime() - new Date(v.check_in_at).getTime()) / 60000)
@@ -55,8 +57,8 @@ export default function VisitsPage() {
               return (
                 <li key={v.id} className="px-4 py-3 flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="font-medium">{v.customer_name}</div>
-                    <div className="text-xs text-slate-500 flex items-center gap-3 mt-0.5">
+                    <div className="font-medium text-ink-900 dark:text-ink-100">{v.customer_name}</div>
+                    <div className="text-xs text-ink-500 flex items-center gap-3 mt-0.5">
                       <span className="flex items-center gap-1"><User size={11} /> {v.employee_name}</span>
                       <span className="flex items-center gap-1"><Clock size={11} />
                         {new Date(v.check_in_at).toLocaleString("uz-Cyrl-UZ", { dateStyle: "short", timeStyle: "short" })}
@@ -73,21 +75,18 @@ export default function VisitsPage() {
                       )}
                     </div>
                     {v.comment && (
-                      <div className="text-sm text-slate-700 dark:text-slate-300 mt-1.5 italic">{v.comment}</div>
+                      <div className="text-sm text-ink-700 dark:text-ink-300 mt-1.5 italic">{v.comment}</div>
                     )}
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded ${
-                    v.status === "completed" ? "bg-emerald-100 text-emerald-700" :
-                    v.status === "in_progress" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"
-                  }`}>
+                  <Badge tone={v.status === "completed" ? "success" : v.status === "in_progress" ? "info" : "neutral"}>
                     {v.status === "completed" ? "Yakunlandi" : v.status === "in_progress" ? "Davom etmoqda" : v.status}
-                  </span>
+                  </Badge>
                 </li>
               );
             })}
           </ul>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

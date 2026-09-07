@@ -13,6 +13,9 @@ import {
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader } from "@/components/ui/card";
 
 type RetDetail = {
   head: {
@@ -75,12 +78,11 @@ type RetDetail = {
 
 const fmt = (v: any) =>
   Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
-const statusBadge = (s: string) =>
-  ({
-    completed: "bg-green-100 text-green-700",
-    draft: "bg-slate-100 text-slate-700 dark:text-slate-200",
-    cancelled: "bg-red-100 text-red-700",
-  }[s] || "bg-slate-100 text-slate-700 dark:text-slate-200");
+const RETURN_STATUS_TONE: Record<string, "success" | "neutral" | "danger"> = {
+  completed: "success",
+  draft: "neutral",
+  cancelled: "danger",
+};
 const statusLabel = (s: string) =>
   ({ completed: "Bajarildi", draft: "Qoralama", cancelled: "Bekor qilindi" }[s] || s);
 const typeLabel = (t?: string) =>
@@ -137,7 +139,7 @@ export default function ReturnDetailPage() {
   }
 
   if (!data) {
-    return <div className="text-center py-20 text-slate-400">{t("ui__загрузка_43e40d49")}</div>;
+    return <div className="text-center py-20 text-ink-400">{t("ui__загрузка_43e40d49")}</div>;
   }
   const h = data.head;
   const debt = Number(h.total_payable) - Number(h.paid_amount);
@@ -146,65 +148,43 @@ export default function ReturnDetailPage() {
     <div className="space-y-6">
       {/* Toolbar */}
       <div className="flex items-center justify-between print:hidden">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:text-slate-100"
-        >
-          <ArrowLeft size={16} /> {t("ui__назад_2b0b0225")}
-        </button>
+        <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={() => router.back()}>
+          {t("ui__назад_2b0b0225")}
+        </Button>
         <div className="flex gap-2">
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm border rounded-md hover:bg-slate-50 dark:bg-slate-900/40"
-          >
-            <Printer size={14} /> {t("ui__печать_03448511")}
-          </button>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm border rounded-md hover:bg-slate-50 dark:bg-slate-900/40"
-          >
-            <FileText size={14} /> {t("ui__сохранить_как_pdf_c78ce159")}
-          </button>
-          <button
-            onClick={exportCsv}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm border rounded-md hover:bg-slate-50 dark:bg-slate-900/40"
-          >
-            <FileSpreadsheet size={14} /> {t("ui__сохранить_как_excel_9f476b8d")}
-          </button>
-          <button
-            onClick={telegramSend}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-blue-300 text-blue-700 rounded-md hover:bg-blue-50"
-          >
-            <Send size={14} /> Telegram
-          </button>
-          <button
-            onClick={showAudit}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm border rounded-md hover:bg-slate-50 dark:bg-slate-900/40"
-          >
-            <History size={14} /> {t("ui__история_аудита_8097646b")}
-          </button>
+          <Button variant="outline" size="md" icon={Printer} onClick={() => window.print()}>
+            {t("ui__печать_03448511")}
+          </Button>
+          <Button variant="outline" size="md" icon={FileText} onClick={() => window.print()}>
+            {t("ui__сохранить_как_pdf_c78ce159")}
+          </Button>
+          <Button variant="outline" size="md" icon={FileSpreadsheet} onClick={exportCsv}>
+            {t("ui__сохранить_как_excel_9f476b8d")}
+          </Button>
+          <Button variant="outline" size="md" icon={Send} onClick={telegramSend}>
+            Telegram
+          </Button>
+          <Button variant="outline" size="md" icon={History} onClick={showAudit}>
+            {t("ui__история_аудита_8097646b")}
+          </Button>
         </div>
       </div>
 
       {/* Header card */}
-      <div className="bg-white dark:bg-slate-800 border rounded-lg shadow-sm p-6 print:shadow-none print:border-0">
-        <div className="flex items-start justify-between pb-4 mb-4 border-b">
+      <Card padding="lg" className="print:shadow-none print:border-0">
+        <div className="flex items-start justify-between pb-4 mb-4 border-b border-ink-200 dark:border-ink-800">
           <div>
             <h1 className="text-2xl font-bold">
               Возврат № {h.doc_number || h.id.slice(0, 8)}
             </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            <p className="text-sm text-ink-500 dark:text-ink-400 mt-1">
               ID: <code>{h.uuid_label}</code> от{" "}
               {new Date(h.return_date).toLocaleString("ru-RU")}
             </p>
           </div>
-          <span
-            className={`px-3 py-1 rounded-full text-xs font-semibold ${statusBadge(
-              h.status
-            )} print:hidden`}
-          >
+          <Badge tone={RETURN_STATUS_TONE[h.status] || "neutral"} className="print:hidden">
             {statusLabel(h.status)}
-          </span>
+          </Badge>
         </div>
 
         {/* Detail field grid */}
@@ -237,7 +217,7 @@ export default function ReturnDetailPage() {
               h.reason_name ? (
                 <span>
                   {h.reason_name}{" "}
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <span className="text-xs text-ink-500 dark:text-ink-400">
                     ({typeLabel(h.return_type)})
                   </span>
                 </span>
@@ -250,7 +230,7 @@ export default function ReturnDetailPage() {
           <FieldRow label={t("ui__счёт_фактуры_bd709911")} value={h.invoice_number} />
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3 text-sm mt-4 pt-4 border-t">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3 text-sm mt-4 pt-4 border-t border-ink-200 dark:border-ink-800">
           <FieldRow label={t("ui__итого_исключительный_налог_0f381d74")} value={fmt(h.tax_excluded)} mono />
           <FieldRow label={t("ui__итого_включая_налог_b265bb37")} value={fmt(h.tax_included)} mono />
           <FieldRow label={t("ui__итоговая_стоимость_2a198c4c")} value={fmt(h.total_cost)} mono />
@@ -258,17 +238,15 @@ export default function ReturnDetailPage() {
           <FieldRow label={t("ui__итого_к_оплате_70406f5b")} value={fmt(h.total_payable)} mono />
           <FieldRow label={t("ui__оплаченный_0a431d4d")} value={fmt(h.paid_amount)} mono />
         </div>
-      </div>
+      </Card>
 
       {/* Items table */}
-      <div className="bg-white dark:bg-slate-800 border rounded-lg shadow-sm overflow-hidden">
-        <div className="p-4 border-b">
-          <h3 className="font-semibold">{t("ui__товары_2ccd69a3")}</h3>
-        </div>
+      <Card padding="none">
+        <CardHeader title={t("ui__товары_2ccd69a3")} />
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-900/40">
-              <tr className="text-slate-600 dark:text-slate-300">
+            <thead className="bg-ink-50 dark:bg-ink-900/40">
+              <tr className="text-ink-600 dark:text-ink-300">
                 <th className="px-2 py-2 text-left w-8">№</th>
                 <th className="px-2 py-2 text-left">{t("ui__товары_2ccd69a3")}</th>
                 <th className="px-2 py-2 text-left w-16">{t("ui__ед_11f95ddc")}</th>
@@ -290,12 +268,12 @@ export default function ReturnDetailPage() {
             </thead>
             <tbody>
               {data.items.map((it, idx) => (
-                <tr key={it.id} className="border-t hover:bg-slate-50 dark:bg-slate-900/40">
+                <tr key={it.id} className="border-t hover:bg-ink-50 dark:bg-ink-900/40">
                   <td className="px-2 py-2">{idx + 1}</td>
                   <td className="px-2 py-2">
                     {it.product_name}
                     {it.product_sku && (
-                      <span className="text-slate-400 ml-1">({it.product_sku})</span>
+                      <span className="text-ink-400 ml-1">({it.product_sku})</span>
                     )}
                   </td>
                   <td className="px-2 py-2">{it.unit_name || "—"}</td>
@@ -341,7 +319,7 @@ export default function ReturnDetailPage() {
               ))}
             </tbody>
             <tfoot>
-              <tr className="bg-slate-50 dark:bg-slate-900/40 font-semibold border-t-2 border-slate-300">
+              <tr className="bg-ink-50 dark:bg-ink-900/40 font-semibold border-t-2 border-ink-300">
                 <td colSpan={14} className="px-2 py-3 text-right">
                   {t("ui__итого_eab79dbd")}
                 </td>
@@ -353,10 +331,10 @@ export default function ReturnDetailPage() {
             </tfoot>
           </table>
         </div>
-      </div>
+      </Card>
 
       {/* Receipt-style mini */}
-      <div className="bg-white dark:bg-slate-800 border rounded-lg shadow-sm p-6 max-w-md mx-auto print:max-w-full print:border-0">
+      <Card padding="lg" className="max-w-md mx-auto print:max-w-full print:border-0">
         <div className="text-center font-mono text-xs space-y-1">
           <div className="font-bold text-base">{h.org_name}</div>
           <div className="border-t border-dashed my-2"></div>
@@ -383,22 +361,22 @@ export default function ReturnDetailPage() {
             <span>Jami:</span>
             <span>{fmt(h.total_amount)}</span>
           </div>
-          <div className="flex justify-between text-red-700">
+          <div className="flex justify-between text-danger-700 dark:text-danger-500">
             <span>{t("ui__долг_15be8566")}</span>
             <span>{fmt(debt)}</span>
           </div>
-          <div className="flex justify-between text-green-700">
+          <div className="flex justify-between text-success-700 dark:text-success-500">
             <span>To'landi:</span>
             <span>{fmt(h.paid_amount)}</span>
           </div>
           <div className="border-t border-dashed my-2"></div>
           <div className="font-bold">{t("ui__вид_чека_возврат_254f0ab5")}</div>
           <div className="border-t border-dashed my-2"></div>
-          <div className="text-slate-500 dark:text-slate-400">
+          <div className="text-ink-500 dark:text-ink-400">
             Bizni tanlaganingizdan mamnunmiz!
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -414,7 +392,7 @@ function FieldRow({
 }) {
   return (
     <div>
-      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase">{label}</div>
+      <div className="text-xs text-ink-500 dark:text-ink-400 uppercase">{label}</div>
       <div className={`mt-0.5 ${mono ? "font-mono font-semibold" : ""}`}>
         {value || "—"}
       </div>

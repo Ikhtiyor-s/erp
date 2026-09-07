@@ -10,6 +10,9 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader } from "@/components/ui/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { ProductPicker, type PickerItem } from "@/components/warehouse/product-picker";
 import { useTranslations } from "next-intl";
 import { usePermissions } from "@/lib/permissions";
@@ -73,14 +76,13 @@ const empty = () => ({
 const fmt = (v: number | string) =>
   Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 
-const statusBadge = (s: string) =>
-  ({
-    draft: "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300",
-    confirmed: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
-    paid: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300",
-    partial: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300",
-    cancelled: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300",
-  }[s] || "bg-slate-100 text-slate-700");
+const SALE_STATUS_TONE: Record<string, "neutral" | "info" | "success" | "warning" | "danger"> = {
+  draft: "neutral",
+  confirmed: "info",
+  paid: "success",
+  partial: "warning",
+  cancelled: "danger",
+};
 
 const statusLabel = (s: string) =>
   ({
@@ -91,29 +93,29 @@ const statusLabel = (s: string) =>
     cancelled: "Bekor qilindi",
   }[s] || s);
 
-function pickBadgeClass(picked: number, total: number): string {
-  if (total === 0) return "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400";
-  if (picked >= total) return "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300";
-  if (picked > total / 2) return "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300";
-  return "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300";
+function pickTone(picked: number, total: number): "neutral" | "success" | "primary" | "warning" {
+  if (total === 0) return "neutral";
+  if (picked >= total) return "success";
+  if (picked > total / 2) return "primary";
+  return "warning";
 }
 
 function pickBarClass(picked: number, total: number): string {
-  if (total === 0) return "bg-slate-300";
-  if (picked >= total) return "bg-emerald-500";
+  if (total === 0) return "bg-ink-300";
+  if (picked >= total) return "bg-success-500";
   return "bg-brand-500";
 }
 
 function PickProgressCell({ data }: { data: PickProgress | null }) {
   if (!data || data.total_items === 0) {
-    return <span className="text-slate-400 text-xs">—</span>;
+    return <span className="text-ink-400 text-xs">—</span>;
   }
   const pct = Math.round((data.picked_count / data.total_items) * 100);
   return (
     <div className="min-w-[72px]">
-      <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-semibold mb-1 ${pickBadgeClass(data.picked_count, data.total_items)}`}>
+      <Badge tone={pickTone(data.picked_count, data.total_items)} className="mb-1">
         {data.picked_count}/{data.total_items}
-      </span>
+      </Badge>
       <div className="h-1 rounded-full bg-ink-100 dark:bg-ink-800">
         <div className={`h-full rounded-full transition-all ${pickBarClass(data.picked_count, data.total_items)}`} style={{ width: `${pct}%` }} />
       </div>
@@ -126,9 +128,9 @@ function MobilePickBadge({ data }: { data: PickProgress | null }) {
   const pct = Math.round((data.picked_count / data.total_items) * 100);
   return (
     <div className="mt-1">
-      <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-semibold ${pickBadgeClass(data.picked_count, data.total_items)}`}>
+      <Badge tone={pickTone(data.picked_count, data.total_items)}>
         {data.picked_count}/{data.total_items}
-      </span>
+      </Badge>
       <div className="h-1 rounded-full bg-ink-100 dark:bg-ink-800 mt-0.5">
         <div className={`h-full rounded-full ${pickBarClass(data.picked_count, data.total_items)}`} style={{ width: `${pct}%` }} />
       </div>
@@ -361,7 +363,7 @@ export default function SaleContractPage() {
       header: t("ui__id_номер_e669322b"),
       width: "120px",
       render: (r) => (
-        <code className="text-xs text-slate-600 dark:text-slate-400">{r.uuid_label}</code>
+        <code className="text-xs text-ink-600 dark:text-ink-400">{r.uuid_label}</code>
       ),
     },
     {
@@ -417,7 +419,7 @@ export default function SaleContractPage() {
       align: "right",
       width: "130px",
       render: (r) => (
-        <span className="font-mono text-green-700 dark:text-green-400">{fmt(r.paid_amount)}</span>
+        <span className="font-mono text-success-700 dark:text-success-500">{fmt(r.paid_amount)}</span>
       ),
     },
     {
@@ -426,9 +428,7 @@ export default function SaleContractPage() {
       align: "center",
       width: "130px",
       render: (r) => (
-        <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${statusBadge(r.status)}`}>
-          {statusLabel(r.status)}
-        </span>
+        <Badge tone={SALE_STATUS_TONE[r.status] || "neutral"}>{statusLabel(r.status)}</Badge>
       ),
     },
     ...(showPick
@@ -452,13 +452,13 @@ export default function SaleContractPage() {
       align: "center",
       width: "60px",
       render: (r) => (
-        <button
+        <Button
+          variant="ghost"
+          size="xs"
+          icon={Eye}
           onClick={() => router.push(`/sale/contract/${r.id}`)}
-          className="text-brand-600 hover:text-brand-700 dark:text-brand-400"
           title={t("ui__открыть_e946df6c")}
-        >
-          <Eye size={14} />
-        </button>
+        />
       ),
     },
   ];
@@ -478,12 +478,13 @@ export default function SaleContractPage() {
         createLabel={t("ui__новая_продажа_4fbfd3e3")}
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <Card padding="md">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="sm:col-span-2 relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_клиент_телефон_7d318763")}
           </label>
-          <Search size={14} className="absolute left-2.5 top-[34px] text-slate-400" />
+          <Search size={14} className="absolute left-2.5 top-[34px] text-ink-400" />
           <input
             className={`${input} pl-8`}
             placeholder={t("ui__поиск_b84a8f87")}
@@ -493,7 +494,7 @@ export default function SaleContractPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__клиент_4af22f2d")}
           </label>
           <select
@@ -508,7 +509,7 @@ export default function SaleContractPage() {
           </select>
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__статус_7203f7a4")}
           </label>
           <select
@@ -525,7 +526,7 @@ export default function SaleContractPage() {
           </select>
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__с_даты_09fc6619")}
           </label>
           <input
@@ -536,7 +537,7 @@ export default function SaleContractPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__по_дату_760bcfc8")}
           </label>
           <input
@@ -547,23 +548,22 @@ export default function SaleContractPage() {
           />
         </div>
         <div className="flex items-end gap-2">
-          <button
-            onClick={load}
-            className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-md text-sm"
-          >
+          <Button size="md" onClick={load}>
             {t("ui__фильтр_2f884b41")}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
+            size="md"
             onClick={() => {
               setFilters({ q: "", customer_id: "", status: "", date_from: "", date_to: "" });
               setTimeout(load, 0);
             }}
-            className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
           >
             {t("ui__сброс_1b421ddb")}
-          </button>
+          </Button>
         </div>
       </div>
+      </Card>
 
       <DataTable columns={columns} rows={rows} loading={loading} />
 
@@ -616,11 +616,11 @@ export default function SaleContractPage() {
             )}
             <Field label={t("ui__склад_e8bf999f")} required>
               {form.cashbox_id && !can("sale.change_warehouse") ? (
-                <div className={`${input} bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-400 cursor-not-allowed`}>
+                <div className={`${input} bg-ink-50 dark:bg-ink-900/40 text-ink-600 dark:text-ink-400 cursor-not-allowed`}>
                   {cashboxes.find((c) => c.id === form.cashbox_id)?.warehouse_name
                     || warehouses.find((w) => w.id === form.warehouse_id)?.name
                     || t("ui__выбрать_fbbc1d13")}
-                  <span className="block text-xs text-slate-400 mt-0.5">{tSale("warehouse_auto_hint")}</span>
+                  <span className="block text-xs text-ink-400 mt-0.5">{tSale("warehouse_auto_hint")}</span>
                 </div>
               ) : (
                 <select
@@ -664,7 +664,7 @@ export default function SaleContractPage() {
           </div>
 
           {/* ProductPicker */}
-          <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2">
+          <div className="border border-ink-200 dark:border-ink-700 rounded-lg p-3 space-y-2">
             {form.warehouse_id ? (
               <ProductPicker
                 warehouseId={form.warehouse_id}
@@ -673,7 +673,7 @@ export default function SaleContractPage() {
                 mode="multi"
               />
             ) : (
-              <p className="text-sm text-slate-500 dark:text-slate-400 py-4 text-center">
+              <p className="text-sm text-ink-500 dark:text-ink-400 py-4 text-center">
                 {tSale("pick_warehouse_first")}
               </p>
             )}
@@ -681,20 +681,20 @@ export default function SaleContractPage() {
 
           {/* Selected items */}
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">
+            <p className="text-xs font-semibold text-ink-600 dark:text-ink-300 uppercase tracking-wide">
               {tSale("selected_products")}
             </p>
 
             {form.items.length === 0 ? (
-              <p className="text-sm text-slate-400 dark:text-slate-500 py-3 text-center">
+              <p className="text-sm text-ink-400 dark:text-ink-500 py-3 text-center">
                 {tSale("no_items_yet")}
               </p>
             ) : (
               <>
                 {/* Desktop table */}
-                <div className="hidden md:block overflow-x-auto rounded-md border border-slate-200 dark:border-slate-700">
+                <div className="hidden md:block overflow-x-auto rounded-md border border-ink-200 dark:border-ink-700">
                   <table className="w-full text-[13px]">
-                    <thead className="bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-300">
+                    <thead className="bg-ink-50 dark:bg-ink-900/40 text-ink-600 dark:text-ink-300">
                       <tr>
                         <th className="text-left px-3 py-2">{tSale("product")}</th>
                         <th className="px-3 py-2 w-20 text-center">{tSale("unit")}</th>
@@ -714,17 +714,15 @@ export default function SaleContractPage() {
 
                         return (
                           <>
-                            <tr key={it.product_id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/40 dark:hover:bg-slate-800/20">
+                            <tr key={it.product_id} className="border-t border-ink-200 dark:border-ink-700 hover:bg-ink-50/40 dark:hover:bg-ink-800/20">
                               <td className="px-3 py-2">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-medium text-ink-900 dark:text-ink-100">{it.product_name}</span>
                                   {hasBom && (
-                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
-                                      {tSale("bom_badge")}
-                                    </span>
+                                    <Badge tone="purple">{tSale("bom_badge")}</Badge>
                                   )}
                                   {bom?.loading && (
-                                    <span className="inline-block w-3 h-3 rounded-full border-2 border-slate-300 border-t-brand-500 animate-spin" />
+                                    <span className="inline-block w-3 h-3 rounded-full border-2 border-ink-300 border-t-brand-500 animate-spin" />
                                   )}
                                   {hasBom && (
                                     <button
@@ -741,13 +739,13 @@ export default function SaleContractPage() {
                                   )}
                                 </div>
                               </td>
-                              <td className="px-3 py-2 text-center text-slate-500 dark:text-slate-400">{it.unit_name}</td>
+                              <td className="px-3 py-2 text-center text-ink-500 dark:text-ink-400">{it.unit_name}</td>
                               <td className="px-3 py-2">
                                 <input
                                   type="number"
                                   step="0.001"
                                   min="0.001"
-                                  className={`${input} text-right ${qtyInvalid ? "border-red-400 focus:border-red-500 focus:ring-red-400/30" : ""}`}
+                                  className={`${input} text-right ${qtyInvalid ? "border-danger-500 focus:border-danger-500 focus:ring-danger-500/30" : ""}`}
                                   value={it.quantity}
                                   onChange={(e) => setLineField(it.product_id, "quantity", Number(e.target.value))}
                                   placeholder={tSale("qty_placeholder")}
@@ -775,14 +773,15 @@ export default function SaleContractPage() {
                                 {fmt(it.quantity * it.price - it.discount)}
                               </td>
                               <td className="text-center px-2">
-                                <button
+                                <Button
                                   type="button"
+                                  variant="ghost"
+                                  size="xs"
+                                  icon={Trash2}
                                   onClick={() => removeItem(it.product_id)}
-                                  className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/40 p-1 rounded"
                                   title={tSale("remove")}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
+                                  className="text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
+                                />
                               </td>
                             </tr>
                             {isExpanded && hasBom && (
@@ -793,7 +792,7 @@ export default function SaleContractPage() {
                                   </p>
                                   <table className="w-full text-[12px]">
                                     <thead>
-                                      <tr className="text-slate-500 dark:text-slate-400">
+                                      <tr className="text-ink-500 dark:text-ink-400">
                                         <th className="text-left pb-1 font-medium">{tSale("bom_component")}</th>
                                         <th className="text-right pb-1 font-medium w-20">{tSale("bom_qty")}</th>
                                         <th className="text-left pb-1 font-medium w-20 pl-2">{tSale("bom_unit")}</th>
@@ -804,7 +803,7 @@ export default function SaleContractPage() {
                                         <tr key={c.component_id} className="border-t border-violet-100 dark:border-violet-800/30">
                                           <td className="py-1 text-ink-800 dark:text-ink-200">{c.component_name}</td>
                                           <td className="py-1 text-right font-mono">{c.qty}</td>
-                                          <td className="py-1 pl-2 text-slate-500 dark:text-slate-400">{c.unit_name ?? "—"}</td>
+                                          <td className="py-1 pl-2 text-ink-500 dark:text-ink-400">{c.unit_name ?? "—"}</td>
                                         </tr>
                                       ))}
                                     </tbody>
@@ -817,7 +816,7 @@ export default function SaleContractPage() {
                       })}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-slate-50 dark:bg-slate-900/40 font-semibold border-t border-slate-200 dark:border-slate-700">
+                      <tr className="bg-ink-50 dark:bg-ink-900/40 font-semibold border-t border-ink-200 dark:border-ink-700">
                         <td className="px-3 py-2" colSpan={5}>{t("ui__итого_edcf3920")}</td>
                         <td className="px-3 py-2 text-right font-mono">{fmt(total)}</td>
                         <td></td>
@@ -835,45 +834,44 @@ export default function SaleContractPage() {
                     const qtyInvalid = it.quantity <= 0;
 
                     return (
-                      <li key={it.product_id} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 space-y-2">
+                      <li key={it.product_id} className="rounded-lg border border-ink-200 dark:border-ink-700 bg-white dark:bg-ink-900 p-3 space-y-2">
                         <div className="flex items-start justify-between gap-2">
                           <div className="space-y-1">
                             <p className="text-[13px] font-medium text-ink-900 dark:text-ink-100">{it.product_name}</p>
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-[11px] text-slate-500 dark:text-slate-400">{it.unit_name}</span>
+                              <span className="text-[11px] text-ink-500 dark:text-ink-400">{it.unit_name}</span>
                               {hasBom && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
-                                  {tSale("bom_badge")}
-                                </span>
+                                <Badge tone="purple">{tSale("bom_badge")}</Badge>
                               )}
                               {bom?.loading && (
-                                <span className="inline-block w-3 h-3 rounded-full border-2 border-slate-300 border-t-brand-500 animate-spin" />
+                                <span className="inline-block w-3 h-3 rounded-full border-2 border-ink-300 border-t-brand-500 animate-spin" />
                               )}
                             </div>
                           </div>
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="xs"
+                            icon={Trash2}
                             onClick={() => removeItem(it.product_id)}
-                            className="shrink-0 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/40 p-1 rounded"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                            className="shrink-0 text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
+                          />
                         </div>
 
                         <div className="grid grid-cols-3 gap-2">
                           <div>
-                            <label className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5">{tSale("qty")}</label>
+                            <label className="text-[10px] text-ink-500 dark:text-ink-400 block mb-0.5">{tSale("qty")}</label>
                             <input
                               type="number"
                               step="0.001"
                               min="0.001"
-                              className={`${input} text-right text-[12px] ${qtyInvalid ? "border-red-400" : ""}`}
+                              className={`${input} text-right text-[12px] ${qtyInvalid ? "border-danger-500" : ""}`}
                               value={it.quantity}
                               onChange={(e) => setLineField(it.product_id, "quantity", Number(e.target.value))}
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5">{tSale("price")}</label>
+                            <label className="text-[10px] text-ink-500 dark:text-ink-400 block mb-0.5">{tSale("price")}</label>
                             <input
                               type="number"
                               step="0.01"
@@ -883,7 +881,7 @@ export default function SaleContractPage() {
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5">{tSale("discount")}</label>
+                            <label className="text-[10px] text-ink-500 dark:text-ink-400 block mb-0.5">{tSale("discount")}</label>
                             <input
                               type="number"
                               step="0.01"
@@ -895,7 +893,7 @@ export default function SaleContractPage() {
                         </div>
 
                         <div className="flex justify-between items-center text-[12px]">
-                          <span className="text-slate-500 dark:text-slate-400">{tSale("total")}:</span>
+                          <span className="text-ink-500 dark:text-ink-400">{tSale("total")}:</span>
                           <span className="font-mono font-semibold">{fmt(it.quantity * it.price - it.discount)}</span>
                         </div>
 
@@ -916,7 +914,7 @@ export default function SaleContractPage() {
                             {bom.components.map((c) => (
                               <div key={c.component_id} className="flex items-center justify-between text-[12px]">
                                 <span className="text-ink-800 dark:text-ink-200">{c.component_name}</span>
-                                <span className="font-mono text-slate-500 dark:text-slate-400">{c.qty} {c.unit_name ?? ""}</span>
+                                <span className="font-mono text-ink-500 dark:text-ink-400">{c.qty} {c.unit_name ?? ""}</span>
                               </div>
                             ))}
                           </div>
@@ -934,22 +932,18 @@ export default function SaleContractPage() {
             )}
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-            >
+          <div className="flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-700">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("ui__отмена_987b33c6")}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={save}
-              disabled={saving || hasInvalidQty || form.items.length === 0}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={hasInvalidQty || form.items.length === 0}
+              loading={saving}
             >
-              {saving ? "..." : tSale("save_btn")}
-            </button>
+              {tSale("save_btn")}
+            </Button>
           </div>
         </div>
       </Modal>
