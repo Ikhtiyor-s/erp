@@ -471,3 +471,39 @@ _Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartir
 5. Legacy jadvallarni (`transfers`, `transfer_items`) DROP QILMANG hozircha — Sprint 6+ da backup verify qilingandan keyin.
 
 Frontend grep: `grep -rn "/warehouse/transfers" apps/web/` — faqat `internal-transfers` mavjud, legacy `/api/warehouse/transfers` chaqiruv 0 ta.
+
+## 2026-09-05T14:31:52Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## 2026-09-05T14:38:23Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## 2026-09-05T15:05:50Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## 2026-09-05T15:19:51Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## 2026-09-05T16:50:50Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## 2026-09-05T17:13:09Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## 2026-09-07T04:53:45Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## 2026-09-07T05:30:37Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
+
+## 2026-09-07T07:37:02Z — sessiya tugadi
+
+_Sessiya davomida nima ishladi / nima ishlamadi / keyingi safar nimani o'zgartirish — agent o'zi yozadi yoki keyingi sessiyada qo'lda to'ldiriladi._
