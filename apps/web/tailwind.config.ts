@@ -10,32 +10,59 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Brand: emerald green (calm, professional, business-friendly)
+        // Brand: indigo-blue (professional B2B SaaS, Duralux-inspired)
+        // 500 = #3454d1 (Duralux primary)
         brand: {
-          50: "#ecfdf5",
-          100: "#d1fae5",
-          200: "#a7f3d0",
-          300: "#6ee7b7",
-          400: "#34d399",
-          500: "#10b981",
-          600: "#059669",
-          700: "#047857",
-          800: "#065f46",
-          900: "#064e3b",
+          50: "#eef1fa",
+          100: "#d5deef",
+          200: "#aab8de",
+          300: "#8093ce",
+          400: "#566dbc",
+          500: "#3454d1",
+          600: "#2a44b0",
+          700: "#21358a",
+          800: "#182865",
+          900: "#0f1a41",
+          950: "#080f28",
         },
-        // Neutral: zinc (Linear/Vercel style — more sophisticated than slate)
+        // Neutral: slate (cool tone, complements indigo brand — Bootstrap/Duralux family)
         ink: {
-          50: "#fafafa",
-          100: "#f4f4f5",
-          200: "#e4e4e7",
-          300: "#d4d4d8",
-          400: "#a1a1aa",
-          500: "#71717a",
-          600: "#52525b",
-          700: "#3f3f46",
-          800: "#27272a",
-          900: "#18181b",
-          950: "#09090b",
+          50: "#f8fafc",
+          100: "#f1f5f9",
+          200: "#e2e8f0",
+          300: "#cbd5e1",
+          400: "#94a3b8",
+          500: "#64748b",
+          600: "#475569",
+          700: "#334155",
+          800: "#1e293b",
+          900: "#0f172a",
+          950: "#020617",
+        },
+        // Semantic colors matched to Duralux palette
+        success: {
+          50: "#e8f9ef",
+          500: "#17c666",
+          600: "#12a052",
+          700: "#0d7a3e",
+        },
+        info: {
+          50: "#e6f7f6",
+          500: "#3dc7be",
+          600: "#2ba39c",
+          700: "#1e7f79",
+        },
+        warn: {
+          50: "#fff5e0",
+          500: "#ffa21d",
+          600: "#e88a00",
+          700: "#b56b00",
+        },
+        danger: {
+          50: "#fde9e9",
+          500: "#ea4d4d",
+          600: "#c73838",
+          700: "#9c2828",
         },
       },
       fontFamily: {
@@ -53,10 +80,13 @@ const config: Config = {
         "2xl": ["clamp(1.25rem, 1.1rem + 0.75vw, 1.5rem)", { lineHeight: "2rem" }],
       },
       borderRadius: {
-        DEFAULT: "0.5rem",
-        sm: "0.375rem",
-        md: "0.5rem",
-        lg: "0.625rem",
+        // Duralux-inspired tighter radius (4px default — more "professional B2B")
+        DEFAULT: "0.25rem",  // 4px
+        sm: "0.125rem",       // 2px
+        md: "0.25rem",        // 4px
+        lg: "0.375rem",       // 6px
+        xl: "1rem",           // 16px (cards)
+        "2xl": "1.25rem",     // 20px (large containers)
       },
       boxShadow: {
         // Softer shadows

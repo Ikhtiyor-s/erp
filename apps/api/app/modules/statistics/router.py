@@ -68,6 +68,34 @@ async def dashboard(
     }
 
 
+@router.get("/daily-revenue")
+async def daily_revenue(
+    days: int = Query(14, ge=1, le=90),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    """Last N days revenue + count per day (for dashboard sparkline/bar chart)."""
+    rows = await db.execute(
+        text("""
+            SELECT
+                sale_date::date AS date,
+                COUNT(*) AS count,
+                COALESCE(SUM(total_amount), 0) AS revenue
+            FROM sales
+            WHERE organization_id = :o
+              AND sale_date >= CURRENT_DATE - (:days * INTERVAL '1 day')
+              AND status <> 'cancelled'
+            GROUP BY 1
+            ORDER BY 1
+        """),
+        {"o": org_id, "days": days},
+    )
+    return [
+        {"date": str(r.date), "count": r.count, "revenue": float(r.revenue or 0)}
+        for r in rows
+    ]
+
+
 @router.get("/sales-summary")
 async def sales_summary(
     date_from: date = Query(...),

@@ -2,6 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { Button } from "@/components/ui/button";
 
 type Props = {
   title: string;
@@ -34,12 +35,9 @@ export function PageHeader({
       <div className="flex items-center gap-2 shrink-0 flex-wrap">
         {actions}
         {onCreate && (
-          <button
-            onClick={onCreate}
-            className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-[clamp(12px,1.6vw,13px)] font-medium px-3 py-1.5 rounded-md transition-colors whitespace-nowrap"
-          >
-            <Plus size={14} strokeWidth={2} /> {createLabel || t("create")}
-          </button>
+          <Button onClick={onCreate} icon={Plus} size="sm">
+            {createLabel || t("create")}
+          </Button>
         )}
       </div>
     </div>

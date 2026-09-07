@@ -2,6 +2,7 @@
 
 import { AlertTriangle } from "lucide-react";
 import { Modal } from "./modal";
+import { Button } from "./button";
 
 type Props = {
   open: boolean;
@@ -28,12 +29,8 @@ export function ConfirmDialog({
 }: Props) {
   const iconBg =
     variant === "danger"
-      ? "bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400"
-      : "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400";
-  const confirmBtn =
-    variant === "danger"
-      ? "bg-rose-600 hover:bg-rose-700"
-      : "bg-amber-600 hover:bg-amber-700";
+      ? "bg-danger-50 text-danger-600 dark:bg-danger-500/15 dark:text-danger-500"
+      : "bg-warn-50 text-warn-600 dark:bg-warn-500/15 dark:text-warn-500";
 
   return (
     <Modal open={open} onClose={onClose} title={title} size="sm">
@@ -41,28 +38,25 @@ export function ConfirmDialog({
         <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${iconBg}`}>
           <AlertTriangle size={18} aria-hidden="true" />
         </div>
-        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+        <p className="text-sm text-ink-700 dark:text-ink-300 leading-relaxed">
           {message}
         </p>
       </div>
       <div className="mt-5 flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={loading}
-          className="px-3 py-1.5 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
-        >
+        <Button type="button" variant="outline" size="md" onClick={onClose} disabled={loading}>
           {cancelLabel}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant={variant === "danger" ? "danger" : "warning"}
+          size="md"
           onClick={onConfirm}
           disabled={loading}
+          loading={loading}
           autoFocus
-          className={`px-3 py-1.5 text-sm rounded-md text-white ${confirmBtn} disabled:opacity-50`}
         >
-          {loading ? "..." : confirmLabel}
-        </button>
+          {confirmLabel}
+        </Button>
       </div>
     </Modal>
   );
