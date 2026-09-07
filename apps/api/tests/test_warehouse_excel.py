@@ -6,12 +6,15 @@ Integration tests (marked with pytest.mark.asyncio) require a running API.
 """
 
 import io
+import secrets
 from decimal import Decimal
 
 import httpx
 import openpyxl
 import pytest
 import pytest_asyncio
+
+_IMPORT_SUFFIX = secrets.token_hex(4)
 
 from app.modules.warehouse.excel import (
     MAX_FILE_BYTES,
@@ -250,7 +253,7 @@ def _product_row(name: str, sku: str = "", purchase_price: str = "1000") -> list
 async def test_import_valid_file(client: httpx.AsyncClient):
     """5-row xlsx upload → {created: 5, updated: 0, errors: []}."""
     rows = [
-        _product_row(f"ImportTest-T011-{i}", sku=f"IMP-T011-{i}")
+        _product_row(f"ImportTest-T011-{_IMPORT_SUFFIX}-{i}", sku=f"IMP-T011-{_IMPORT_SUFFIX}-{i}")
         for i in range(5)
     ]
     xlsx_bytes = _make_import_xlsx(rows)
@@ -271,7 +274,7 @@ async def test_import_valid_file(client: httpx.AsyncClient):
 async def test_import_idempotent(client: httpx.AsyncClient):
     """Upload same file twice → second call returns updated: 5."""
     rows = [
-        _product_row(f"IdempTest-T011-{i}", sku=f"IDEMP-T011-{i}")
+        _product_row(f"IdempTest-T011-{_IMPORT_SUFFIX}-{i}", sku=f"IDEMP-T011-{_IMPORT_SUFFIX}-{i}")
         for i in range(5)
     ]
     xlsx_bytes = _make_import_xlsx(rows)
@@ -295,9 +298,9 @@ async def test_import_idempotent(client: httpx.AsyncClient):
 async def test_import_bad_price_row(client: httpx.AsyncClient):
     """One row with non-numeric price → errors[].row set; other rows still processed."""
     rows = [
-        _product_row("GoodProduct-T011-A", sku="BP-T011-A"),
-        ["BadPriceProduct-T011", "BP-T011-BAD", "", "", "", "dona", "arzon", "", "", "", "", ""],
-        _product_row("GoodProduct-T011-B", sku="BP-T011-B"),
+        _product_row(f"GoodProduct-T011-A-{_IMPORT_SUFFIX}", sku=f"BP-T011-A-{_IMPORT_SUFFIX}"),
+        [f"BadPriceProduct-T011-{_IMPORT_SUFFIX}", f"BP-T011-BAD-{_IMPORT_SUFFIX}", "", "", "", "dona", "arzon", "", "", "", "", ""],
+        _product_row(f"GoodProduct-T011-B-{_IMPORT_SUFFIX}", sku=f"BP-T011-B-{_IMPORT_SUFFIX}"),
     ]
     xlsx_bytes = _make_import_xlsx(rows)
 

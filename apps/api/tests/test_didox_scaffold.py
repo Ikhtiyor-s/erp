@@ -150,6 +150,10 @@ async def test_didox_create_invoice_missing_sale_id_422(client: httpx.AsyncClien
 
 @pytest.mark.asyncio
 async def test_didox_get_invoice_status_stub(client: httpx.AsyncClient):
+    await client.put(
+        f"/api/v1/integrations/{DIDOX_CODE}",
+        json={"stir": "111222333", "developer_token": "enabled-token"},
+    )
     await client.post(f"/api/v1/integrations/{DIDOX_CODE}/enable")
 
     resp = await client.get("/api/v1/integration/didox/invoice/stub-123")
@@ -165,6 +169,10 @@ async def test_didox_get_invoice_status_stub(client: httpx.AsyncClient):
 
 @pytest.mark.asyncio
 async def test_didox_send_invoice_stub(client: httpx.AsyncClient):
+    await client.put(
+        f"/api/v1/integrations/{DIDOX_CODE}",
+        json={"stir": "111222333", "developer_token": "enabled-token"},
+    )
     await client.post(f"/api/v1/integrations/{DIDOX_CODE}/enable")
 
     resp = await client.post("/api/v1/integration/didox/invoice/stub-123/send")

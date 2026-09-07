@@ -30,7 +30,11 @@ async def _get_product(client: httpx.AsyncClient, pid: str) -> dict:
     return resp.json()
 
 
-async def _list_products(client: httpx.AsyncClient, **params) -> list:
+async def _list_products(client: httpx.AsyncClient, q: str = "", **params) -> list:
+    """Fetch product list, optionally searching by name (q) to avoid pagination issues."""
+    if q:
+        params["q"] = q
+    params.setdefault("limit", 200)
     resp = await client.get("/api/v1/warehouse/products", params=params)
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -46,10 +50,12 @@ async def _list_products(client: httpx.AsyncClient, **params) -> list:
 @pytest.mark.asyncio
 async def test_archive_flow(client: httpx.AsyncClient):
     """Archive → invisible in default list → visible with include_archived=true."""
-    pid = await _create_product(client, "T209_Archive_Flow_Product")
+    import secrets as _sec
+    name = f"T209_Archive_Flow_{_sec.token_hex(4)}"
+    pid = await _create_product(client, name)
 
-    # Default list should include it (not archived yet)
-    products = await _list_products(client)
+    # Search by name to avoid pagination (1000+ products in QA org)
+    products = await _list_products(client, q=name)
     ids = [p["id"] for p in products]
     assert pid in ids, "Newly created product should appear in default list"
 
@@ -58,13 +64,13 @@ async def test_archive_flow(client: httpx.AsyncClient):
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"ok": True}
 
-    # Should NOT appear in default list
-    products = await _list_products(client)
+    # Should NOT appear in default list when searching by name
+    products = await _list_products(client, q=name)
     ids = [p["id"] for p in products]
     assert pid not in ids, "Archived product must not appear in default list"
 
     # Should appear with include_archived=true
-    products = await _list_products(client, include_archived="true")
+    products = await _list_products(client, q=name, include_archived="true")
     ids = [p["id"] for p in products]
     assert pid in ids, "Archived product must appear with include_archived=true"
 
@@ -72,7 +78,9 @@ async def test_archive_flow(client: httpx.AsyncClient):
 @pytest.mark.asyncio
 async def test_unarchive_flow(client: httpx.AsyncClient):
     """Archive then unarchive → product returns to default list."""
-    pid = await _create_product(client, "T209_Unarchive_Flow_Product")
+    import secrets as _sec
+    name = f"T209_Unarchive_Flow_{_sec.token_hex(4)}"
+    pid = await _create_product(client, name)
 
     await client.post(f"/api/v1/warehouse/products/{pid}/archive")
 
@@ -80,8 +88,8 @@ async def test_unarchive_flow(client: httpx.AsyncClient):
     resp = await client.post(f"/api/v1/warehouse/products/{pid}/unarchive")
     assert resp.status_code == 200, resp.text
 
-    # Should be visible again
-    products = await _list_products(client)
+    # Should be visible again when searching by name
+    products = await _list_products(client, q=name)
     ids = [p["id"] for p in products]
     assert pid in ids, "Unarchived product must reappear in default list"
 

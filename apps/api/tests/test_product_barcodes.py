@@ -2,6 +2,7 @@
 Integration tests for T-203: product_barcodes CRUD + lookup.
 Run inside container: docker exec erp-api pytest apps/api/tests/test_product_barcodes.py -v
 """
+import secrets
 import pytest
 import pytest_asyncio
 import httpx
@@ -10,7 +11,7 @@ from tests.conftest import API_URL
 
 pytestmark = pytest.mark.asyncio
 
-_BC_PREFIX = "_TEST_BC_"
+_BC_PREFIX = f"_TEST_BC_{secrets.token_hex(4)}_"
 
 
 async def _ensure_product(client: httpx.AsyncClient, name: str) -> str:

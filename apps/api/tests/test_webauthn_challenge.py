@@ -108,7 +108,7 @@ async def test_register_finish_consumes_challenge(client, auth_token):
 async def test_login_begin_unknown_email(http_client):
     resp = await http_client.post(
         "/api/v1/auth/webauthn/login/begin",
-        json={"email": "nonexistent_xyz_nobody@nowhere.test"},
+        json={"email": "nonexistent_xyz_nobody@example.com"},
     )
     assert resp.status_code == 404
     assert "topilmadi" in resp.json().get("detail", "")

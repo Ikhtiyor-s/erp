@@ -5,12 +5,15 @@ Requires a running API with a seeded QA org (see conftest.py).
 Run inside the container:
     docker exec erp-api pytest apps/api/tests/test_warehouse_types_racks.py -v
 """
+import secrets
 import pytest
 import pytest_asyncio
 import httpx
 
 
 pytestmark = pytest.mark.asyncio
+
+_SUFFIX = secrets.token_hex(4)
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +31,7 @@ def wh_url(path: str) -> str:
 @pytest.mark.asyncio
 async def test_create_and_list_warehouse_type(client: httpx.AsyncClient):
     """Happy path: create a type, verify it appears in the list."""
-    payload = {"name": "Test Markaziy", "code": "central"}
+    payload = {"name": f"Test Markaziy {_SUFFIX}", "code": "central"}
     resp = await client.post(wh_url("/types"), json=payload)
     assert resp.status_code == 201, resp.text
     type_id = resp.json()["id"]
@@ -37,7 +40,7 @@ async def test_create_and_list_warehouse_type(client: httpx.AsyncClient):
     resp2 = await client.get(wh_url("/types"))
     assert resp2.status_code == 200
     names = [t["name"] for t in resp2.json()]
-    assert "Test Markaziy" in names
+    assert f"Test Markaziy {_SUFFIX}" in names
 
     found = next(t for t in resp2.json() if t["id"] == type_id)
     assert found["code"] == "central"
@@ -58,7 +61,7 @@ async def test_create_type_invalid_code(client: httpx.AsyncClient):
 @pytest.mark.asyncio
 async def test_create_type_null_code(client: httpx.AsyncClient):
     """code is optional (nullable)."""
-    resp = await client.post(wh_url("/types"), json={"name": "No-code type"})
+    resp = await client.post(wh_url("/types"), json={"name": f"No-code type {_SUFFIX}"})
     assert resp.status_code == 201
     type_id = resp.json()["id"]
     # cleanup
@@ -68,18 +71,18 @@ async def test_create_type_null_code(client: httpx.AsyncClient):
 @pytest.mark.asyncio
 async def test_update_warehouse_type(client: httpx.AsyncClient):
     """PUT /warehouse/types/{id} returns ok:true and name is changed."""
-    create = await client.post(wh_url("/types"), json={"name": "UpdateMe", "code": "pos"})
+    create = await client.post(wh_url("/types"), json={"name": f"UpdateMe {_SUFFIX}", "code": "pos"})
     assert create.status_code == 201
     type_id = create.json()["id"]
 
-    upd = await client.put(wh_url(f"/types/{type_id}"), json={"name": "Updated", "code": "transit"})
+    upd = await client.put(wh_url(f"/types/{type_id}"), json={"name": f"Updated {_SUFFIX}", "code": "transit"})
     assert upd.status_code == 200
     assert upd.json() == {"ok": True}
 
     lst = await client.get(wh_url("/types"))
     found = next((t for t in lst.json() if t["id"] == type_id), None)
     assert found is not None
-    assert found["name"] == "Updated"
+    assert found["name"] == f"Updated {_SUFFIX}"
 
     # cleanup
     await client.delete(wh_url(f"/types/{type_id}"))
@@ -88,7 +91,7 @@ async def test_update_warehouse_type(client: httpx.AsyncClient):
 @pytest.mark.asyncio
 async def test_delete_warehouse_type_soft(client: httpx.AsyncClient):
     """DELETE soft-deletes (is_active=FALSE); type disappears from list."""
-    create = await client.post(wh_url("/types"), json={"name": "DeleteMe"})
+    create = await client.post(wh_url("/types"), json={"name": f"DeleteMe {_SUFFIX}"})
     assert create.status_code == 201
     type_id = create.json()["id"]
 
@@ -295,7 +298,7 @@ async def test_rack_count_in_row_list(client: httpx.AsyncClient, warehouse_id: i
 @pytest.mark.asyncio
 async def test_create_type_duplicate_name(client: httpx.AsyncClient):
     """POST same name twice → second call returns 409."""
-    payload = {"name": "DuplicateType-T011", "code": "custom"}
+    payload = {"name": f"DuplicateType-T011-{_SUFFIX}", "code": "custom"}
     r1 = await client.post(wh_url("/types"), json=payload)
     assert r1.status_code == 201, r1.text
     type_id = r1.json()["id"]
@@ -310,7 +313,7 @@ async def test_create_type_duplicate_name(client: httpx.AsyncClient):
 @pytest.mark.asyncio
 async def test_list_types_org_isolation(client: httpx.AsyncClient):
     """Types visible to correct org; a null-org client cannot see them."""
-    unique_name = "OrgIsoCheck-T011"
+    unique_name = f"OrgIsoCheck-T011-{_SUFFIX}"
     create = await client.post(wh_url("/types"), json={"name": unique_name})
     assert create.status_code == 201
     type_id = create.json()["id"]
@@ -341,7 +344,7 @@ async def test_org_isolation_types(client: httpx.AsyncClient):
     This test uses a second token-less client hitting the same endpoint — verifies
     that the list endpoint scopes by org_id header."""
     # Create a type that has a unique name
-    unique_name = "OrgIsolation-Type-T004"
+    unique_name = f"OrgIsolation-Type-T004-{_SUFFIX}"
     create = await client.post(wh_url("/types"), json={"name": unique_name, "code": "scrap"})
     assert create.status_code == 201
     type_id = create.json()["id"]

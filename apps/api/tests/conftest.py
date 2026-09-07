@@ -22,6 +22,41 @@ TEST_EMAIL = os.environ.get("TEST_EMAIL", "qa@example.com")
 TEST_PASSWORD = os.environ.get("TEST_PASSWORD", "Qa12345!")
 TEST_ORG_CODE = os.environ.get("TEST_ORG_CODE", "ANIQ")
 
+_PG_DSN = os.environ.get(
+    "DATABASE_URL_SYNC",
+    "postgresql://erp:erp@erp-postgres:5432/erp",
+)
+
+
+_RATE_LIMIT_PATTERNS_TO_RESET = (
+    "LIMITS:LIMITER/127.0.0.1//api/v1/auth/register/*",
+    "LIMITS:LIMITER/127.0.0.1//api/v1/integration/telegram/bind/generate/*",
+    "LIMITS:LIMITER/127.0.0.1//api/v1/customer-portal/auth/request-otp/*",
+)
+
+
+def _reset_test_rate_limits() -> None:
+    """Delete per-endpoint rate-limit counters from Redis before each test session.
+
+    Several endpoints have low per-hour limits (register: 5/h, bind: 3/h, otp: 3/min).
+    Running the full test suite multiple times within one hour exhausts these limits.
+    Only removes keys for 127.0.0.1 (the test IP) — no other data is affected.
+    """
+    try:
+        import redis as _redis
+        redis_url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+        r = _redis.from_url(redis_url, socket_connect_timeout=2)
+        for pattern in _RATE_LIMIT_PATTERNS_TO_RESET:
+            keys = r.keys(pattern)
+            if keys:
+                r.delete(*keys)
+    except Exception:
+        pass
+
+
+def pytest_sessionstart(session):
+    _reset_test_rate_limits()
+
 
 @pytest_asyncio.fixture
 async def http_client():
@@ -82,3 +117,34 @@ async def client(http_client, auth_token, org_id):
         "X-Organization-Id": org_id,
     })
     return http_client
+
+
+async def _wipe_integration_settings(org_id: str) -> None:
+    """Remove integration config rows from app_settings for the given org.
+
+    Uses a fresh asyncpg connection to avoid event-loop conflicts with the
+    app's SQLAlchemy connection pool (which is tied to a different loop instance).
+    """
+    import asyncpg
+    conn = await asyncpg.connect(_PG_DSN)
+    try:
+        await conn.execute(
+            "DELETE FROM app_settings "
+            "WHERE organization_id = $1 "
+            "AND key IN ('integrations', 'crm', 'online_payments')",
+            org_id,
+        )
+    finally:
+        await conn.close()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _clean_integrations(auth_token, org_id):
+    """Wipe integration config in app_settings before and after every test.
+
+    Prevents cross-test config pollution for all scaffold tests (Group A root cause).
+    Uses a fresh asyncpg connection per call to avoid SQLAlchemy pool/loop conflicts.
+    """
+    await _wipe_integration_settings(org_id)
+    yield
+    await _wipe_integration_settings(org_id)
