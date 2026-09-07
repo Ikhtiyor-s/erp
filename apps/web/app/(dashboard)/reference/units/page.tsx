@@ -7,6 +7,8 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Unit = { id: number; code: string; name: string; short_name?: string };
@@ -19,6 +21,8 @@ export default function UnitsPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Unit | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -39,20 +43,26 @@ export default function UnitsPage() {
       toast.success(editId ? "Saqlandi" : "Yaratildi"); setOpen(false); load();
     } catch (e: any) { toast.error(getErrorMessage(e, "Xato")); }
   }
-  async function del(r: Unit) {
-    if (!confirm(`��${r.name}�� o'chirilsinmi?`)) return;
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
     try {
-      await api.delete(`/reference/units/${r.id}`);
-      toast.success(t("ui__удалено_0c450c40")); load();
+      await api.delete(`/reference/units/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
     } catch (e: any) {
       toast.error(getErrorMessage(e, "O'chirib bo'lmaydi (ishlatilmoqda)"));
+    } finally {
+      setDeleteLoading(false);
     }
   }
 
   const columns: Column<Unit>[] = [
     { key: "code", header: t("ui__код_3f34a617"), width: "120px" },
     { key: "name", header: t("ui__название_602680ed") },
-    { key: "short_name", header: t("ui__сокр_9f480467"), width: "120px", render: (r) => r.short_name || "���" },
+    { key: "short_name", header: t("ui__сокр_9f480467"), width: "120px", render: (r) => r.short_name || "—" },
   ];
 
   return (
@@ -64,7 +74,7 @@ export default function UnitsPage() {
           setForm({ code: r.code, name: r.name, short_name: r.short_name || "" });
           setEditId(r.id); setOpen(true);
         }}
-        onDelete={del} />
+        onDelete={(r) => setDeleteTarget(r)} />
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Birlikni tahrirlash" : "Yangi birlik"}>
         <div className="space-y-3">
@@ -81,11 +91,21 @@ export default function UnitsPage() {
               onChange={(e) => setForm({ ...form, short_name: e.target.value })} />
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button type="button" onClick={save}>{t("ui__сохранить_74ea58b6")}</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="O'chirish"
+        message={`«${deleteTarget?.name}» o'chirilsinmi?`}
+        variant="danger"
+        loading={deleteLoading}
+      />
     </div>
   );
 }

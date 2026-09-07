@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 
 const FILENAMES: Record<string, { csv: string; xlsx: string }> = {
@@ -55,50 +57,53 @@ export default function ExportsCenterPage() {
         {exports.map((e) => {
           const I = e.icon;
           return (
-            <div
-              key={e.key}
-              className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-5 hover:border-brand-400 dark:hover:border-brand-500 hover:shadow transition"
-            >
+            <Card key={e.key} padding="lg" className="hover:border-brand-400 dark:hover:border-brand-500 hover:shadow transition">
               <div className="flex items-start gap-3 mb-3">
-                <div className={`p-2 bg-slate-100 dark:bg-slate-700 rounded-md ${e.color}`}>
+                <div className={`p-2 bg-ink-100 dark:bg-ink-800 rounded-md ${e.color}`}>
                   <I size={20} />
                 </div>
                 <div className="flex-1">
-                  <div className="font-semibold text-slate-900 dark:text-slate-100">{e.name}</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{e.description}</div>
+                  <div className="font-semibold text-ink-900 dark:text-ink-100">{e.name}</div>
+                  <div className="text-xs text-ink-500 dark:text-ink-400 mt-1">{e.description}</div>
                 </div>
               </div>
               <div className="flex gap-2">
-                <button
+                <Button
+                  variant="primary"
+                  size="md"
+                  icon={FileSpreadsheet}
+                  fullWidth
                   onClick={() => downloadExport(e.key, e.name, "xlsx")}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm bg-brand-600 hover:bg-brand-700 text-white rounded-md font-medium"
                   title="Excel formatida yuklab olish"
                 >
-                  <FileSpreadsheet size={14} /> Excel
-                </button>
-                <button
+                  Excel
+                </Button>
+                <Button
+                  variant="outline"
+                  size="md"
+                  icon={FileText}
+                  fullWidth
                   onClick={() => downloadExport(e.key, e.name, "csv")}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-md"
                   title="CSV formatida yuklab olish"
                 >
-                  <FileText size={14} /> CSV
-                </button>
+                  CSV
+                </Button>
               </div>
-            </div>
+            </Card>
           );
         })}
       </div>
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-5">
-        <h3 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">
+      <Card padding="lg">
+        <h3 className="font-semibold mb-2 text-ink-900 dark:text-ink-100">
           {t("ui__о_форматах_5401d55d")}
         </h3>
-        <ul className="text-sm text-slate-600 dark:text-slate-300 space-y-1 list-disc list-inside">
+        <ul className="text-sm text-ink-600 dark:text-ink-300 space-y-1 list-disc list-inside">
           <li><strong>Excel (.xlsx)</strong> ��� Microsoft Excel, Google Sheets, LibreOffice Calc'da to'g'ridan-to'g'ri ochiladi. Sarlavhalar formatlanagn, filter avtomatik yoqilgan, ustun kengligi avtomatik.</li>
           <li><strong>CSV</strong> ��� universal format, nuqtali vergul (<code>;</code>) ajratuvchi, UTF-8 BOM (kirill/lotin matn buzilmasdan).</li>
           <li>Fayl mahalliy yuklab olinadi, pochta orqali yuborilmaydi.</li>
         </ul>
-      </div>
+      </Card>
     </div>
   );
 }

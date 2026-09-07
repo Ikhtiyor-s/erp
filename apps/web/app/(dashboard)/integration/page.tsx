@@ -123,7 +123,7 @@ export default function IntegrationHubPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("search")}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-ink-900 dark:text-ink-50 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-ink-200 dark:border-ink-800 rounded-lg bg-white dark:bg-ink-950 text-ink-900 dark:text-ink-50 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
         </div>
       </div>
@@ -136,7 +136,7 @@ export default function IntegrationHubPage() {
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               activeFilter === value
                 ? "bg-brand-600 text-white"
-                : "bg-slate-100 dark:bg-slate-700 text-ink-600 dark:text-ink-300 hover:bg-slate-200 dark:hover:bg-slate-600"
+                : "bg-ink-100 dark:bg-ink-800 text-ink-600 dark:text-ink-300 hover:bg-ink-200 dark:hover:bg-ink-700"
             }`}
           >
             {t(labelKey)}
@@ -152,7 +152,7 @@ export default function IntegrationHubPage() {
       )}
 
       {!loading && error && (
-        <div className="rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 px-4 py-3 text-sm">
+        <div className="rounded-xl bg-danger-50 dark:bg-danger-500/15 border border-danger-500/20 text-danger-700 dark:text-danger-500 px-4 py-3 text-sm">
           {error}
         </div>
       )}

@@ -8,6 +8,9 @@ import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Card, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 type Role = {
   id: number;
@@ -26,13 +29,15 @@ type Permission = {
 
 const SYSTEM_ROLES = ["superadmin", "admin", "manager", "accountant", "cashier", "viewer"];
 
-const ROLE_COLORS: Record<string, string> = {
-  superadmin: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
-  admin: "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300",
-  manager: "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
-  accountant: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  cashier: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-  viewer: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+type RoleTone = "danger" | "purple" | "primary" | "warning" | "success" | "neutral";
+
+const ROLE_TONE: Record<string, RoleTone> = {
+  superadmin: "danger",
+  admin: "purple",
+  manager: "primary",
+  accountant: "warning",
+  cashier: "success",
+  viewer: "neutral",
 };
 
 const MODULE_LABELS: Record<string, string> = {
@@ -200,18 +205,16 @@ export default function AdminRolesPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: roles list */}
-        <div className="lg:col-span-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
-          <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100 flex items-center justify-between">
-            <span>Rollar ({roles.length})</span>
-          </div>
+        <Card padding="none" className="lg:col-span-4">
+          <CardHeader title={`Rollar (${roles.length})`} />
           <div>
-            {loading && <div className="p-6 text-center text-slate-400">Yuklanmoqda...</div>}
+            {loading && <div className="p-6 text-center text-ink-400">Yuklanmoqda...</div>}
             {roles.map((r) => {
               const isSystem = SYSTEM_ROLES.includes(r.code);
               return (
                 <div
                   key={r.id}
-                  className={`w-full px-4 py-3 border-l-2 hover:bg-slate-50 dark:hover:bg-slate-900/40 ${
+                  className={`w-full px-4 py-3 border-l-2 hover:bg-ink-50 dark:hover:bg-ink-900/40 ${
                     selectedRoleId === r.id
                       ? "border-brand-500 bg-brand-50/50 dark:bg-brand-900/20"
                       : "border-transparent"
@@ -219,15 +222,13 @@ export default function AdminRolesPage() {
                 >
                   <div className="flex items-center justify-between">
                     <button onClick={() => setSelectedRoleId(r.id)} className="flex items-center gap-3 text-left flex-1 min-w-0">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[r.code] || "bg-slate-100 text-slate-700"}`}>
-                        {r.code}
-                      </span>
+                      <Badge tone={ROLE_TONE[r.code] || "neutral"}>{r.code}</Badge>
                       <div className="min-w-0">
-                        <div className="font-medium text-slate-900 dark:text-slate-100 text-sm truncate">
+                        <div className="font-medium text-ink-900 dark:text-ink-100 text-sm truncate">
                           {r.name}
                           {!isSystem && <span className="ml-1 text-xs text-brand-600">custom</span>}
                         </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                        <div className="text-xs text-ink-500 dark:text-ink-400">
                           {r.perm_count} ta ruxsat
                         </div>
                       </div>
@@ -235,7 +236,7 @@ export default function AdminRolesPage() {
                     {!isSystem && (
                       <button
                         onClick={() => setConfirmDelete(r)}
-                        className="p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-500"
+                        className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-ink-500 dark:text-ink-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                         title="O'chirish"
                         aria-label={`${r.name} rolini o'chirish`}
                       >
@@ -247,37 +248,39 @@ export default function AdminRolesPage() {
               );
             })}
           </div>
-        </div>
+        </Card>
 
         {/* Right: permissions matrix */}
-        <div className="lg:col-span-8 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
+        <Card padding="none" className="lg:col-span-8">
           {!selectedRole && (
-            <div className="p-10 text-center text-slate-400">
+            <div className="p-10 text-center text-ink-400">
               <Shield size={32} className="mx-auto mb-2 opacity-30" />
               Chap tomondan rolni tanlang yoki yangi rol yarating
             </div>
           )}
           {selectedRole && (
             <>
-              <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <div className="font-semibold text-slate-900 dark:text-slate-100">
-                    {selectedRole.name} <span className="text-xs text-slate-400 font-normal">({selectedRole.code})</span>
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    Tanlangan: {selectedRolePerms.size} / {permissions.length}
-                  </div>
+              <CardHeader
+                actions={
+                  <Button
+                    onClick={save}
+                    disabled={saving || isSuperadmin}
+                    loading={saving}
+                    icon={Save}
+                    size="sm"
+                    title={isSuperadmin ? "Super Admin'ni o'zgartirish mumkin emas" : undefined}
+                  >
+                    {saving ? "Saqlanmoqda..." : "Saqlash"}
+                  </Button>
+                }
+              >
+                <div className="font-semibold text-ink-900 dark:text-ink-100">
+                  {selectedRole.name} <span className="text-xs text-ink-400 font-normal">({selectedRole.code})</span>
                 </div>
-                <button
-                  onClick={save}
-                  disabled={saving || isSuperadmin}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={isSuperadmin ? "Super Admin'ni o'zgartirish mumkin emas" : ""}
-                >
-                  <Save size={14} />
-                  {saving ? "Saqlanmoqda..." : "Saqlash"}
-                </button>
-              </div>
+                <div className="text-xs text-ink-500 dark:text-ink-400">
+                  Tanlangan: {selectedRolePerms.size} / {permissions.length}
+                </div>
+              </CardHeader>
 
               <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
                 {Object.entries(byModule).map(([mod, perms]) => {
@@ -285,8 +288,8 @@ export default function AdminRolesPage() {
                   const allSelected = allIds.every((id) => selectedRolePerms.has(id));
                   const someSelected = allIds.some((id) => selectedRolePerms.has(id));
                   return (
-                    <div key={mod} className="border border-slate-200 dark:border-slate-700 rounded-md">
-                      <div className="px-3 py-2 bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div key={mod} className="border border-ink-200/60 dark:border-ink-800/60 rounded-md">
+                      <div className="px-3 py-2 bg-ink-50 dark:bg-ink-900/40 border-b border-ink-200/60 dark:border-ink-800/60 flex items-center justify-between">
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input
                             type="checkbox"
@@ -297,11 +300,11 @@ export default function AdminRolesPage() {
                             onChange={() => toggleModule(allIds)}
                             disabled={isSuperadmin}
                           />
-                          <span className="font-medium text-slate-900 dark:text-slate-100 text-sm">
+                          <span className="font-medium text-ink-900 dark:text-ink-100 text-sm">
                             {MODULE_LABELS[mod] || mod}
                           </span>
                         </label>
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-ink-500">
                           {allIds.filter((id) => selectedRolePerms.has(id)).length}/{allIds.length}
                         </span>
                       </div>
@@ -309,7 +312,7 @@ export default function AdminRolesPage() {
                         {perms.map((p) => (
                           <label
                             key={p.id}
-                            className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/30 px-2 py-1 rounded"
+                            className="flex items-center gap-2 text-sm cursor-pointer hover:bg-ink-50 dark:hover:bg-ink-900/30 px-2 py-1 rounded"
                           >
                             <input
                               type="checkbox"
@@ -317,7 +320,7 @@ export default function AdminRolesPage() {
                               onChange={() => togglePerm(p.id)}
                               disabled={isSuperadmin}
                             />
-                            <span className="text-slate-700 dark:text-slate-300">
+                            <span className="text-ink-700 dark:text-ink-300">
                               {ACTION_LABELS[p.action] || p.action}
                             </span>
                           </label>
@@ -329,7 +332,7 @@ export default function AdminRolesPage() {
               </div>
             </>
           )}
-        </div>
+        </Card>
       </div>
 
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Yangi rol yaratish">
@@ -343,7 +346,7 @@ export default function AdminRolesPage() {
               placeholder="masalan: filial_mudiri"
               autoFocus
             />
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-ink-500 mt-1">
               Tizim rollari (admin, manager, cashier, ...) ishlatilmaydi
             </p>
           </Field>
@@ -378,25 +381,17 @@ export default function AdminRolesPage() {
                 </option>
               ))}
             </select>
-            <p className="text-xs text-slate-500 mt-1 inline-flex items-center gap-1">
+            <p className="text-xs text-ink-500 mt-1 inline-flex items-center gap-1">
               <Copy size={11} /> Ruxsatlar nusxalanadi, keyin o'zgartirishingiz mumkin
             </p>
           </Field>
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button
-              onClick={() => setCreateOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600"
-            >
+          <div className="flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
               Bekor
-            </button>
-            <button
-              onClick={createRole}
-              disabled={creating}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-50 inline-flex items-center gap-1.5"
-            >
-              <Plus size={14} />
+            </Button>
+            <Button type="button" onClick={createRole} disabled={creating} loading={creating} icon={Plus}>
               {creating ? "Yaratilmoqda..." : "Yaratish"}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>

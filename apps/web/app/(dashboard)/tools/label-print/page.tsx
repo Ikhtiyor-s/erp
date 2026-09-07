@@ -5,6 +5,8 @@ import { useTranslations } from "next-intl";
 import { PageHeader } from "@/components/ui/page-header";
 import { LabelPrint } from "@/components/barcode/label-print";
 import type { LabelData, LabelFormat } from "@/components/barcode/label-print";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Tag } from "lucide-react";
 
 const SAMPLE_LABELS: LabelData[] = [
@@ -26,18 +28,13 @@ export default function LabelPrintPage() {
         title={t("print.title")}
         description={t("print.format")}
         actions={
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[13px] font-medium transition-colors"
-          >
-            <Tag size={14} />
+          <Button variant="primary" size="sm" icon={Tag} onClick={() => setOpen(true)}>
             {t("print.preview")}
-          </button>
+          </Button>
         }
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-5 space-y-4">
+      <Card padding="lg" className="space-y-4">
         <h2 className="text-[14px] font-semibold text-ink-900 dark:text-ink-100">
           {t("print.format")}
         </h2>
@@ -50,24 +47,21 @@ export default function LabelPrintPage() {
                 ? "print.format_58mm"
                 : "print.format_80mm";
             return (
-              <button
+              <Button
                 key={f}
                 type="button"
+                variant={format === f ? "primary" : "outline"}
+                size="md"
                 onClick={() => setFormat(f)}
-                className={`px-4 py-2 rounded-md border text-[13px] font-medium transition-colors ${
-                  format === f
-                    ? "bg-brand-600 border-brand-600 text-white"
-                    : "border-ink-200 dark:border-ink-700 text-ink-700 dark:text-ink-200 hover:bg-ink-50 dark:hover:bg-ink-800"
-                }`}
               >
                 {t(labelKey)}
-              </button>
+              </Button>
             );
           })}
         </div>
-      </div>
+      </Card>
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-5">
+      <Card padding="lg">
         <h2 className="text-[14px] font-semibold text-ink-900 dark:text-ink-100 mb-3">
           {t("product_name")}
         </h2>
@@ -127,16 +121,11 @@ export default function LabelPrintPage() {
         </ul>
 
         <div className="mt-4 pt-4 border-t border-ink-100 dark:border-ink-800 flex justify-end">
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[13px] font-medium transition-colors"
-          >
-            <Tag size={14} />
+          <Button variant="primary" size="md" icon={Tag} onClick={() => setOpen(true)}>
             {t("download_pdf")}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       <LabelPrint
         items={SAMPLE_LABELS}

@@ -8,6 +8,9 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type LE = {
@@ -45,6 +48,8 @@ export default function LegalEntityPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<LE | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -73,11 +78,20 @@ export default function LegalEntityPage() {
       toast.error(getErrorMessage(e, "Xato"));
     }
   }
-  async function del(r: LE) {
-    if (!confirm(`��${r.name}�� o'chirilsinmi?`)) return;
-    await api.delete(`/reference/legal-entities/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40"));
-    load();
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await api.delete(`/reference/legal-entities/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
+    } catch (e: any) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleteLoading(false);
+    }
   }
 
   const filtered = q
@@ -90,11 +104,11 @@ export default function LegalEntityPage() {
 
   const cols: Column<LE>[] = [
     { key: "name", header: t("ui__название_602680ed") },
-    { key: "tin", header: t("ui__инн_5b0ec543"), width: "130px", render: (r) => r.tin || "���" },
-    { key: "oked", header: t("ui__окэд_96fe8277"), width: "120px", render: (r) => r.oked || "���" },
-    { key: "phone", header: t("ui__телефон_2928e19c"), width: "150px", render: (r) => r.phone || "���" },
-    { key: "director", header: t("ui__директор_7dbaf4be"), width: "180px", render: (r) => r.director || "���" },
-    { key: "bank_name", header: t("ui__банк_a8bf94ab"), render: (r) => r.bank_name || "���" },
+    { key: "tin", header: t("ui__инн_5b0ec543"), width: "130px", render: (r) => r.tin || "—" },
+    { key: "oked", header: t("ui__окэд_96fe8277"), width: "120px", render: (r) => r.oked || "—" },
+    { key: "phone", header: t("ui__телефон_2928e19c"), width: "150px", render: (r) => r.phone || "—" },
+    { key: "director", header: t("ui__директор_7dbaf4be"), width: "180px", render: (r) => r.director || "—" },
+    { key: "bank_name", header: t("ui__банк_a8bf94ab"), render: (r) => r.bank_name || "—" },
   ];
 
   return (
@@ -109,12 +123,12 @@ export default function LegalEntityPage() {
         }}
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 flex gap-3 items-end">
+      <Card padding="md">
         <div className="relative flex-1 max-w-md">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_bfc95980")}
           </label>
-          <Search size={14} className="absolute left-2.5 top-[34px] text-slate-400" />
+          <Search size={14} className="absolute left-2.5 top-[34px] text-ink-400" />
           <input
             className={`${input} pl-8`}
             placeholder={t("ui__поиск_b84a8f87")}
@@ -122,7 +136,7 @@ export default function LegalEntityPage() {
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
-      </div>
+      </Card>
 
       <DataTable
         columns={cols}
@@ -144,7 +158,7 @@ export default function LegalEntityPage() {
           setEditId(r.id);
           setOpen(true);
         }}
-        onDelete={del}
+        onDelete={(r) => setDeleteTarget(r)}
       />
 
       <Modal open={open} onClose={() => setOpen(false)} size="lg" title={editId ? "Tahrirlash" : "Yangi yur. shaxs"}>
@@ -192,12 +206,22 @@ export default function LegalEntityPage() {
               />
             </Field>
           </div>
-          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button type="button" onClick={save}>{t("ui__сохранить_74ea58b6")}</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="O'chirish"
+        message={`«${deleteTarget?.name}» o'chirilsinmi?`}
+        variant="danger"
+        loading={deleteLoading}
+      />
     </div>
   );
 }

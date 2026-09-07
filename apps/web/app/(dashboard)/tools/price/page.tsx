@@ -7,6 +7,9 @@ import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 export default function BulkPricePage() {
@@ -17,21 +20,19 @@ export default function BulkPricePage() {
   const [markup, setMarkup] = useState("10");
   const [categoryId, setCategoryId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  async function apply() {
+  function apply() {
     const m = Number(markup);
     if (!m) {
       toast.error(t("ui__введите_процент_29aa3157"));
       return;
     }
-    if (
-      !confirm(
-        `${m > 0 ? "+" : ""}${m}% qo'llansinmi: ${
-          field === "sale_price" ? "sotuv narxiga" : "kelish narxiga"
-        }${categoryId ? ` (kategoriya ${categoryId})` : " barcha mahsulotlarga"}?`
-      )
-    )
-      return;
+    setConfirmOpen(true);
+  }
+
+  async function doApply() {
+    const m = Number(markup);
     setBusy(true);
     try {
       const { data } = await api.post<{ updated: number }>(
@@ -43,12 +44,18 @@ export default function BulkPricePage() {
         }
       );
       toast.success(`Yangilangan mahsulotlar: ${data.updated}`);
+      setConfirmOpen(false);
     } catch (e: any) {
       toast.error(getErrorMessage(e, "Xato"));
     } finally {
       setBusy(false);
     }
   }
+
+  const m = Number(markup);
+  const confirmMessage = `${m > 0 ? "+" : ""}${m}% qo'llansinmi: ${
+    field === "sale_price" ? "sotuv narxiga" : "kelish narxiga"
+  }${categoryId ? ` (kategoriya ${categoryId})` : " barcha mahsulotlarga"}?`;
 
   return (
     <div className="space-y-6">
@@ -57,7 +64,7 @@ export default function BulkPricePage() {
         description={t("ui__массовая_смена_цен_товаров_нац_3e840767")}
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-6 max-w-2xl">
+      <Card padding="lg" className="max-w-2xl">
         <div className="space-y-4">
           <Field label={t("ui__какое_поле_менять_66af109c")}>
             <select
@@ -89,22 +96,35 @@ export default function BulkPricePage() {
             />
           </Field>
 
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-700 flex gap-3">
-            <button
+          <div className="pt-4 border-t border-ink-200 dark:border-ink-700 flex gap-3">
+            <Button
+              variant="primary"
+              size="lg"
+              icon={Number(markup) >= 0 ? TrendingUp : TrendingDown}
+              loading={busy}
               onClick={apply}
-              disabled={busy}
-              className="px-5 py-2 bg-brand-600 text-white rounded-md hover:bg-brand-700 disabled:opacity-50 inline-flex items-center gap-2"
             >
-              {Number(markup) >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
               {busy ? "Qayta ishlanmoqda..." : "Qo'llash"}
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl">
+      <div className="text-xs text-ink-500 dark:text-ink-400 max-w-2xl">
         <p>{t("ui__операция_необратима_рекомендуе_f5927bfc")}</p>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={doApply}
+        title="Narxlarni yangilashni tasdiqlang"
+        message={confirmMessage}
+        confirmLabel="Qo'llash"
+        cancelLabel="Bekor"
+        variant="warning"
+        loading={busy}
+      />
     </div>
   );
 }

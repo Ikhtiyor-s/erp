@@ -7,6 +7,8 @@ import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 import {
   useBarcodeScanner,
@@ -191,7 +193,7 @@ export default function PosPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__склад_e8bf999f")}
           </label>
           <select
@@ -210,7 +212,7 @@ export default function PosPage() {
           </select>
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__касса_c85fd621")}
           </label>
           <select
@@ -229,7 +231,7 @@ export default function PosPage() {
           </select>
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__клиент_опционально_016355ed")}
           </label>
           <select
@@ -248,48 +250,49 @@ export default function PosPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="md:col-span-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4">
+        <Card padding="md" className="md:col-span-2">
           {/* Device toolbar */}
           <div className="flex flex-wrap items-center gap-2 mb-3 text-xs">
-            <button
+            <Button
+              type="button"
+              variant={scannerEnabled ? "success" : "outline"}
+              size="xs"
+              icon={ScanLine}
               onClick={() => setScannerEnabled((v) => !v)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-md border ${
-                scannerEnabled
-                  ? "bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700 text-green-800 dark:text-green-300"
-                  : "bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-500"
-              }`}
               title="HID barcode skaner avtomatik aniqlanadi"
             >
-              <ScanLine size={12} />
               Skaner {scannerEnabled ? "yoqilgan" : "o'chirilgan"}
-            </button>
+            </Button>
 
             {scaleConnected ? (
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-300">
+              <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-info-50 dark:bg-info-500/15 border border-info-500/30 text-info-700 dark:text-info-500">
                 <Scale size={12} />
                 Tarozi:{" "}
                 <span className="font-mono font-bold">
                   {scaleWeight !== null ? `${scaleWeight.toFixed(3)} kg` : "0.000 kg"}
                 </span>
-                <button onClick={disconnectScaleNow} className="ml-1 hover:underline">
+                <button type="button" onClick={disconnectScaleNow} className="ml-1 hover:underline">
                   uzish
                 </button>
               </div>
             ) : (
-              <button
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                icon={Scale}
                 onClick={connectScale}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700"
                 title="Elektron tarozini USB-Serial orqali ulash"
               >
-                <Scale size={12} /> Tarozini ulash
-              </button>
+                Tarozini ulash
+              </Button>
             )}
           </div>
 
           <div className="relative mb-3">
             <Search
               size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"
             />
             <input
               className={`${input} pl-9`}
@@ -305,40 +308,41 @@ export default function PosPage() {
             {products.map((p) => (
               <button
                 key={p.id}
+                type="button"
                 onClick={() => addToCart(p)}
-                className="text-left p-3 border border-slate-200 dark:border-slate-700 rounded-md hover:border-brand-400 dark:hover:border-brand-500 hover:bg-brand-50 dark:hover:bg-brand-900/20"
+                className="text-left p-3 border border-ink-200 dark:border-ink-800 rounded-md hover:border-brand-400 dark:hover:border-brand-500 hover:bg-brand-50 dark:hover:bg-brand-900/20"
               >
-                <div className="text-xs text-slate-500 dark:text-slate-400">
+                <div className="text-xs text-ink-500 dark:text-ink-400">
                   {p.sku || "—"}
                 </div>
-                <div className="font-medium text-sm text-slate-900 dark:text-slate-100 line-clamp-2">
+                <div className="font-medium text-sm text-ink-900 dark:text-ink-100 line-clamp-2">
                   {p.name}
                 </div>
                 <div className="font-mono font-semibold text-brand-700 dark:text-brand-400 mt-1">
                   {fmt(p.sale_price)} {p.currency_code || ""}
                 </div>
                 {!p.is_service && (
-                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  <div className="text-xs text-ink-500 dark:text-ink-400 mt-1">
                     Ост: {fmt(p.total_stock)}
                   </div>
                 )}
               </button>
             ))}
             {products.length === 0 && (
-              <div className="col-span-full text-center text-slate-400 dark:text-slate-500 py-12">
+              <div className="col-span-full text-center text-ink-400 dark:text-ink-600 py-12">
                 {t("ui__товары_не_найдены_42190736")}
               </div>
             )}
           </div>
-        </div>
+        </Card>
 
-        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 h-fit sticky top-4">
-          <div className="flex items-center gap-2 mb-3 text-slate-900 dark:text-slate-100">
+        <Card padding="md" className="h-fit sticky top-4">
+          <div className="flex items-center gap-2 mb-3 text-ink-900 dark:text-ink-100">
             <ShoppingCart size={18} />
             <h3 className="font-semibold">Корзина ({cart.length})</h3>
           </div>
           {cart.length === 0 ? (
-            <div className="text-center text-slate-400 dark:text-slate-500 py-12">
+            <div className="text-center text-ink-400 dark:text-ink-600 py-12">
               {t("ui__пусто_e5b328b4")}
             </div>
           ) : (
@@ -347,59 +351,60 @@ export default function PosPage() {
                 {cart.map((c) => (
                   <li
                     key={c.product.id}
-                    className="border border-slate-200 dark:border-slate-700 rounded-md p-2"
+                    className="border border-ink-200 dark:border-ink-800 rounded-md p-2"
                   >
                     <div className="flex justify-between items-start gap-2">
-                      <div className="text-sm font-medium text-slate-900 dark:text-slate-100 flex-1 line-clamp-2">
+                      <div className="text-sm font-medium text-ink-900 dark:text-ink-100 flex-1 line-clamp-2">
                         {c.product.name}
                       </div>
-                      <button
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        icon={Trash2}
                         onClick={() => removeCart(c.product.id)}
-                        className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 p-1 rounded"
-                      >
-                        <Trash2 size={12} />
-                      </button>
+                        className="text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
+                      />
                     </div>
                     <div className="flex justify-between items-center mt-2">
                       <div className="flex items-center gap-1">
-                        <button
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          icon={Minus}
                           onClick={() => chgQty(c.product.id, -1)}
-                          className="p-1 border border-slate-300 dark:border-slate-600 rounded hover:bg-slate-50 dark:hover:bg-slate-700"
-                        >
-                          <Minus size={12} />
-                        </button>
-                        <span className="font-mono px-2 text-sm text-slate-900 dark:text-slate-100">
+                        />
+                        <span className="font-mono px-2 text-sm text-ink-900 dark:text-ink-100">
                           {c.qty}
                         </span>
-                        <button
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          icon={Plus}
                           onClick={() => chgQty(c.product.id, +1)}
-                          className="p-1 border border-slate-300 dark:border-slate-600 rounded hover:bg-slate-50 dark:hover:bg-slate-700"
-                        >
-                          <Plus size={12} />
-                        </button>
+                        />
                       </div>
-                      <span className="font-mono font-semibold text-sm text-slate-900 dark:text-slate-100">
+                      <span className="font-mono font-semibold text-sm text-ink-900 dark:text-ink-100">
                         {fmt(Number(c.product.sale_price) * c.qty)}
                       </span>
                     </div>
                   </li>
                 ))}
               </ul>
-              <div className="border-t border-slate-200 dark:border-slate-700 pt-3 mt-3 space-y-2">
-                <div className="flex justify-between text-lg font-bold text-slate-900 dark:text-slate-100">
+              <div className="border-t border-ink-200 dark:border-ink-800 pt-3 mt-3 space-y-2">
+                <div className="flex justify-between text-lg font-bold text-ink-900 dark:text-ink-100">
                   <span>{t("ui__итого_edcf3920")}</span>
                   <span className="font-mono">{fmt(total)}</span>
                 </div>
-                <button
-                  onClick={checkout}
-                  className="w-full px-4 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold"
-                >
+                <Button variant="success" size="lg" fullWidth onClick={checkout}>
                   {t("ui__оплатить_4caffb2a")}
-                </button>
+                </Button>
               </div>
             </>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );

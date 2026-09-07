@@ -8,6 +8,10 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Order = {
@@ -33,10 +37,10 @@ type Wh = { id: number; name: string };
 type Emp = { id: string; full_name: string };
 
 const fmt = (v: any) => Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 3 });
-const statusColor = (s: string) => ({
-  draft: "text-slate-500 dark:text-slate-400", in_progress: "text-yellow-600",
-  completed: "text-green-600", cancelled: "text-red-600",
-}[s] || "");
+const STATUS_TONE: Record<string, "neutral" | "warning" | "success" | "danger"> = {
+  draft: "neutral", in_progress: "warning",
+  completed: "success", cancelled: "danger",
+};
 const statusLabel = (s: string) => ({
   draft: "Qoralama", in_progress: "Ishda",
   completed: "Yakunlandi", cancelled: "Bekor qilindi",
@@ -51,6 +55,8 @@ export default function ProductionPage() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<any | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const empty = {
     bom_id: "", warehouse_id: "" as number | "", warehouse_from_id: "" as number | "",
@@ -129,10 +135,20 @@ export default function ProductionPage() {
     } catch (e) { toast.error(getErrorMessage(e, "Xato")); }
   }
 
-  async function cancel(id: string) {
-    if (!confirm("Ishlab chiqarish buyurtmasini bekor qilasizmi?")) return;
-    await api.delete(`/manufacturing/production-orders/${id}`);
-    toast.success(t("ui__отменено_81a04dab")); setView(null); load();
+  async function confirmCancel() {
+    if (!cancelTarget) return;
+    setCancelling(true);
+    try {
+      await api.delete(`/manufacturing/production-orders/${cancelTarget}`);
+      toast.success(t("ui__отменено_81a04dab"));
+      setCancelTarget(null);
+      setView(null);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setCancelling(false);
+    }
   }
 
   const cols: Column<Order>[] = [
@@ -141,7 +157,7 @@ export default function ProductionPage() {
       header: t("ui__id_номер_e669322b"),
       width: "100px",
       render: (r) => (
-        <code className="text-xs text-slate-600 dark:text-slate-400">
+        <code className="text-xs text-ink-600 dark:text-ink-400">
           {r.uuid_label || `#${r.id.slice(0, 8)}`}
         </code>
       ),
@@ -192,7 +208,7 @@ export default function ProductionPage() {
       header: t("ui__статус_7203f7a4"),
       width: "120px",
       render: (r) => (
-        <span className={statusColor(r.status)}>{statusLabel(r.status)}</span>
+        <Badge tone={STATUS_TONE[r.status] ?? "neutral"}>{statusLabel(r.status)}</Badge>
       ),
     },
     {
@@ -216,98 +232,97 @@ export default function ProductionPage() {
       <PageHeader title={t("ui__заказы_на_производство_5bf29aa0")} description={t("ui__производство_готовой_продукции_cfee26bc")}
         onCreate={() => { setForm(empty); setOpen(true); }} createLabel={t("ui__новый_заказ_9a1a009d")} />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="sm:col-span-2 relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__поиск_продукт_ответственный_за_f1c866e1")}
-          </label>
-          <Search
-            size={14}
-            className="absolute left-2.5 top-[34px] text-slate-400"
-          />
-          <input
-            className={`${input} pl-8`}
-            placeholder={t("ui__поиск_b84a8f87")}
-            value={filters.q}
-            onChange={(e) => setFilters({ ...filters, q: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && load()}
-          />
+      <Card padding="md">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="sm:col-span-2 relative">
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
+              {t("ui__поиск_продукт_ответственный_за_f1c866e1")}
+            </label>
+            <Search
+              size={14}
+              className="absolute left-2.5 top-[34px] text-ink-400"
+            />
+            <input
+              className={`${input} pl-8`}
+              placeholder={t("ui__поиск_b84a8f87")}
+              value={filters.q}
+              onChange={(e) => setFilters({ ...filters, q: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && load()}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
+              {t("ui__статус_7203f7a4")}
+            </label>
+            <select
+              className={input}
+              value={filters.status}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+            >
+              <option value="">{t("ui__все_a07b234e")}</option>
+              <option value="draft">{t("ui__черновик_30ab6155")}</option>
+              <option value="in_progress">{t("ui__в_работе_8c92e34f")}</option>
+              <option value="completed">{t("ui__завершено_0083ce05")}</option>
+              <option value="cancelled">{t("ui__отменено_81a04dab")}</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
+              {t("ui__ответственный_ab60703b")}
+            </label>
+            <select
+              className={input}
+              value={filters.responsible_id}
+              onChange={(e) =>
+                setFilters({ ...filters, responsible_id: e.target.value })
+              }
+            >
+              <option value="">{t("ui__все_a07b234e")}</option>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
+              {t("ui__склад_e8bf999f")}
+            </label>
+            <select
+              className={input}
+              value={filters.warehouse_id}
+              onChange={(e) =>
+                setFilters({
+                  ...filters,
+                  warehouse_id: e.target.value ? Number(e.target.value) : "",
+                })
+              }
+            >
+              <option value="">{t("ui__все_a07b234e")}</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="col-span-1 sm:col-span-2 lg:col-span-5 flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setFilters({ q: "", status: "", responsible_id: "", warehouse_id: "" });
+                setTimeout(load, 0);
+              }}
+            >
+              {t("ui__сброс_1b421ddb")}
+            </Button>
+            <Button variant="primary" onClick={load}>
+              {t("ui__фильтр_2f884b41")}
+            </Button>
+          </div>
         </div>
-        <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__статус_7203f7a4")}
-          </label>
-          <select
-            className={input}
-            value={filters.status}
-            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-          >
-            <option value="">{t("ui__все_a07b234e")}</option>
-            <option value="draft">{t("ui__черновик_30ab6155")}</option>
-            <option value="in_progress">{t("ui__в_работе_8c92e34f")}</option>
-            <option value="completed">{t("ui__завершено_0083ce05")}</option>
-            <option value="cancelled">{t("ui__отменено_81a04dab")}</option>
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__ответственный_ab60703b")}
-          </label>
-          <select
-            className={input}
-            value={filters.responsible_id}
-            onChange={(e) =>
-              setFilters({ ...filters, responsible_id: e.target.value })
-            }
-          >
-            <option value="">{t("ui__все_a07b234e")}</option>
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.full_name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__склад_e8bf999f")}
-          </label>
-          <select
-            className={input}
-            value={filters.warehouse_id}
-            onChange={(e) =>
-              setFilters({
-                ...filters,
-                warehouse_id: e.target.value ? Number(e.target.value) : "",
-              })
-            }
-          >
-            <option value="">{t("ui__все_a07b234e")}</option>
-            {warehouses.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="col-span-5 flex justify-end gap-2">
-          <button
-            onClick={() => {
-              setFilters({ q: "", status: "", responsible_id: "", warehouse_id: "" });
-              setTimeout(load, 0);
-            }}
-            className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-          >
-            {t("ui__сброс_1b421ddb")}
-          </button>
-          <button
-            onClick={load}
-            className="px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
-          >
-            {t("ui__фильтр_2f884b41")}
-          </button>
-        </div>
-      </div>
+      </Card>
 
       <DataTable columns={cols} rows={rows} loading={loading} />
 
@@ -352,8 +367,8 @@ export default function ProductionPage() {
             </Field>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={create} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__создать_b059f7e1")}</button>
+            <Button variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button variant="primary" onClick={create}>{t("ui__создать_b059f7e1")}</Button>
           </div>
         </div>
       </Modal>
@@ -363,29 +378,29 @@ export default function ProductionPage() {
         {view && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-slate-500 dark:text-slate-400">{t("ui__статус_9fa7ff8e")}</span> <span className={statusColor(view.head.status)}>{statusLabel(view.head.status)}</span></div>
-              <div><span className="text-slate-500 dark:text-slate-400">{t("ui__план_3d7adcfe")}</span> <span className="font-mono">{fmt(view.head.planned_qty)}</span></div>
-              <div><span className="text-slate-500 dark:text-slate-400">{t("ui__склад_готовой_75442a37")}</span> {view.head.warehouse_name}</div>
-              <div><span className="text-slate-500 dark:text-slate-400">{t("ui__ответственный_4746ee0f")}</span> {view.head.responsible_name || "—"}</div>
+              <div><span className="text-ink-500 dark:text-ink-400">{t("ui__статус_9fa7ff8e")}</span> <Badge tone={STATUS_TONE[view.head.status] ?? "neutral"}>{statusLabel(view.head.status)}</Badge></div>
+              <div><span className="text-ink-500 dark:text-ink-400">{t("ui__план_3d7adcfe")}</span> <span className="font-mono">{fmt(view.head.planned_qty)}</span></div>
+              <div><span className="text-ink-500 dark:text-ink-400">{t("ui__склад_готовой_75442a37")}</span> {view.head.warehouse_name}</div>
+              <div><span className="text-ink-500 dark:text-ink-400">{t("ui__ответственный_4746ee0f")}</span> {view.head.responsible_name || "—"}</div>
             </div>
 
             <div>
-              <h4 className="font-semibold mb-2 text-sm">{t("ui__ингредиенты_на_план_b844f35d")}</h4>
-              <div className="border rounded-md">
+              <h4 className="font-semibold mb-2 text-sm text-ink-900 dark:text-ink-100">{t("ui__ингредиенты_на_план_b844f35d")}</h4>
+              <div className="border border-ink-200 dark:border-ink-800 rounded-md">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-900/40">
+                  <thead className="bg-ink-50 dark:bg-ink-900/40">
                     <tr>
-                      <th className="px-3 py-2 text-left">{t("ui__ингредиент_3ab4d4ca")}</th>
-                      <th className="px-3 py-2 text-right">{t("ui__на_1_ед_66e87448")}</th>
-                      <th className="px-3 py-2 text-right">{t("ui__на_план_6f75b16b")}</th>
+                      <th className="px-3 py-2 text-left text-ink-600 dark:text-ink-400">{t("ui__ингредиент_3ab4d4ca")}</th>
+                      <th className="px-3 py-2 text-right text-ink-600 dark:text-ink-400">{t("ui__на_1_ед_66e87448")}</th>
+                      <th className="px-3 py-2 text-right text-ink-600 dark:text-ink-400">{t("ui__на_план_6f75b16b")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {view.ingredients.map((i: any) => {
                       const mult = Number(view.head.planned_qty) / Number(view.head.output_qty || 1);
                       return (
-                        <tr key={i.product_id} className="border-t">
-                          <td className="px-3 py-2">{i.product_name}</td>
+                        <tr key={i.product_id} className="border-t border-ink-100 dark:border-ink-800/40">
+                          <td className="px-3 py-2 text-ink-900 dark:text-ink-100">{i.product_name}</td>
                           <td className="px-3 py-2 text-right font-mono">{fmt(i.quantity)}</td>
                           <td className="px-3 py-2 text-right font-mono font-semibold">{fmt(Number(i.quantity) * mult)}</td>
                         </tr>
@@ -396,24 +411,26 @@ export default function ProductionPage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t">
+            <div className="flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
               {view.head.status === "draft" && (
                 <>
-                  <button onClick={() => cancel(view.head.id)}
-                    className="px-3 py-2 text-sm border border-red-300 text-red-700 rounded-md hover:bg-red-50 inline-flex items-center gap-1.5">
-                    <XCircle size={14} /> {t("ui__отменить_ecdbdc8b")}
-                  </button>
-                  <button onClick={() => start(view.head.id)}
-                    className="px-4 py-2 text-sm bg-yellow-600 text-white rounded-md hover:bg-yellow-700 inline-flex items-center gap-1.5">
-                    <Play size={14} /> {t("ui__запустить_2ae9b916")}
-                  </button>
+                  <Button
+                    variant="outline"
+                    className="border-danger-500/40 text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
+                    icon={XCircle}
+                    onClick={() => setCancelTarget(view.head.id)}
+                  >
+                    {t("ui__отменить_ecdbdc8b")}
+                  </Button>
+                  <Button variant="warning" icon={Play} onClick={() => start(view.head.id)}>
+                    {t("ui__запустить_2ae9b916")}
+                  </Button>
                 </>
               )}
               {view.head.status === "in_progress" && (
-                <button onClick={() => setFinishOpen(true)}
-                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 inline-flex items-center gap-1.5">
-                  <CheckCircle size={14} /> {t("ui__завершить_b0e3a5e0")}
-                </button>
+                <Button variant="success" icon={CheckCircle} onClick={() => setFinishOpen(true)}>
+                  {t("ui__завершить_b0e3a5e0")}
+                </Button>
               )}
             </div>
           </div>
@@ -422,7 +439,7 @@ export default function ProductionPage() {
 
       <Modal open={finishOpen} onClose={() => setFinishOpen(false)} title={t("ui__завершить_производство_d8f11799")}>
         <div className="space-y-3">
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-sm text-ink-500 dark:text-ink-400">
             {t("ui__сырьё_будет_списано_по_рецепту_0aeff348")}
           </p>
           <Field label={t("ui__фактически_произведено_a4cede7d")} required>
@@ -430,11 +447,21 @@ export default function ProductionPage() {
               onChange={(e) => setFinishQty(e.target.value)} />
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setFinishOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={finishOrder} className="px-4 py-2 text-sm rounded-md bg-green-600 text-white hover:bg-green-700">{t("ui__завершить_b0e3a5e0")}</button>
+            <Button variant="outline" onClick={() => setFinishOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button variant="success" onClick={finishOrder}>{t("ui__завершить_b0e3a5e0")}</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={confirmCancel}
+        title="Buyurtmani bekor qilish"
+        message="Ishlab chiqarish buyurtmasini bekor qilasizmi?"
+        variant="danger"
+        loading={cancelling}
+      />
     </div>
   );
 }

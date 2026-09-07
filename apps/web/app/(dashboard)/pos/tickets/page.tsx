@@ -2,10 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Plus, X, Users, Coffee, RefreshCw } from "lucide-react";
+import { Plus, X, Users, Coffee, RefreshCw, Wallet } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
 import { Modal, Field, input } from "@/components/ui/modal";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { StatWidget } from "@/components/ui/stat-widget";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type Ticket = {
   id: string;
@@ -30,6 +34,8 @@ export default function OpenTicketsPage() {
   const [whs, setWhs] = useState<Warehouse[]>([]);
   const [boxes, setBoxes] = useState<Cashbox[]>([]);
   const [open, setOpen] = useState(false);
+  const [closeTarget, setCloseTarget] = useState<Ticket | null>(null);
+  const [closing, setClosing] = useState(false);
   const [form, setForm] = useState({
     ticket_name: "", table_number: "", guest_count: 1,
     warehouse_id: null as number | null, cashbox_id: null as number | null, notes: "",
@@ -54,64 +60,79 @@ export default function OpenTicketsPage() {
     load();
   }
 
-  async function close(tid: string) {
-    if (!confirm("Ticket yopilsinmi?")) return;
-    await api.post(`/open-tickets/${tid}/close`, {});
-    load();
+  async function confirmClose() {
+    if (!closeTarget) return;
+    setClosing(true);
+    try {
+      await api.post(`/open-tickets/${closeTarget.id}/close`, {});
+      setCloseTarget(null);
+      load();
+    } finally {
+      setClosing(false);
+    }
   }
+
+  const totalAmount = tickets.reduce((s, t) => s + Number(t.total_amount || 0), 0);
 
   return (
     <div className="space-y-5">
       <PageHeader title="Ochiq ticketlar"
         description="Restoran/kafe stollari yoki kechiktirilgan buyurtmalar"
+        actions={
+          <Button variant="outline" size="sm" icon={RefreshCw} onClick={load}>
+            Yangilash
+          </Button>
+        }
         onCreate={() => setOpen(true)} />
 
-      <div className="flex items-center justify-between bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
-        <span className="text-sm text-slate-500">Jami: {tickets.length} ta ochiq</span>
-        <button onClick={load} className="px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded flex items-center gap-1">
-          <RefreshCw size={14} /> Yangilash
-        </button>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <StatWidget label="Ochiq ticketlar" value={tickets.length} icon={Coffee} color="brand" />
+        <StatWidget label="Umumiy summa" value={totalAmount} icon={Wallet} color="success" mono />
       </div>
 
       {tickets.length === 0 ? (
-        <div className="bg-white dark:bg-slate-800 py-16 text-center text-slate-400 rounded-lg border border-slate-200 dark:border-slate-700">
+        <Card padding="lg" className="py-16 text-center text-ink-400 dark:text-ink-600">
           <Coffee size={48} className="mx-auto mb-3 opacity-40" />
           <p>Ochiq ticketlar yo'q</p>
           <p className="text-xs mt-1">Yangi stol/buyurtma boshlash uchun "+" tugmasini bosing</p>
-        </div>
+        </Card>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {tickets.map((t) => (
-            <div key={t.id} className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4 hover:border-brand-400 transition">
+            <Card key={t.id} padding="md" className="hover:border-brand-400 transition">
               <div className="flex items-start justify-between mb-2">
                 <div className="flex-1">
-                  <div className="font-semibold text-slate-900 dark:text-slate-100">{t.ticket_name}</div>
+                  <div className="font-semibold text-ink-900 dark:text-ink-100">{t.ticket_name}</div>
                   {t.table_number && (
-                    <div className="text-xs text-slate-500 mt-0.5">Stol № {t.table_number}</div>
+                    <div className="text-xs text-ink-500 mt-0.5">Stol № {t.table_number}</div>
                   )}
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); close(t.id); }}
-                  className="text-slate-400 hover:text-rose-600 p-1">
-                  <X size={16} />
-                </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  icon={X}
+                  onClick={(e) => { e.stopPropagation(); setCloseTarget(t); }}
+                  className="text-ink-400 hover:text-danger-600"
+                />
               </div>
               {t.guest_count != null && (
-                <div className="flex items-center gap-1 text-xs text-slate-500 mb-2">
+                <div className="flex items-center gap-1 text-xs text-ink-500 mb-2">
                   <Users size={12} /> {t.guest_count} mehmon
                 </div>
               )}
-              <div className="text-xs text-slate-500 mb-2">
+              <div className="text-xs text-ink-500 mb-2">
                 {new Date(t.opened_at).toLocaleString("uz-Cyrl-UZ", { dateStyle: "short", timeStyle: "short" })}
               </div>
-              <div className="border-t border-slate-100 dark:border-slate-700 pt-2 flex items-center justify-between">
-                <span className="text-xs text-slate-500">{t.item_count} mahsulot</span>
+              <div className="border-t border-ink-100 dark:border-ink-800 pt-2 flex items-center justify-between">
+                <span className="text-xs text-ink-500">{t.item_count} mahsulot</span>
                 <span className="font-mono font-semibold text-brand-600 dark:text-brand-400">{fmt(t.total_amount)}</span>
               </div>
               <a href={`/pos/tickets/${t.id}`}
                 className="mt-2 block text-center text-xs py-1.5 bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 rounded hover:bg-brand-100">
                 Ochish
               </a>
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -153,14 +174,28 @@ export default function OpenTicketsPage() {
                 onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </Field>
           </div>
-          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded">Bekor</button>
-            <button onClick={create} className="px-4 py-2 text-sm bg-brand-600 text-white rounded flex items-center gap-1">
-              <Plus size={14} /> Yaratish
-            </button>
+          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-700">
+            <Button type="button" variant="outline" size="md" onClick={() => setOpen(false)}>
+              Bekor
+            </Button>
+            <Button type="button" variant="primary" size="md" icon={Plus} onClick={create}>
+              Yaratish
+            </Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!closeTarget}
+        onClose={() => setCloseTarget(null)}
+        onConfirm={confirmClose}
+        title="Ticketni yopish"
+        message={`«${closeTarget?.ticket_name}» ticketi yopilsinmi?`}
+        confirmLabel="Yopish"
+        cancelLabel="Bekor"
+        variant="warning"
+        loading={closing}
+      />
     </div>
   );
 }

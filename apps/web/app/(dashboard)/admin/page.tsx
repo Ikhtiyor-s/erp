@@ -46,7 +46,7 @@ export default function AdminIndexPage() {
             <Link
               key={c.href}
               href={c.href}
-              className="group bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 hover:border-brand-500 hover:shadow-md transition-all"
+              className="group bg-white dark:bg-ink-950 border border-ink-200/60 dark:border-ink-800/60 rounded-xl p-4 shadow-sm hover:border-brand-500 hover:shadow-md transition-all"
             >
               <div className="flex items-start justify-between mb-2">
                 <div className="w-10 h-10 rounded-lg bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 flex items-center justify-center">
@@ -54,13 +54,13 @@ export default function AdminIndexPage() {
                 </div>
                 <ChevronRight
                   size={14}
-                  className="text-slate-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-transform"
+                  className="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-transform"
                 />
               </div>
-              <div className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
+              <div className="font-semibold text-ink-900 dark:text-ink-100 text-sm">
                 {c.title}
               </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              <div className="text-xs text-ink-500 dark:text-ink-400 mt-1 leading-relaxed">
                 {c.description}
               </div>
             </Link>

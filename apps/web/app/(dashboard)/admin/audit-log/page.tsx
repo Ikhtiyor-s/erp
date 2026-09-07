@@ -7,6 +7,9 @@ import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
 import { input } from "@/components/ui/modal";
+import { Card, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 type AuditRow = {
   id: string;
@@ -21,12 +24,14 @@ type AuditRow = {
   user_email: string | null;
 };
 
-const ACTION_COLORS: Record<string, string> = {
-  create:    "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-  update:    "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
-  delete:    "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
-  login:     "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300",
-  logout:    "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+type ActionTone = "success" | "info" | "danger" | "primary" | "neutral";
+
+const ACTION_TONE: Record<string, ActionTone> = {
+  create: "success",
+  update: "info",
+  delete: "danger",
+  login: "primary",
+  logout: "neutral",
 };
 
 const PAGE_SIZE = 50;
@@ -107,10 +112,10 @@ export default function AdminAuditLogPage() {
         description="Tashkilotda sodir bo'lgan barcha o'zgarishlar tarixi"
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+      <Card className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
         <div className="lg:col-span-2 relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">Qidiruv</label>
-          <Search size={14} className="absolute left-2.5 top-[34px] text-slate-400" />
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">Qidiruv</label>
+          <Search size={14} className="absolute left-2.5 top-[34px] text-ink-400" />
           <input
             className={`${input} pl-8`}
             placeholder="diff ichida..."
@@ -120,7 +125,7 @@ export default function AdminAuditLogPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">Amal</label>
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">Amal</label>
           <select
             className={input}
             value={filters.action}
@@ -131,7 +136,7 @@ export default function AdminAuditLogPage() {
           </select>
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">Obyekt</label>
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">Obyekt</label>
           <select
             className={input}
             value={filters.entity}
@@ -142,60 +147,56 @@ export default function AdminAuditLogPage() {
           </select>
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">Sanadan</label>
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">Sanadan</label>
           <input type="date" className={input}
             value={filters.date_from}
             onChange={(e) => setFilters({ ...filters, date_from: e.target.value })} />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">Sanagacha</label>
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">Sanagacha</label>
           <input type="date" className={input}
             value={filters.date_to}
             onChange={(e) => setFilters({ ...filters, date_to: e.target.value })} />
         </div>
         <div className="sm:col-span-2 lg:col-span-6 flex justify-end gap-2">
-          <button onClick={reset}
-            className="px-3 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 inline-flex items-center gap-1.5">
-            <RotateCw size={14} /> Reset
-          </button>
-          <button onClick={applyFilters}
-            className="px-4 py-2 text-sm bg-brand-600 hover:bg-brand-700 text-white rounded-md">
-            Filtr
-          </button>
+          <Button onClick={reset} variant="outline" icon={RotateCw}>Reset</Button>
+          <Button onClick={applyFilters}>Filtr</Button>
         </div>
-      </div>
+      </Card>
 
       {/* Mobile cards */}
       <ul className="md:hidden space-y-3">
-        {loading && <li className="text-center text-sm text-slate-400 py-8">Yuklanmoqda...</li>}
-        {!loading && rows.length === 0 && <li className="text-center text-sm text-slate-400 py-8">Hodisalar topilmadi</li>}
+        {loading && <li className="text-center text-sm text-ink-400 py-8">Yuklanmoqda...</li>}
+        {!loading && rows.length === 0 && <li className="text-center text-sm text-ink-400 py-8">Hodisalar topilmadi</li>}
         {rows.map((r) => (
-          <li key={r.id} className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+          <li key={r.id} className="bg-white dark:bg-ink-950 rounded-xl border border-ink-200/60 dark:border-ink-800/60 p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${ACTION_COLORS[r.action] || "bg-slate-100 text-slate-700"}`}>{r.action}</span>
-                  {r.entity && <span className="text-xs text-slate-500">{r.entity}</span>}
+                  <Badge tone={ACTION_TONE[r.action] || "neutral"}>{r.action}</Badge>
+                  {r.entity && <span className="text-xs text-ink-500">{r.entity}</span>}
                 </div>
-                <p className="text-sm font-medium text-slate-900 dark:text-slate-100 mt-1">{r.user_name || "—"}</p>
-                <p className="text-xs text-slate-500">{r.user_email}</p>
-                <p className="text-xs text-slate-400 font-mono mt-0.5">{new Date(r.created_at).toLocaleString("ru-RU")}</p>
+                <p className="text-sm font-medium text-ink-900 dark:text-ink-100 mt-1">{r.user_name || "—"}</p>
+                <p className="text-xs text-ink-500">{r.user_email}</p>
+                <p className="text-xs text-ink-400 font-mono mt-0.5">{new Date(r.created_at).toLocaleString("ru-RU")}</p>
               </div>
-              <div className="text-xs text-slate-400 shrink-0">{r.ip || "—"}</div>
+              <div className="text-xs text-ink-400 shrink-0">{r.ip || "—"}</div>
             </div>
           </li>
         ))}
       </ul>
 
       {/* Desktop table */}
-      <div className="hidden md:block bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2 text-slate-900 dark:text-slate-100">
-          <Activity size={16} />
-          <span className="font-semibold">Hodisalar ({total.toLocaleString("ru-RU")})</span>
-        </div>
+      <Card padding="none" className="hidden md:block">
+        <CardHeader>
+          <div className="flex items-center gap-2 text-ink-900 dark:text-ink-100">
+            <Activity size={16} />
+            <span className="font-semibold">Hodisalar ({total.toLocaleString("ru-RU")})</span>
+          </div>
+        </CardHeader>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-900/40 text-xs text-slate-500 dark:text-slate-400 uppercase">
+            <thead className="bg-ink-50 dark:bg-ink-900/40 text-xs text-ink-500 dark:text-ink-400 uppercase">
               <tr>
                 <th className="text-left px-3 py-2">Vaqt</th>
                 <th className="text-left px-3 py-2">Foydalanuvchi</th>
@@ -206,51 +207,47 @@ export default function AdminAuditLogPage() {
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={5} className="text-center py-10 text-slate-400">Yuklanmoqda...</td></tr>
+                <tr><td colSpan={5} className="text-center py-10 text-ink-400">Yuklanmoqda...</td></tr>
               )}
               {!loading && rows.length === 0 && (
-                <tr><td colSpan={5} className="text-center py-10 text-slate-400">Hodisalar topilmadi</td></tr>
+                <tr><td colSpan={5} className="text-center py-10 text-ink-400">Hodisalar topilmadi</td></tr>
               )}
               {rows.map((r) => (
                 <Fragment key={r.id}>
                   <tr
                     onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
-                    className="border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/30 cursor-pointer">
-                    <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap font-mono">
+                    className="border-t border-ink-100 dark:border-ink-800/40 hover:bg-ink-50 dark:hover:bg-ink-900/30 cursor-pointer">
+                    <td className="px-3 py-2 text-xs text-ink-500 dark:text-ink-400 whitespace-nowrap font-mono">
                       {new Date(r.created_at).toLocaleString("ru-RU", {
                         year: "2-digit", month: "2-digit", day: "2-digit",
                         hour: "2-digit", minute: "2-digit", second: "2-digit",
                       })}
                     </td>
                     <td className="px-3 py-2">
-                      <div className="text-slate-900 dark:text-slate-100">{r.user_name || "—"}</div>
-                      <div className="text-xs text-slate-500">{r.user_email || ""}</div>
+                      <div className="text-ink-900 dark:text-ink-100">{r.user_name || "—"}</div>
+                      <div className="text-xs text-ink-500">{r.user_email || ""}</div>
                     </td>
                     <td className="px-3 py-2">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        ACTION_COLORS[r.action] || "bg-slate-100 text-slate-700"
-                      }`}>
-                        {r.action}
-                      </span>
+                      <Badge tone={ACTION_TONE[r.action] || "neutral"}>{r.action}</Badge>
                     </td>
-                    <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
+                    <td className="px-3 py-2 text-ink-700 dark:text-ink-300">
                       {r.entity || "—"}
                       {r.entity_id && (
-                        <span className="ml-1 text-xs text-slate-400 font-mono">
+                        <span className="ml-1 text-xs text-ink-400 font-mono">
                           {r.entity_id.slice(0, 8)}
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-xs text-slate-500 font-mono">{r.ip || "—"}</td>
+                    <td className="px-3 py-2 text-xs text-ink-500 font-mono">{r.ip || "—"}</td>
                   </tr>
                   {expandedId === r.id && (
                     <tr>
-                      <td colSpan={5} className="px-3 py-2 bg-slate-50 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-700">
-                        <pre className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap overflow-x-auto max-h-60 overflow-y-auto font-mono">
+                      <td colSpan={5} className="px-3 py-2 bg-ink-50 dark:bg-ink-900/40 border-t border-ink-100 dark:border-ink-800/40">
+                        <pre className="text-xs text-ink-700 dark:text-ink-300 whitespace-pre-wrap overflow-x-auto max-h-60 overflow-y-auto font-mono">
                           {r.diff ? JSON.stringify(r.diff, null, 2) : "— diff yo'q —"}
                         </pre>
                         {r.user_agent && (
-                          <div className="text-xs text-slate-500 mt-2">UA: {r.user_agent}</div>
+                          <div className="text-xs text-ink-500 mt-2">UA: {r.user_agent}</div>
                         )}
                       </td>
                     </tr>
@@ -261,26 +258,26 @@ export default function AdminAuditLogPage() {
           </table>
         </div>
         {/* Pagination */}
-        <div className="px-3 py-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-xs">
-          <span className="text-slate-500">
+        <div className="px-3 py-2 border-t border-ink-200/60 dark:border-ink-800/60 flex items-center justify-between text-xs">
+          <span className="text-ink-500">
             Sahifa {page + 1} / {totalPages} • {total.toLocaleString("ru-RU")} ta jami
           </span>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={page === 0 || loading}
-              className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">
+              className="p-1.5 rounded hover:bg-ink-100 dark:hover:bg-ink-800 disabled:opacity-30">
               <ChevronLeft size={14} />
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1 || loading}
-              className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">
+              className="p-1.5 rounded hover:bg-ink-100 dark:hover:bg-ink-800 disabled:opacity-30">
               <ChevronRight size={14} />
             </button>
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

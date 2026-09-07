@@ -2,11 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Field, input } from "@/components/ui/modal";
+import { DataTable, type Column } from "@/components/ui/data-table";
 import { useTranslations } from "next-intl";
 
 type ReturnStatus = "draft" | "confirmed" | "cancelled";
@@ -42,22 +45,19 @@ const STATUS_TABS: Array<{ key: "all" | ReturnStatus; labelKey: string }> = [
   { key: "cancelled", labelKey: "status_cancelled" },
 ];
 
+const STATUS_TONE: Record<ReturnStatus, "neutral" | "success" | "danger"> = {
+  draft: "neutral",
+  confirmed: "success",
+  cancelled: "danger",
+};
+
 function statusBadge(status: ReturnStatus, t: (k: string) => string) {
-  const colorMap: Record<ReturnStatus, string> = {
-    draft: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-    confirmed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-    cancelled: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
-  };
   const labelMap: Record<ReturnStatus, string> = {
     draft: "status_draft",
     confirmed: "status_confirmed",
     cancelled: "status_cancelled",
   };
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${colorMap[status]}`}>
-      {t(labelMap[status])}
-    </span>
-  );
+  return <Badge tone={STATUS_TONE[status]}>{t(labelMap[status])}</Badge>;
 }
 
 function refundBadge(method: RefundMethod | null, t: (k: string) => string) {
@@ -67,11 +67,7 @@ function refundBadge(method: RefundMethod | null, t: (k: string) => string) {
     supplier_balance: "refund_balance",
     replacement: "refund_replacement",
   };
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-      {t(labelMap[method])}
-    </span>
-  );
+  return <Badge tone="warning">{t(labelMap[method])}</Badge>;
 }
 
 function fmtDate(s: string | null) {
@@ -129,6 +125,29 @@ export default function SupplierReturnsPage() {
     load();
   }, [load]);
 
+  const columns: Column<SupplierReturn>[] = [
+    {
+      key: "doc_number",
+      header: t("col_doc_number"),
+      render: (r) => (
+        <span className="font-mono text-brand-600 dark:text-brand-400">
+          {r.doc_number || r.id.slice(0, 8)}
+        </span>
+      ),
+    },
+    { key: "supplier_name", header: t("col_supplier"), render: (r) => r.supplier_name ?? "—" },
+    { key: "warehouse_name", header: t("col_warehouse"), render: (r) => r.warehouse_name ?? "—" },
+    { key: "status", header: t("col_status"), render: (r) => statusBadge(r.status, t) },
+    { key: "refund_method", header: t("refund_method"), render: (r) => refundBadge(r.refund_method, t) },
+    {
+      key: "total_amount",
+      header: t("col_amount"),
+      align: "right",
+      render: (r) => <span className="font-mono">{fmtAmount(r.total_amount)}</span>,
+    },
+    { key: "created_at", header: t("col_date"), render: (r) => fmtDate(r.created_at) },
+  ];
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -157,56 +176,54 @@ export default function SupplierReturnsPage() {
 
       {/* Filter panel */}
       <div>
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          iconRight={filtersOpen ? ChevronUp : ChevronDown}
           onClick={() => setFiltersOpen((v) => !v)}
-          className="inline-flex items-center gap-1.5 text-[13px] text-ink-600 dark:text-ink-400 hover:text-ink-900 dark:hover:text-ink-100 transition-colors"
         >
           {t("filter_label")}
-          {filtersOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </button>
+        </Button>
 
         {filtersOpen && (
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 rounded-lg border border-ink-200 dark:border-ink-800 bg-ink-50 dark:bg-ink-900/30">
-            <div className="space-y-1">
-              <label className="text-[12px] text-ink-600 dark:text-ink-400 font-medium">{t("col_supplier")}</label>
+            <Field label={t("col_supplier")}>
               <select
+                className={input}
                 value={supplierFilter}
                 onChange={(e) => setSupplierFilter(e.target.value)}
-                className="w-full border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-950 text-ink-900 dark:text-ink-100 rounded-md px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-brand-500"
               >
                 <option value="">— {t("filter_all")} —</option>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[12px] text-ink-600 dark:text-ink-400 font-medium">{t("col_warehouse")}</label>
+            </Field>
+            <Field label={t("col_warehouse")}>
               <select
+                className={input}
                 value={warehouseFilter}
                 onChange={(e) => setWarehouseFilter(e.target.value ? Number(e.target.value) : "")}
-                className="w-full border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-950 text-ink-900 dark:text-ink-100 rounded-md px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-brand-500"
               >
                 <option value="">— {t("filter_all")} —</option>
                 {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[12px] text-ink-600 dark:text-ink-400 font-medium">{t("filter_date_from")}</label>
+            </Field>
+            <Field label={t("filter_date_from")}>
               <input
                 type="date"
+                className={input}
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="w-full border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-950 text-ink-900 dark:text-ink-100 rounded-md px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-brand-500"
               />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[12px] text-ink-600 dark:text-ink-400 font-medium">{t("filter_date_to")}</label>
+            </Field>
+            <Field label={t("filter_date_to")}>
               <input
                 type="date"
+                className={input}
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="w-full border border-ink-200 dark:border-ink-800 bg-white dark:bg-ink-950 text-ink-900 dark:text-ink-100 rounded-md px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-brand-500"
               />
-            </div>
+            </Field>
           </div>
         )}
       </div>
@@ -216,7 +233,9 @@ export default function SupplierReturnsPage() {
         <div className="text-center py-12 text-ink-400 text-[13px]">{t("loading")}</div>
       )}
       {!loading && error && (
-        <div className="text-center py-12 text-rose-600 text-[13px]">{error}</div>
+        <div className="rounded-md bg-danger-50 dark:bg-danger-500/15 border border-danger-500/30 px-4 py-3 text-[13px] text-danger-700 dark:text-danger-500">
+          {error}
+        </div>
       )}
       {!loading && !error && rows.length === 0 && (
         <div className="text-center py-12 text-ink-400 text-[13px]">{t("empty")}</div>
@@ -225,41 +244,13 @@ export default function SupplierReturnsPage() {
       {/* Desktop table */}
       {!loading && !error && rows.length > 0 && (
         <>
-          <div className="hidden md:block overflow-x-auto rounded-lg border border-ink-200 dark:border-ink-800">
-            <table className="w-full text-[13px]">
-              <thead className="bg-ink-50 dark:bg-ink-900/40">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-ink-600 dark:text-ink-400 whitespace-nowrap">{t("col_doc_number")}</th>
-                  <th className="px-4 py-3 text-left font-medium text-ink-600 dark:text-ink-400">{t("col_supplier")}</th>
-                  <th className="px-4 py-3 text-left font-medium text-ink-600 dark:text-ink-400">{t("col_warehouse")}</th>
-                  <th className="px-4 py-3 text-left font-medium text-ink-600 dark:text-ink-400 whitespace-nowrap">{t("col_status")}</th>
-                  <th className="px-4 py-3 text-left font-medium text-ink-600 dark:text-ink-400 whitespace-nowrap">{t("refund_method")}</th>
-                  <th className="px-4 py-3 text-right font-medium text-ink-600 dark:text-ink-400 whitespace-nowrap">{t("col_amount")}</th>
-                  <th className="px-4 py-3 text-left font-medium text-ink-600 dark:text-ink-400 whitespace-nowrap">{t("col_date")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ink-200/60 dark:divide-ink-800/60">
-                {rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="hover:bg-ink-50/50 dark:hover:bg-ink-900/20 transition-colors cursor-pointer"
-                    onClick={() => router.push(`/supplier/returns/${row.id}`)}
-                  >
-                    <td className="px-4 py-3 font-mono text-brand-600 dark:text-brand-400">
-                      {row.doc_number || row.id.slice(0, 8)}
-                    </td>
-                    <td className="px-4 py-3 text-ink-900 dark:text-ink-100">{row.supplier_name ?? "—"}</td>
-                    <td className="px-4 py-3 text-ink-900 dark:text-ink-100">{row.warehouse_name ?? "—"}</td>
-                    <td className="px-4 py-3">{statusBadge(row.status, t)}</td>
-                    <td className="px-4 py-3">{refundBadge(row.refund_method, t)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-ink-900 dark:text-ink-100">
-                      {fmtAmount(row.total_amount)}
-                    </td>
-                    <td className="px-4 py-3 text-ink-600 dark:text-ink-400 whitespace-nowrap">{fmtDate(row.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="hidden md:block">
+            <DataTable
+              columns={columns}
+              rows={rows}
+              rowKey={(r) => r.id}
+              onRowClick={(row) => router.push(`/supplier/returns/${row.id}`)}
+            />
           </div>
 
           {/* Mobile cards */}

@@ -3,8 +3,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, ArrowLeft, CheckCircle } from "lucide-react";
+import { Trash2, ArrowLeft, CheckCircle } from "lucide-react";
 import { api } from "@/lib/api";
+import { Card, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { input } from "@/components/ui/modal";
 
 type Item = {
   id: number;
@@ -34,6 +38,8 @@ export default function TicketDetail() {
   const [t, setT] = useState<Ticket | null>(null);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Product[]>([]);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
 
   async function load() {
     const r = await api.get<Ticket>(`/open-tickets/${id}`);
@@ -64,74 +70,95 @@ export default function TicketDetail() {
     load();
   }
 
-  async function close() {
-    if (!confirm("Ticket yopilsinmi?")) return;
-    await api.post(`/open-tickets/${id}/close`, {});
-    toast.success("Yopildi");
-    router.push("/pos/tickets");
+  async function confirmClose() {
+    setClosing(true);
+    try {
+      await api.post(`/open-tickets/${id}/close`, {});
+      toast.success("Yopildi");
+      router.push("/pos/tickets");
+    } finally {
+      setClosing(false);
+    }
   }
 
-  if (!t) return <div className="py-20 text-center text-slate-400">Yuklanmoqda...</div>;
+  if (!t) return <div className="py-20 text-center text-ink-400">Yuklanmoqda...</div>;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <button onClick={() => router.push("/pos/tickets")} className="text-sm text-slate-500 flex items-center gap-1">
-          <ArrowLeft size={14} /> Ortga
-        </button>
-        <button onClick={close} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm flex items-center gap-1">
-          <CheckCircle size={14} /> Yopish va to'lov
-        </button>
+        <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={() => router.push("/pos/tickets")}>
+          Ortga
+        </Button>
+        <Button variant="success" size="md" icon={CheckCircle} onClick={() => setCloseOpen(true)}>
+          Yopish va to'lov
+        </Button>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
-        <div className="font-bold text-lg">{t.ticket_name}</div>
-        {t.table_number && <div className="text-sm text-slate-500">Stol № {t.table_number}</div>}
-      </div>
+      <Card padding="md">
+        <div className="font-bold text-lg text-ink-900 dark:text-ink-100">{t.ticket_name}</div>
+        {t.table_number && <div className="text-sm text-ink-500">Stol № {t.table_number}</div>}
+      </Card>
 
-      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+      <Card padding="md">
         <input value={q} onChange={(e) => setQ(e.target.value)}
           placeholder="Mahsulot qidirish..."
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 rounded-md text-sm" />
+          className={input} />
         {results.length > 0 && (
-          <div className="mt-2 max-h-60 overflow-auto border border-slate-200 dark:border-slate-700 rounded-md divide-y divide-slate-100 dark:divide-slate-700">
+          <div className="mt-2 max-h-60 overflow-auto border border-ink-200 dark:border-ink-800 rounded-md divide-y divide-ink-100 dark:divide-ink-800">
             {results.map((p) => (
-              <button key={p.id} onClick={() => addItem(p)}
-                className="w-full px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-between">
-                <span className="text-sm">{p.name}</span>
+              <button key={p.id} type="button" onClick={() => addItem(p)}
+                className="w-full px-3 py-2 text-left hover:bg-ink-50 dark:hover:bg-ink-800 flex items-center justify-between">
+                <span className="text-sm text-ink-900 dark:text-ink-100">{p.name}</span>
                 <span className="font-mono text-sm text-brand-600">{fmt(p.sale_price)}</span>
               </button>
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
-      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 font-semibold">Buyurtma</div>
+      <Card padding="none">
+        <CardHeader title="Buyurtma" />
         {t.items.length === 0 ? (
-          <div className="py-10 text-center text-slate-400 text-sm">Bo'sh</div>
+          <div className="py-10 text-center text-ink-400 text-sm">Bo'sh</div>
         ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-700">
+          <ul className="divide-y divide-ink-100 dark:divide-ink-800">
             {t.items.map((it) => (
               <li key={it.id} className="px-4 py-3 flex items-center justify-between">
                 <div className="flex-1">
-                  <div className="text-sm font-medium">{it.product_name}</div>
-                  <div className="text-xs text-slate-500 font-mono mt-0.5">
+                  <div className="text-sm font-medium text-ink-900 dark:text-ink-100">{it.product_name}</div>
+                  <div className="text-xs text-ink-500 font-mono mt-0.5">
                     {it.quantity} x {fmt(it.price)} = {fmt(Number(it.quantity) * Number(it.price))}
                   </div>
                 </div>
-                <button onClick={() => remove(it.id)} className="text-rose-600 p-1">
-                  <Trash2 size={14} />
-                </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  icon={Trash2}
+                  onClick={() => remove(it.id)}
+                  className="text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
+                />
               </li>
             ))}
           </ul>
         )}
-        <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 flex justify-between font-semibold">
+        <div className="px-4 py-3 border-t border-ink-200 dark:border-ink-800 flex justify-between font-semibold text-ink-900 dark:text-ink-100">
           <span>Jami:</span>
           <span className="font-mono">{fmt(t.total_amount)}</span>
         </div>
-      </div>
+      </Card>
+
+      <ConfirmDialog
+        open={closeOpen}
+        onClose={() => setCloseOpen(false)}
+        onConfirm={confirmClose}
+        title="Ticketni yopish"
+        message="Ticket yopilsinmi va to'lov amalga oshirilsinmi?"
+        confirmLabel="Yopish"
+        cancelLabel="Bekor"
+        variant="warning"
+        loading={closing}
+      />
     </div>
   );
 }

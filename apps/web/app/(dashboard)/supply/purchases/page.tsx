@@ -8,6 +8,8 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 
 type Supply = {
@@ -96,7 +98,7 @@ export default function PurchasesPage() {
   const columns: Column<Supply>[] = [
     {
       key: "doc_number",
-      header: "���",
+      header: "№",
       width: "120px",
       render: (r) => r.doc_number || r.id.slice(0, 8),
     },
@@ -109,13 +111,13 @@ export default function PurchasesPage() {
     {
       key: "supplier_name",
       header: t("ui__поставщик_b8fbf748"),
-      render: (r) => r.supplier_name || "���",
+      render: (r) => r.supplier_name || "—",
     },
     {
       key: "warehouse_name",
       header: t("ui__склад_e8bf999f"),
       width: "180px",
-      render: (r) => r.warehouse_name || "���",
+      render: (r) => r.warehouse_name || "—",
     },
     {
       key: "total_amount",
@@ -123,7 +125,7 @@ export default function PurchasesPage() {
       align: "right",
       width: "160px",
       render: (r) => (
-        <span className="font-mono text-slate-900 dark:text-slate-100">
+        <span className="font-mono text-ink-900 dark:text-ink-100">
           {Number(r.total_amount).toLocaleString("ru-RU", {
             maximumFractionDigits: 2,
           })}
@@ -137,11 +139,11 @@ export default function PurchasesPage() {
       width: "120px",
       render: (r) =>
         r.status === "received" ? (
-          <span className="text-green-600 dark:text-green-400">{t("ui__принято_713e9366")}</span>
+          <Badge tone="success">{t("ui__принято_713e9366")}</Badge>
         ) : r.status === "cancelled" ? (
-          <span className="text-red-600 dark:text-red-400">{t("ui__отменено_81a04dab")}</span>
+          <Badge tone="danger">{t("ui__отменено_81a04dab")}</Badge>
         ) : (
-          <span className="text-slate-500 dark:text-slate-400">{r.status}</span>
+          <Badge tone="neutral">{r.status}</Badge>
         ),
     },
   ];
@@ -175,9 +177,9 @@ export default function PurchasesPage() {
             </Field>
           </div>
 
-          <div className="border rounded-lg overflow-hidden">
+          <div className="border border-ink-200 dark:border-ink-800 rounded-lg overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-300">
+              <thead className="bg-ink-50 dark:bg-ink-900/40 text-ink-700 dark:text-ink-300">
                 <tr>
                   <th className="text-left px-3 py-2">{t("ui__товар_8b35db64")}</th>
                   <th className="text-right px-3 py-2 w-28">{t("ui__количество_cb8bfd4d")}</th>
@@ -188,7 +190,7 @@ export default function PurchasesPage() {
               </thead>
               <tbody>
                 {form.items.map((it, idx) => (
-                  <tr key={idx} className="border-t">
+                  <tr key={idx} className="border-t border-ink-200 dark:border-ink-800">
                     <td className="px-3 py-2">
                       <select className={input} value={it.product_id}
                         onChange={(e) => setLine(idx, "product_id", e.target.value)}>
@@ -208,7 +210,7 @@ export default function PurchasesPage() {
                       {(it.quantity * it.price).toLocaleString("ru")}
                     </td>
                     <td className="text-center">
-                      <button onClick={() => removeLine(idx)} className="text-red-500 hover:bg-red-50 p-1 rounded">
+                      <button onClick={() => removeLine(idx)} className="text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15 p-1 rounded">
                         <Trash2 size={14} />
                       </button>
                     </td>
@@ -216,7 +218,7 @@ export default function PurchasesPage() {
                 ))}
               </tbody>
               <tfoot>
-                <tr className="bg-slate-50 dark:bg-slate-900/40 font-semibold">
+                <tr className="bg-ink-50 dark:bg-ink-900/40 font-semibold">
                   <td className="px-3 py-2" colSpan={3}>{t("ui__итого_edcf3920")}</td>
                   <td className="px-3 py-2 text-right">{total.toLocaleString("ru")}</td>
                   <td></td>
@@ -225,7 +227,7 @@ export default function PurchasesPage() {
             </table>
           </div>
 
-          <button onClick={addLine} className="flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
+          <button onClick={addLine} className="flex items-center gap-1 text-sm text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">
             <Plus size={14} /> {t("ui__добавить_строку_d70236f2")}
           </button>
 
@@ -234,9 +236,9 @@ export default function PurchasesPage() {
               onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </Field>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__принять_5dc5ad80")}</button>
+          <div className="flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button type="button" onClick={save}>{t("ui__принять_5dc5ad80")}</Button>
           </div>
         </div>
       </Modal>

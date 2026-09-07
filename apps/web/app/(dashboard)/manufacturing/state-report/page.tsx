@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ClipboardList, Target, CheckCircle2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
+import { Badge } from "@/components/ui/badge";
+import { StatWidget } from "@/components/ui/stat-widget";
 import { useTranslations } from "next-intl";
 
 type Row = { status: string; cnt: number; total_planned: string; total_produced: string };
@@ -13,12 +16,12 @@ const statusLabel = (s: string) => ({
   draft: "Qoralama", in_progress: "Ishda",
   completed: "Yakunlandi", cancelled: "Bekor qilindi",
 }[s] || s);
-const statusColor = (s: string) => ({
-  draft: "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200",
-  in_progress: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300",
-  completed: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300",
-  cancelled: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300",
-}[s] || "bg-slate-100 dark:bg-slate-700");
+const STATUS_TONE: Record<string, "neutral" | "warning" | "success" | "danger"> = {
+  draft: "neutral",
+  in_progress: "warning",
+  completed: "success",
+  cancelled: "danger",
+};
 
 export default function StateReportPage() {
   const t = useTranslations("ui");
@@ -38,9 +41,7 @@ export default function StateReportPage() {
   const cols: Column<Row>[] = [
     {
       key: "status", header: t("ui__статус_7203f7a4"), width: "200px",
-      render: (r) => <span className={`inline-block px-2.5 py-1 rounded text-xs font-semibold ${statusColor(r.status)}`}>
-        {statusLabel(r.status)}
-      </span>,
+      render: (r) => <Badge tone={STATUS_TONE[r.status] ?? "neutral"}>{statusLabel(r.status)}</Badge>,
     },
     { key: "cnt", header: t("ui__заказов_00d9a0d8"), align: "right", width: "120px" },
     { key: "total_planned", header: t("ui__план_ee229f3b"), align: "right", width: "180px",
@@ -53,26 +54,11 @@ export default function StateReportPage() {
     <div className="space-y-6">
       <PageHeader title={t("ui__отчёт_по_статусам_9bdce63d")} description={t("ui__производственные_заказы_по_ста_9ce49aca")} />
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        <Card label={t("ui__всего_заказов_5bfc0cc4")} value={totalCnt} />
-        <Card label={t("ui__запланировано_7420cfa9")} value={fmt(totalPlanned)} />
-        <Card label={t("ui__произведено_74e8623b")} value={fmt(totalProduced)} color="text-green-700 dark:text-green-400" />
+        <StatWidget label={t("ui__всего_заказов_5bfc0cc4")} value={totalCnt} icon={ClipboardList} color="ink" />
+        <StatWidget label={t("ui__запланировано_7420cfa9")} value={fmt(totalPlanned)} icon={Target} color="ink" mono />
+        <StatWidget label={t("ui__произведено_74e8623b")} value={fmt(totalProduced)} icon={CheckCircle2} color="success" mono />
       </div>
       <DataTable columns={cols} rows={rows} loading={loading} rowKey={(r) => r.status} />
-    </div>
-  );
-}
-
-function Card({
-  label,
-  value,
-  color = "text-slate-900 dark:text-slate-100",
-}: any) {
-  return (
-    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4">
-      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase">
-        {label}
-      </div>
-      <div className={`text-2xl font-bold mt-1 font-mono ${color}`}>{value}</div>
     </div>
   );
 }

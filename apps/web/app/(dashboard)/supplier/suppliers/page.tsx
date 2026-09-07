@@ -9,6 +9,9 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Supplier = {
@@ -38,6 +41,8 @@ export default function SupplierPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -65,11 +70,20 @@ export default function SupplierPage() {
       toast.error(getErrorMessage(e, "Xato"));
     }
   }
-  async function del(r: Supplier) {
-    if (!confirm(`«${r.name}» o'chirilsinmi?`)) return;
-    await api.delete(`/supplier/suppliers/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40"));
-    load();
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/supplier/suppliers/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const columns: Column<Supplier>[] = [
@@ -84,7 +98,7 @@ export default function SupplierPage() {
       header: t("ui__id_номер_e669322b"),
       width: "120px",
       render: (r) => (
-        <code className="text-xs text-slate-600 dark:text-slate-400">
+        <code className="text-xs text-ink-600 dark:text-ink-400">
           {r.uuid_label}
         </code>
       ),
@@ -117,10 +131,10 @@ export default function SupplierPage() {
         const v = Number(r.balance || 0);
         const cls =
           v > 0
-            ? "text-red-700 dark:text-red-400"
+            ? "text-danger-700 dark:text-danger-500"
             : v < 0
-            ? "text-green-700 dark:text-green-400"
-            : "text-slate-500 dark:text-slate-400";
+            ? "text-success-700 dark:text-success-500"
+            : "text-ink-500 dark:text-ink-400";
         return <span className={`font-mono ${cls}`}>{fmt(v)}</span>;
       },
     },
@@ -166,30 +180,29 @@ export default function SupplierPage() {
         }}
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 flex gap-3 items-end">
-        <div className="relative flex-1 max-w-md">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
-            {t("ui__поиск_имя_телефон_код_инн_47148610")}
-          </label>
-          <Search
-            size={14}
-            className="absolute left-2.5 top-[34px] text-slate-400"
-          />
-          <input
-            className={`${input} pl-8`}
-            placeholder={t("ui__поиск_b84a8f87")}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && load()}
-          />
+      <Card padding="md">
+        <div className="flex gap-3 items-end">
+          <div className="relative flex-1 max-w-md">
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
+              {t("ui__поиск_имя_телефон_код_инн_47148610")}
+            </label>
+            <Search
+              size={14}
+              className="absolute left-2.5 top-[34px] text-ink-400"
+            />
+            <input
+              className={`${input} pl-8`}
+              placeholder={t("ui__поиск_b84a8f87")}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && load()}
+            />
+          </div>
+          <Button variant="primary" onClick={load}>
+            {t("ui__фильтр_2f884b41")}
+          </Button>
         </div>
-        <button
-          onClick={load}
-          className="px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
-        >
-          {t("ui__фильтр_2f884b41")}
-        </button>
-      </div>
+      </Card>
 
       {/* Desktop table */}
       <div className="hidden md:block">
@@ -209,44 +222,46 @@ export default function SupplierPage() {
             setEditId(r.id);
             setOpen(true);
           }}
-          onDelete={del}
+          onDelete={(r) => setDeleteTarget(r)}
         />
       </div>
 
       {/* Mobile cards */}
       <ul className="md:hidden space-y-3">
-        {loading && <li className="text-center text-sm text-slate-400 py-8">{t("ui__загрузка_43e40d49")}</li>}
-        {!loading && rows.length === 0 && <li className="text-center text-sm text-slate-400 py-8">{t("ui__нет_данных_dee9a2d8")}</li>}
+        {loading && <li className="text-center text-sm text-ink-400 py-8">{t("ui__загрузка_43e40d49")}</li>}
+        {!loading && rows.length === 0 && <li className="text-center text-sm text-ink-400 py-8">{t("ui__нет_данных_dee9a2d8")}</li>}
         {rows.map((r) => (
-          <li key={r.id} className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+          <li key={r.id} className="bg-white dark:bg-ink-900 rounded-lg border border-ink-200 dark:border-ink-800 p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-slate-900 dark:text-slate-100 truncate">{r.name}</p>
-                {r.phone && <p className="text-sm text-slate-500 dark:text-slate-400">{r.phone}</p>}
-                {r.tin && <p className="text-xs text-slate-400 dark:text-slate-500">{t("ui__инн_5b0ec543")}: {r.tin}</p>}
-                <p className={`text-xs font-mono mt-0.5 ${Number(r.balance || 0) > 0 ? "text-red-600" : Number(r.balance || 0) < 0 ? "text-green-600" : "text-slate-400"}`}>
+                <p className="font-medium text-ink-900 dark:text-ink-100 truncate">{r.name}</p>
+                {r.phone && <p className="text-sm text-ink-500 dark:text-ink-400">{r.phone}</p>}
+                {r.tin && <p className="text-xs text-ink-400 dark:text-ink-500">{t("ui__инн_5b0ec543")}: {r.tin}</p>}
+                <p className={`text-xs font-mono mt-0.5 ${Number(r.balance || 0) > 0 ? "text-danger-600 dark:text-danger-500" : Number(r.balance || 0) < 0 ? "text-success-600 dark:text-success-500" : "text-ink-400"}`}>
                   {t("ui__баланс_95dcad97")}: {fmt(r.balance)}
                 </p>
               </div>
               <div className="flex gap-2 shrink-0">
-                <button
+                <Button
+                  variant="outline"
+                  size="xs"
                   aria-label="Tahrirlash"
                   onClick={() => {
                     setForm({ name: r.name, code: r.code || "", phone: r.phone || "", email: r.email || "", tin: r.tin || "", address: r.address || "" });
                     setEditId(r.id);
                     setOpen(true);
                   }}
-                  className="text-xs text-brand-600 hover:text-brand-700 px-2 py-1 rounded border border-brand-200"
                 >
                   Tahrir
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="danger"
+                  size="xs"
                   aria-label="O'chirish"
-                  onClick={() => del(r)}
-                  className="text-xs text-rose-600 hover:text-rose-700 px-2 py-1 rounded border border-rose-200"
+                  onClick={() => setDeleteTarget(r)}
                 >
                   O&apos;chir
-                </button>
+                </Button>
               </div>
             </div>
           </li>
@@ -307,22 +322,26 @@ export default function SupplierPage() {
               />
             </Field>
           </div>
-          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button
-              onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-            >
+          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button variant="outline" onClick={() => setOpen(false)}>
               {t("ui__отмена_987b33c6")}
-            </button>
-            <button
-              onClick={save}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
-            >
+            </Button>
+            <Button variant="primary" onClick={save}>
               {t("ui__сохранить_74ea58b6")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Yetkazib beruvchini o'chirish"
+        message={deleteTarget ? `«${deleteTarget.name}» o'chirilsinmi?` : ""}
+        variant="danger"
+        loading={deleting}
+      />
     </div>
   );
 }

@@ -7,6 +7,8 @@ import { Plus, Trash2, ArrowLeft } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { Field, input } from "@/components/ui/modal";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader } from "@/components/ui/card";
 import { useTranslations } from "next-intl";
 
 type Supplier = { id: string; name: string };
@@ -127,12 +129,7 @@ export default function NewSupplierReturnPage() {
     <div className="max-w-4xl mx-auto space-y-6 pb-10">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.push("/supplier/returns")}
-          className="p-1.5 rounded hover:bg-ink-100 dark:hover:bg-ink-800 text-ink-600 dark:text-ink-400 transition-colors"
-        >
-          <ArrowLeft size={18} />
-        </button>
+        <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={() => router.push("/supplier/returns")} />
         <div>
           <h1 className="text-xl font-semibold text-ink-900 dark:text-ink-100">{t("create")}</h1>
           <p className="text-[13px] text-ink-500">{t("description")}</p>
@@ -140,7 +137,7 @@ export default function NewSupplierReturnPage() {
       </div>
 
       {/* Main fields */}
-      <div className="rounded-lg border border-ink-200 dark:border-ink-800 p-5 space-y-4">
+      <Card padding="lg" className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label={t("col_supplier")} required>
             <select
@@ -198,13 +195,11 @@ export default function NewSupplierReturnPage() {
             placeholder={t("reason_placeholder")}
           />
         </Field>
-      </div>
+      </Card>
 
       {/* Items table */}
-      <div className="rounded-lg border border-ink-200 dark:border-ink-800 overflow-hidden">
-        <div className="px-4 py-3 bg-ink-50 dark:bg-ink-900/40 border-b border-ink-200 dark:border-ink-800">
-          <h3 className="text-[14px] font-semibold text-ink-900 dark:text-ink-100">{t("items")}</h3>
-        </div>
+      <Card padding="none">
+        <CardHeader title={t("items")} />
 
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
@@ -261,12 +256,13 @@ export default function NewSupplierReturnPage() {
                     {(item.quantity * item.unit_cost).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}
                   </td>
                   <td className="px-4 py-2 text-center">
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      icon={Trash2}
+                      className="text-danger-500 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-500/15"
                       onClick={() => removeItem(idx)}
-                      className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 p-1 rounded transition-colors"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    />
                   </td>
                 </tr>
               ))}
@@ -283,31 +279,21 @@ export default function NewSupplierReturnPage() {
           </table>
         </div>
 
-        <div className="px-4 py-3 border-t border-ink-200 dark:border-ink-800">
-          <button
-            onClick={addItem}
-            className="inline-flex items-center gap-1.5 text-[13px] text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 transition-colors"
-          >
-            <Plus size={14} /> {t("add_item")}
-          </button>
+        <div className="px-4 py-3 border-t border-ink-200/60 dark:border-ink-800/60">
+          <Button variant="ghost" size="sm" icon={Plus} onClick={addItem}>
+            {t("add_item")}
+          </Button>
         </div>
-      </div>
+      </Card>
 
       {/* Actions */}
       <div className="flex justify-end gap-3">
-        <button
-          onClick={() => router.push("/supplier/returns")}
-          className="px-4 py-2 text-sm rounded-md border border-ink-200 dark:border-ink-700 text-ink-700 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-800 transition-colors"
-        >
+        <Button variant="outline" onClick={() => router.push("/supplier/returns")}>
           {t("btn_cancel")}
-        </button>
-        <button
-          onClick={save}
-          disabled={saving}
-          className="px-4 py-2 text-sm rounded-md bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-60 transition-colors"
-        >
+        </Button>
+        <Button variant="primary" onClick={save} loading={saving} disabled={saving}>
           {saving ? t("saving") : t("btn_save_draft")}
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -8,6 +8,8 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Bom = { id: string; product_id: string; product_name: string; name?: string; output_qty: string };
@@ -20,8 +22,9 @@ export default function IngredientPage() {
   const [rows, setRows] = useState<Bom[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<any | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Bom | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [productId, setProductId] = useState("");
   const [productName, setProductName] = useState("");
@@ -97,10 +100,19 @@ export default function IngredientPage() {
     } catch (e) { toast.error(getErrorMessage(e, "Xato")); }
   }
 
-  async function del(b: Bom) {
-    if (!confirm(`«${b.product_name}» retsepti o'chirilsinmi?`)) return;
-    await api.delete(`/manufacturing/bom/${b.id}`);
-    toast.success(t("ui__удалено_0c450c40")); load();
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/manufacturing/bom/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const cols: Column<Bom>[] = [
@@ -114,7 +126,7 @@ export default function IngredientPage() {
     <div className="space-y-6">
       <PageHeader title={t("ui__ингредиенты_bom_3ad66554")} description={t("ui__рецепты_производства_94721058")}
         onCreate={() => { reset(); setOpen(true); }} createLabel={t("ui__новый_рецепт_1e04f735")} />
-      <DataTable columns={cols} rows={rows} loading={loading} onEdit={openEdit} onDelete={del} />
+      <DataTable columns={cols} rows={rows} loading={loading} onEdit={openEdit} onDelete={(r) => setDeleteTarget(r)} />
 
       <Modal open={open} onClose={() => { setOpen(false); reset(); }} size="lg"
         title={editId ? "Retseptni tahrirlash" : "Yangi retsept"}>
@@ -126,12 +138,12 @@ export default function IngredientPage() {
                   <input className={input} placeholder={productName || "Qidirish..."}
                     value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
                   {productOptions.length > 0 && (
-                    <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border rounded-md shadow-lg max-h-48 overflow-auto">
+                    <div className="absolute z-10 mt-1 w-full bg-white dark:bg-ink-900 border border-ink-200 dark:border-ink-800 rounded-md shadow-lg max-h-48 overflow-auto">
                       {productOptions.map((p) => (
                         <button key={p.id}
                           onClick={() => { setProductId(p.id); setProductName(p.name); setProductSearch(p.name); setProductOptions([]); }}
-                          className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:bg-slate-900/40">
-                          {p.name}{p.sku && <span className="text-slate-400"> ({p.sku})</span>}
+                          className="block w-full text-left px-3 py-2 text-sm text-ink-700 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-800">
+                          {p.name}{p.sku && <span className="text-ink-400"> ({p.sku})</span>}
                         </button>
                       ))}
                     </div>
@@ -153,11 +165,11 @@ export default function IngredientPage() {
               <input className={input} placeholder={t("ui__поиск_ингредиента_f0396c8f")}
                 value={ingSearch} onChange={(e) => setIngSearch(e.target.value)} />
               {ingOptions.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border rounded-md shadow-lg max-h-48 overflow-auto">
+                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-ink-900 border border-ink-200 dark:border-ink-800 rounded-md shadow-lg max-h-48 overflow-auto">
                   {ingOptions.map((p) => (
                     <button key={p.id} onClick={() => addIng(p)}
-                      className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:bg-slate-900/40">
-                      {p.name}{p.sku && <span className="text-slate-400"> ({p.sku})</span>}
+                      className="block w-full text-left px-3 py-2 text-sm text-ink-700 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-800">
+                      {p.name}{p.sku && <span className="text-ink-400"> ({p.sku})</span>}
                     </button>
                   ))}
                 </div>
@@ -166,27 +178,32 @@ export default function IngredientPage() {
           </Field>
 
           {items.length > 0 && (
-            <div className="border rounded-md max-h-64 overflow-auto">
+            <div className="border border-ink-200 dark:border-ink-800 rounded-md max-h-64 overflow-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-900/40">
+                <thead className="bg-ink-50 dark:bg-ink-900/40">
                   <tr>
-                    <th className="px-3 py-2 text-left">{t("ui__ингредиент_3ab4d4ca")}</th>
-                    <th className="px-3 py-2 text-right w-32">{t("ui__кол_во_на_1_ед_выхода_ad8117be")}</th>
+                    <th className="px-3 py-2 text-left text-ink-600 dark:text-ink-400">{t("ui__ингредиент_3ab4d4ca")}</th>
+                    <th className="px-3 py-2 text-right w-32 text-ink-600 dark:text-ink-400">{t("ui__кол_во_на_1_ед_выхода_ad8117be")}</th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((it, idx) => (
-                    <tr key={it.product_id} className="border-t">
-                      <td className="px-3 py-2">{it.product_name}</td>
+                    <tr key={it.product_id} className="border-t border-ink-100 dark:border-ink-800/40">
+                      <td className="px-3 py-2 text-ink-900 dark:text-ink-100">{it.product_name}</td>
                       <td className="px-3 py-2 text-right">
                         <input type="number" step="0.001" value={it.quantity}
                           onChange={(e) => { const n = [...items]; n[idx].quantity = e.target.value; setItems(n); }}
-                          className="w-24 border rounded px-2 py-1 text-right text-sm" />
+                          className={`${input} w-24 text-right`} />
                       </td>
                       <td className="text-center">
-                        <button onClick={() => setItems(items.filter((_, i) => i !== idx))}
-                          className="text-red-600 hover:bg-red-50 p-1 rounded"><Trash2 size={14} /></button>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          icon={Trash2}
+                          className="text-danger-500 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-500/15"
+                          onClick={() => setItems(items.filter((_, i) => i !== idx))}
+                        />
                       </td>
                     </tr>
                   ))}
@@ -196,12 +213,21 @@ export default function IngredientPage() {
           )}
 
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => { setOpen(false); reset(); }}
-              className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 dark:bg-slate-900/40">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+            <Button variant="outline" onClick={() => { setOpen(false); reset(); }}>{t("ui__отмена_987b33c6")}</Button>
+            <Button variant="primary" onClick={save}>{t("ui__сохранить_74ea58b6")}</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Retseptni o'chirish"
+        message={deleteTarget ? `«${deleteTarget.product_name}» retsepti o'chirilsinmi?` : ""}
+        variant="danger"
+        loading={deleting}
+      />
     </div>
   );
 }

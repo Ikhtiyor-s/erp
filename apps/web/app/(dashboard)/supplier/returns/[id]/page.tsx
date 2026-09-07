@@ -7,6 +7,9 @@ import { ArrowLeft } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardHeader } from "@/components/ui/card";
 import { useTranslations } from "next-intl";
 
 type ReturnStatus = "draft" | "confirmed" | "cancelled";
@@ -44,22 +47,19 @@ type SupplierReturnDetail = {
 
 type ConfirmAction = "confirm" | "cancel" | "delete" | null;
 
+const STATUS_TONE: Record<ReturnStatus, "neutral" | "success" | "danger"> = {
+  draft: "neutral",
+  confirmed: "success",
+  cancelled: "danger",
+};
+
 function statusBadge(status: ReturnStatus, t: (k: string) => string) {
-  const colorMap: Record<ReturnStatus, string> = {
-    draft: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-    confirmed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-    cancelled: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
-  };
   const labelMap: Record<ReturnStatus, string> = {
     draft: "status_draft",
     confirmed: "status_confirmed",
     cancelled: "status_cancelled",
   };
-  return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded text-[12px] font-medium ${colorMap[status]}`}>
-      {t(labelMap[status])}
-    </span>
-  );
+  return <Badge tone={STATUS_TONE[status]}>{t(labelMap[status])}</Badge>;
 }
 
 function fmtDate(s: string | null) {
@@ -148,12 +148,7 @@ export default function SupplierReturnDetailPage() {
     <div className="max-w-4xl mx-auto space-y-6 pb-10">
       {/* Back button */}
       <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.push("/supplier/returns")}
-          className="p-1.5 rounded hover:bg-ink-100 dark:hover:bg-ink-800 text-ink-600 dark:text-ink-400 transition-colors"
-        >
-          <ArrowLeft size={18} />
-        </button>
+        <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={() => router.push("/supplier/returns")} />
         <h1 className="text-xl font-semibold text-ink-900 dark:text-ink-100">{t("detail_title")}</h1>
       </div>
 
@@ -161,13 +156,15 @@ export default function SupplierReturnDetailPage() {
         <div className="text-center py-16 text-ink-400 text-[13px]">{t("loading")}</div>
       )}
       {!loading && error && (
-        <div className="text-center py-16 text-rose-600 text-[13px]">{error}</div>
+        <div className="rounded-md bg-danger-50 dark:bg-danger-500/15 border border-danger-500/30 px-4 py-3 text-[13px] text-danger-700 dark:text-danger-500">
+          {error}
+        </div>
       )}
 
       {!loading && !error && detail && (
         <>
           {/* Header card */}
-          <div className="rounded-lg border border-ink-200 dark:border-ink-800 p-5 space-y-4">
+          <Card padding="lg" className="space-y-4">
             <div className="flex flex-wrap items-start gap-4 justify-between">
               <div className="space-y-1">
                 <div className="flex items-center gap-3">
@@ -185,33 +182,26 @@ export default function SupplierReturnDetailPage() {
               <div className="flex flex-wrap gap-2">
                 {detail.status === "draft" && (
                   <>
-                    <button
-                      onClick={() => router.push(`/supplier/returns/${id}/edit`)}
-                      className="px-3 py-1.5 text-[13px] rounded border border-ink-200 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800 text-ink-700 dark:text-ink-300 transition-colors"
-                    >
+                    <Button variant="outline" size="sm" onClick={() => router.push(`/supplier/returns/${id}/edit`)}>
                       {t("btn_edit")}
-                    </button>
-                    <button
-                      onClick={() => setPendingAction("confirm")}
-                      className="px-3 py-1.5 text-[13px] rounded bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
-                    >
+                    </Button>
+                    <Button variant="success" size="sm" onClick={() => setPendingAction("confirm")}>
                       {t("btn_confirm")}
-                    </button>
-                    <button
-                      onClick={() => setPendingAction("delete")}
-                      className="px-3 py-1.5 text-[13px] rounded bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/20 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 transition-colors"
-                    >
+                    </Button>
+                    <Button variant="danger" size="sm" onClick={() => setPendingAction("delete")}>
                       {t("btn_delete")}
-                    </button>
+                    </Button>
                   </>
                 )}
                 {detail.status === "confirmed" && (
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-danger-500/40 text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
                     onClick={() => setPendingAction("cancel")}
-                    className="px-3 py-1.5 text-[13px] rounded bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/20 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 transition-colors"
                   >
                     {t("btn_cancel")}
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -233,13 +223,11 @@ export default function SupplierReturnDetailPage() {
                 </div>
               )}
             </div>
-          </div>
+          </Card>
 
           {/* Items table */}
-          <div className="rounded-lg border border-ink-200 dark:border-ink-800 overflow-hidden">
-            <div className="px-4 py-3 bg-ink-50 dark:bg-ink-900/40 border-b border-ink-200 dark:border-ink-800">
-              <h3 className="text-[14px] font-semibold text-ink-900 dark:text-ink-100">{t("items")}</h3>
-            </div>
+          <Card padding="none">
+            <CardHeader title={t("items")} />
 
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-[13px]">
@@ -288,10 +276,10 @@ export default function SupplierReturnDetailPage() {
                 <span className="font-mono">{fmtAmount(detail.total_amount)}</span>
               </li>
             </ul>
-          </div>
+          </Card>
 
           {/* Audit info */}
-          <div className="rounded-lg border border-ink-200 dark:border-ink-800 p-5">
+          <Card padding="lg">
             <h3 className="text-[13px] font-semibold text-ink-700 dark:text-ink-300 mb-3">{t("audit_info")}</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-[13px]">
               <div>
@@ -315,7 +303,7 @@ export default function SupplierReturnDetailPage() {
                 </div>
               )}
             </div>
-          </div>
+          </Card>
         </>
       )}
 

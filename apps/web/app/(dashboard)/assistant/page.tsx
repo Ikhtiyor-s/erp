@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Sparkles, Send, Loader2, AlertCircle, Wrench } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { input as inputClass } from "@/components/ui/modal";
 
 type Msg = { role: "user" | "assistant"; content: string; tool_calls?: any[] };
 
@@ -80,20 +82,20 @@ export default function AssistantPage() {
 
       {/* Provider status banner */}
       {status && !anyProvider && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md p-3 flex items-start gap-2 text-sm">
-          <AlertCircle size={16} className="text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-          <div className="text-amber-900 dark:text-amber-200">
+        <div className="bg-warn-50 dark:bg-warn-500/15 border border-warn-500/20 rounded-xl p-3 flex items-start gap-2 text-sm">
+          <AlertCircle size={16} className="text-warn-600 dark:text-warn-500 mt-0.5 flex-shrink-0" />
+          <div className="text-warn-700 dark:text-warn-500">
             <strong>Demo rejim:</strong> AI provider sozlanmagan. Real javoblar uchun{" "}
-            <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded">ANTHROPIC_API_KEY</code>{" "}
+            <code className="bg-warn-500/10 dark:bg-warn-500/20 px-1 rounded">ANTHROPIC_API_KEY</code>{" "}
             yoki{" "}
-            <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded">OPENAI_API_KEY</code>{" "}
+            <code className="bg-warn-500/10 dark:bg-warn-500/20 px-1 rounded">OPENAI_API_KEY</code>{" "}
             o'rnating <code>apps/api/.env</code> faylida va API'ni qayta ishga tushiring.
             Demo rejimda ham {status.tools_count} ta ma'lumot funksiyasi ishlaydi.
           </div>
         </div>
       )}
       {status && anyProvider && (
-        <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+        <div className="text-xs text-ink-500 dark:text-ink-400 flex items-center gap-2">
           <Wrench size={12} />
           {status.anthropic_configured ? "Anthropic Claude" : "OpenAI"} faol —{" "}
           {status.tools_count} ta tool ulangan ({status.tools.slice(0, 3).join(", ")}, ...)
@@ -103,12 +105,12 @@ export default function AssistantPage() {
       {/* Chat history */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 space-y-4"
+        className="flex-1 overflow-y-auto bg-white dark:bg-ink-950 border border-ink-200/60 dark:border-ink-800/60 rounded-xl shadow-sm p-4 space-y-4"
       >
         {messages.length === 0 && (
-          <div className="text-center py-12 text-slate-400 dark:text-slate-500">
+          <div className="text-center py-12 text-ink-400 dark:text-ink-500">
             <Sparkles size={32} className="mx-auto mb-3 text-brand-400" />
-            <div className="font-medium text-slate-600 dark:text-slate-300 mb-1">
+            <div className="font-medium text-ink-600 dark:text-ink-300 mb-1">
               Aniq ERP AI assistentiga xush kelibsiz
             </div>
             <div className="text-sm">Quyidagi savollardan birini sinab ko'ring:</div>
@@ -117,7 +119,7 @@ export default function AssistantPage() {
                 <button
                   key={s}
                   onClick={() => send(s)}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-brand-100 dark:bg-slate-700 dark:hover:bg-brand-900/40 text-slate-700 dark:text-slate-200 text-xs rounded-full transition-colors"
+                  className="px-3 py-1.5 bg-ink-100 hover:bg-brand-100 dark:bg-ink-800 dark:hover:bg-brand-900/40 text-ink-700 dark:text-ink-200 text-xs rounded-full transition-colors"
                 >
                   {s}
                 </button>
@@ -134,7 +136,7 @@ export default function AssistantPage() {
               className={`max-w-2xl px-4 py-3 rounded-2xl text-sm ${
                 m.role === "user"
                   ? "bg-brand-600 text-white rounded-br-sm"
-                  : "bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-bl-sm"
+                  : "bg-ink-100 dark:bg-ink-800 text-ink-900 dark:text-ink-100 rounded-bl-sm"
               }`}
             >
               <div
@@ -142,10 +144,10 @@ export default function AssistantPage() {
                 dangerouslySetInnerHTML={{ __html: formatAssistantHtml(m.content) }}
               />
               {m.tool_calls && m.tool_calls.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-slate-300/40 dark:border-slate-600 text-xs opacity-70 flex flex-wrap gap-1">
+                <div className="mt-2 pt-2 border-t border-ink-300/40 dark:border-ink-600 text-xs opacity-70 flex flex-wrap gap-1">
                   <Wrench size={11} className="inline" />
                   {m.tool_calls.map((tc: any, j: number) => (
-                    <span key={j} className="px-1.5 py-0.5 bg-slate-200/50 dark:bg-slate-600/50 rounded">
+                    <span key={j} className="px-1.5 py-0.5 bg-ink-200/50 dark:bg-ink-600/50 rounded">
                       {typeof tc === "string" ? tc : tc.tool || JSON.stringify(tc)}
                     </span>
                   ))}
@@ -156,7 +158,7 @@ export default function AssistantPage() {
         ))}
         {sending && (
           <div className="flex justify-start">
-            <div className="px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-sm flex items-center gap-2">
+            <div className="px-4 py-3 rounded-2xl bg-ink-100 dark:bg-ink-800 text-ink-500 dark:text-ink-400 text-sm flex items-center gap-2">
               <Loader2 size={14} className="animate-spin" /> O'ylanmoqda...
             </div>
           </div>
@@ -166,15 +168,12 @@ export default function AssistantPage() {
       {/* Input */}
       <div className="flex gap-2">
         {messages.length > 0 && (
-          <button
-            onClick={reset}
-            className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700"
-          >
+          <Button variant="outline" onClick={reset}>
             Yangi suhbat
-          </button>
+          </Button>
         )}
         <input
-          className="flex-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 rounded-md px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+          className={`flex-1 ${inputClass}`}
           placeholder="Savolingizni yozing..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -186,13 +185,9 @@ export default function AssistantPage() {
           }}
           disabled={sending}
         />
-        <button
-          onClick={() => send()}
-          disabled={sending || !input.trim()}
-          className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Send size={14} /> Yuborish
-        </button>
+        <Button onClick={() => send()} disabled={sending || !input.trim()} icon={Send}>
+          Yuborish
+        </Button>
       </div>
     </div>
   );
@@ -215,7 +210,7 @@ function formatAssistantHtml(text: string): string {
   // Code blocks ```...```
   out = out.replace(/```(\w+)?\n([\s\S]*?)```/g,
     (_m, _lang, code) =>
-      `<pre class="bg-slate-900 text-slate-100 p-3 rounded text-xs overflow-x-auto my-2">${code}</pre>`);
+      `<pre class="bg-ink-900 text-ink-50 p-3 rounded text-xs overflow-x-auto my-2">${code}</pre>`);
   // Inline code `...`
   out = out.replace(/`([^`]+)`/g, "<code class='bg-black/10 dark:bg-white/10 px-1 rounded'>$1</code>");
   // **bold**

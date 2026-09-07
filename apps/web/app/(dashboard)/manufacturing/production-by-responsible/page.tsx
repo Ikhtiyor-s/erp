@@ -33,7 +33,7 @@ export default function ByResponsiblePage() {
       align: "right",
       width: "120px",
       render: (r) => (
-        <span className="text-green-700 dark:text-green-400 font-semibold">
+        <span className="text-success-700 dark:text-success-500 font-semibold">
           {r.completed_cnt}
         </span>
       ),
@@ -51,7 +51,7 @@ export default function ByResponsiblePage() {
       align: "right",
       width: "160px",
       render: (r) => (
-        <span className="font-mono font-semibold text-green-700 dark:text-green-400">
+        <span className="font-mono font-semibold text-success-700 dark:text-success-500">
           {fmt(r.produced)}
         </span>
       ),
@@ -68,19 +68,19 @@ export default function ByResponsiblePage() {
             : 0;
         const barColor =
           ratio >= 100
-            ? "bg-green-500"
+            ? "bg-success-500"
             : ratio >= 80
-            ? "bg-yellow-500"
-            : "bg-red-500";
+            ? "bg-warn-500"
+            : "bg-danger-500";
         const textColor =
           ratio >= 100
-            ? "text-green-700 dark:text-green-400"
+            ? "text-success-700 dark:text-success-500"
             : ratio >= 80
-            ? "text-yellow-600 dark:text-yellow-400"
-            : "text-red-600 dark:text-red-400";
+            ? "text-warn-600 dark:text-warn-500"
+            : "text-danger-600 dark:text-danger-500";
         return (
           <div className="flex items-center gap-2 justify-end">
-            <div className="w-20 bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">
+            <div className="w-20 bg-ink-200 dark:bg-ink-700 rounded-full h-1.5">
               <div
                 className={`${barColor} h-1.5 rounded-full`}
                 style={{ width: `${Math.min(ratio, 100)}%` }}

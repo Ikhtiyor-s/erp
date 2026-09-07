@@ -7,6 +7,9 @@ import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
 import { Field, input } from "@/components/ui/modal";
+import { Card, CardHeader, CardBody, CardFooter } from "@/components/ui/card";
+import { StatWidget } from "@/components/ui/stat-widget";
+import { Button } from "@/components/ui/button";
 
 type Org = {
   id: string;
@@ -88,29 +91,29 @@ export default function AdminOrgPage() {
       />
 
       {loading && (
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-10 text-center text-slate-400 border border-slate-200 dark:border-slate-700">
-          Yuklanmoqda...
-        </div>
+        <Card className="p-10 text-center text-ink-400">Yuklanmoqda...</Card>
       )}
 
       {!loading && org && (
         <>
           {/* Stats cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard icon={<Users size={16} />} label="Foydalanuvchi" value={org.user_count} />
-            <StatCard icon={<UserCheck size={16} />} label="Mijoz" value={org.customer_count} />
-            <StatCard icon={<Package size={16} />} label="Mahsulot" value={org.product_count} />
-            <StatCard icon={<ShoppingCart size={16} />} label="Sotuv" value={org.sale_count} />
+            <StatWidget icon={Users} label="Foydalanuvchi" value={org.user_count} color="brand" mono />
+            <StatWidget icon={UserCheck} label="Mijoz" value={org.customer_count} color="info" mono />
+            <StatWidget icon={Package} label="Mahsulot" value={org.product_count} color="warn" mono />
+            <StatWidget icon={ShoppingCart} label="Sotuv" value={org.sale_count} color="success" mono />
           </div>
 
           {/* Form */}
-          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
-            <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2 text-slate-900 dark:text-slate-100">
-              <Building2 size={16} />
-              <span className="font-semibold">Rekvizitlar</span>
-            </div>
+          <Card padding="none">
+            <CardHeader>
+              <div className="flex items-center gap-2 text-ink-900 dark:text-ink-100">
+                <Building2 size={16} />
+                <span className="font-semibold">Rekvizitlar</span>
+              </div>
+            </CardHeader>
 
-            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardBody className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label="Nomi" required>
                 <input
                   type="text"
@@ -138,7 +141,7 @@ export default function AdminOrgPage() {
                   pattern="\d{9}"
                   maxLength={9}
                 />
-                <p className="text-xs text-slate-500 mt-1">9 raqamli soliq raqami</p>
+                <p className="text-xs text-ink-500 mt-1">9 raqamli soliq raqami</p>
               </Field>
               <Field label="Telefon">
                 <input
@@ -167,43 +170,22 @@ export default function AdminOrgPage() {
                   placeholder="https://..."
                 />
               </Field>
-            </div>
+            </CardBody>
 
-            <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-700 flex justify-end">
-              <button
-                onClick={save}
-                disabled={saving}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-md text-sm font-medium disabled:opacity-50"
-              >
-                <Save size={14} />
+            <CardFooter className="flex justify-end">
+              <Button onClick={save} disabled={saving} loading={saving} icon={Save}>
                 {saving ? "Saqlanmoqda..." : "Saqlash"}
-              </button>
-            </div>
-          </div>
+              </Button>
+            </CardFooter>
+          </Card>
 
           {/* Meta */}
-          <div className="text-xs text-slate-500 dark:text-slate-400">
+          <div className="text-xs text-ink-500 dark:text-ink-400">
             ID: <span className="font-mono">{org.id}</span> • Yaratilgan:{" "}
             {new Date(org.created_at).toLocaleString("uz-Cyrl-UZ")}
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function StatCard({
-  icon, label, value,
-}: { icon: React.ReactNode; label: string; value: number }) {
-  return (
-    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
-      <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-        {icon}
-        <span>{label}</span>
-      </div>
-      <div className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-100 mt-1">
-        {value.toLocaleString("ru-RU")}
-      </div>
     </div>
   );
 }

@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ListPlus, Star } from "lucide-react";
+import { ListPlus, Star, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type PriceList = {
@@ -41,6 +43,8 @@ export default function PriceListsPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", currency_id: "" as number | "", is_default: false });
   const [editId, setEditId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PriceList | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [itemsFor, setItemsFor] = useState<PriceList | null>(null);
   const [items, setItems] = useState<PriceItem[]>([]);
@@ -84,11 +88,20 @@ export default function PriceListsPage() {
       toast.error(getErrorMessage(e, "Xato"));
     }
   }
-  async function del(r: PriceList) {
-    if (!confirm(`��${r.name}�� o'chirilsinmi?`)) return;
-    await api.delete(`/reference/price-lists/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40"));
-    load();
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await api.delete(`/reference/price-lists/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
+    } catch (e: any) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleteLoading(false);
+    }
   }
 
   async function openItems(r: PriceList) {
@@ -128,7 +141,7 @@ export default function PriceListsPage() {
           {r.is_default && (
             <Star size={14} className="text-yellow-500 fill-yellow-500" />
           )}
-          <span className="text-slate-900 dark:text-slate-100">{r.name}</span>
+          <span className="text-ink-900 dark:text-ink-100">{r.name}</span>
         </div>
       ),
     },
@@ -136,7 +149,7 @@ export default function PriceListsPage() {
       key: "currency_code",
       header: t("ui__валюта_cf55d9a9"),
       width: "100px",
-      render: (r) => r.currency_code || "���",
+      render: (r) => r.currency_code || "—",
     },
     {
       key: "item_count",
@@ -155,12 +168,9 @@ export default function PriceListsPage() {
       align: "center",
       width: "120px",
       render: (r) => (
-        <button
-          onClick={() => openItems(r)}
-          className="text-brand-600 dark:text-brand-400 hover:text-brand-700 text-xs inline-flex items-center gap-1"
-        >
-          <ListPlus size={14} /> {t("ui__позиции_3f4e8c19")}
-        </button>
+        <Button variant="ghost" size="xs" icon={ListPlus} onClick={() => openItems(r)}>
+          {t("ui__позиции_3f4e8c19")}
+        </Button>
       ),
     },
   ];
@@ -190,7 +200,7 @@ export default function PriceListsPage() {
           setEditId(r.id);
           setOpen(true);
         }}
-        onDelete={del}
+        onDelete={(r) => setDeleteTarget(r)}
       />
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Narxnomani tahrirlash" : "Yangi narxnoma"}>
@@ -221,7 +231,7 @@ export default function PriceListsPage() {
               ))}
             </select>
           </Field>
-          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+          <label className="flex items-center gap-2 text-sm text-ink-700 dark:text-ink-200">
             <input
               type="checkbox"
               checked={form.is_default}
@@ -229,13 +239,13 @@ export default function PriceListsPage() {
             />
             {t("ui__по_умолчанию_d3b9e440")}
           </label>
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700">
+          <div className="flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("ui__отмена_987b33c6")}
-            </button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">
+            </Button>
+            <Button type="button" onClick={save}>
               {t("ui__сохранить_74ea58b6")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
@@ -274,18 +284,13 @@ export default function PriceListsPage() {
               />
             </Field>
             <div className="col-span-3">
-              <button
-                onClick={addItem}
-                className="px-4 py-2 text-sm bg-brand-600 text-white rounded-md hover:bg-brand-700"
-              >
-                {t("ui__добавить_5eba283b")}
-              </button>
+              <Button onClick={addItem}>{t("ui__добавить_5eba283b")}</Button>
             </div>
           </div>
 
-          <div className="border border-slate-200 dark:border-slate-700 rounded-md max-h-72 overflow-auto">
+          <div className="border border-ink-200 dark:border-ink-800 rounded-md max-h-72 overflow-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900/40 text-slate-700 dark:text-slate-300 sticky top-0">
+              <thead className="bg-ink-50 dark:bg-ink-900/40 text-ink-700 dark:text-ink-300 sticky top-0">
                 <tr>
                   <th className="px-3 py-2 text-left">{t("ui__товар_8b35db64")}</th>
                   <th className="px-3 py-2 text-right w-32">{t("ui__цена_682fa8db")}</th>
@@ -295,23 +300,23 @@ export default function PriceListsPage() {
               <tbody>
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="text-center py-6 text-slate-400 dark:text-slate-500">
+                    <td colSpan={3} className="text-center py-6 text-ink-400 dark:text-ink-600">
                       {t("ui__нет_позиций_cc62d9ac")}
                     </td>
                   </tr>
                 ) : (
                   items.map((it) => (
-                    <tr key={it.id} className="border-t border-slate-200 dark:border-slate-700">
-                      <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{it.product_name}</td>
-                      <td className="px-3 py-2 text-right font-mono text-slate-900 dark:text-slate-100">
+                    <tr key={it.id} className="border-t border-ink-200 dark:border-ink-800">
+                      <td className="px-3 py-2 text-ink-900 dark:text-ink-100">{it.product_name}</td>
+                      <td className="px-3 py-2 text-right font-mono text-ink-900 dark:text-ink-100">
                         {fmt(it.price)}
                       </td>
                       <td className="px-3 py-2 text-right">
                         <button
                           onClick={() => delItem(it)}
-                          className="text-red-600 dark:text-red-400 hover:text-red-700 text-xs"
+                          className="text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15 p-1 rounded"
                         >
-                          ���
+                          <Trash2 size={14} />
                         </button>
                       </td>
                     </tr>
@@ -322,6 +327,16 @@ export default function PriceListsPage() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="O'chirish"
+        message={`«${deleteTarget?.name}» o'chirilsinmi?`}
+        variant="danger"
+        loading={deleteLoading}
+      />
     </div>
   );
 }

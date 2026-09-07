@@ -8,6 +8,11 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { StatWidget } from "@/components/ui/stat-widget";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Task = {
@@ -33,6 +38,8 @@ const empty = {
   due_date: "",
 };
 
+type TaskTone = "neutral" | "warning" | "success" | "danger" | "info";
+
 const statusLabel = (s: string) =>
   ({
     todo: "Bajarish uchun",
@@ -41,24 +48,24 @@ const statusLabel = (s: string) =>
     cancelled: "Bekor qilindi",
   }[s] || s);
 
-const statusColor = (s: string) =>
+const statusTone = (s: string): TaskTone =>
   ({
-    todo: "text-slate-700 dark:text-slate-300",
-    in_progress: "text-yellow-700 dark:text-yellow-400",
-    done: "text-green-700 dark:text-green-400",
-    cancelled: "text-red-700 dark:text-red-400",
-  }[s] || "");
+    todo: "neutral",
+    in_progress: "warning",
+    done: "success",
+    cancelled: "danger",
+  }[s] as TaskTone) || "neutral";
 
 const priorityLabel = (p: string) =>
   ({ low: "Past", normal: "Oddiy", high: "Yuqori", urgent: "Shoshilinch" }[p] || p);
 
-const priorityBadge = (p: string) =>
+const priorityTone = (p: string): TaskTone =>
   ({
-    low: "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300",
-    normal: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300",
-    high: "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300",
-    urgent: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300",
-  }[p] || "");
+    low: "neutral",
+    normal: "info",
+    high: "warning",
+    urgent: "danger",
+  }[p] as TaskTone) || "neutral";
 
 export default function TasksPage() {
   const t = useTranslations("ui");
@@ -74,6 +81,8 @@ export default function TasksPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Task | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -126,11 +135,19 @@ export default function TasksPage() {
       toast.error(getErrorMessage(e, "Xato"));
     }
   }
-  async function del(r: Task) {
-    if (!confirm(`��${r.title}�� vazifasi o'chirilsinmi?`)) return;
-    await api.delete(`/tasks/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40"));
-    load();
+  async function doDelete() {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/tasks/${confirmDelete.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setConfirmDelete(null);
+      load();
+    } catch (e: any) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const stats = useMemo(() => {
@@ -146,13 +163,7 @@ export default function TasksPage() {
       header: t("ui__приор_18774995"),
       width: "100px",
       render: (r) => (
-        <span
-          className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${priorityBadge(
-            r.priority
-          )}`}
-        >
-          {priorityLabel(r.priority)}
-        </span>
+        <Badge tone={priorityTone(r.priority)}>{priorityLabel(r.priority)}</Badge>
       ),
     },
     { key: "title", header: t("ui__задача_fb65f812") },
@@ -160,22 +171,20 @@ export default function TasksPage() {
       key: "assignee_name",
       header: t("ui__исполнитель_1d3ab78a"),
       width: "160px",
-      render: (r) => r.assignee_name || "���",
+      render: (r) => r.assignee_name || "—",
     },
     {
       key: "due_date",
       header: t("ui__срок_bae913f6"),
       width: "120px",
       render: (r) =>
-        r.due_date ? new Date(r.due_date).toLocaleDateString("ru-RU") : "���",
+        r.due_date ? new Date(r.due_date).toLocaleDateString("ru-RU") : "—",
     },
     {
       key: "status",
       header: t("ui__статус_7203f7a4"),
       width: "130px",
-      render: (r) => (
-        <span className={statusColor(r.status)}>{statusLabel(r.status)}</span>
-      ),
+      render: (r) => <Badge tone={statusTone(r.status)}>{statusLabel(r.status)}</Badge>,
     },
     {
       key: "id" as any,
@@ -188,7 +197,7 @@ export default function TasksPage() {
             {r.status === "todo" && (
               <button
                 onClick={() => setStatus(r, "in_progress")}
-                className="p-1 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/30 rounded"
+                className="p-1 text-warn-600 dark:text-warn-500 hover:bg-warn-50 dark:hover:bg-warn-500/15 rounded"
                 title={t("ui__в_работу_e8f15a73")}
               >
                 <Clock size={14} />
@@ -196,14 +205,14 @@ export default function TasksPage() {
             )}
             <button
               onClick={() => setStatus(r, "done")}
-              className="p-1 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded"
+              className="p-1 text-success-600 dark:text-success-500 hover:bg-success-50 dark:hover:bg-success-500/15 rounded"
               title={t("ui__завершить_b0e3a5e0")}
             >
               <Check size={14} />
             </button>
             <button
               onClick={() => setStatus(r, "cancelled")}
-              className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+              className="p-1 text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15 rounded"
               title={t("ui__отменить_ecdbdc8b")}
             >
               <X size={14} />
@@ -226,20 +235,20 @@ export default function TasksPage() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card label={t("ui__всего_e7ffde0e")} value={String(stats.total)} color="text-slate-900 dark:text-slate-100" />
-        <Card label={t("ui__к_выполнению_cef53737")} value={String(stats.todo)} color="text-slate-700 dark:text-slate-300" />
-        <Card label={t("ui__в_работе_8c92e34f")} value={String(stats.inProgress)} color="text-yellow-700 dark:text-yellow-400" />
-        <Card label={t("ui__выполнено_c665d401")} value={String(stats.done)} color="text-green-700 dark:text-green-400" />
+        <StatWidget label={t("ui__всего_e7ffde0e")} value={stats.total} color="ink" />
+        <StatWidget label={t("ui__к_выполнению_cef53737")} value={stats.todo} color="ink" />
+        <StatWidget label={t("ui__в_работе_8c92e34f")} value={stats.inProgress} color="warn" />
+        <StatWidget label={t("ui__выполнено_c665d401")} value={stats.done} color="success" />
       </div>
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <Card className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="sm:col-span-2 relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_название_описание_3176a313")}
           </label>
           <Search
             size={14}
-            className="absolute left-2.5 top-[34px] text-slate-400"
+            className="absolute left-2.5 top-[34px] text-ink-400"
           />
           <input
             className={`${input} pl-8`}
@@ -250,7 +259,7 @@ export default function TasksPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__статус_7203f7a4")}
           </label>
           <select
@@ -266,7 +275,7 @@ export default function TasksPage() {
           </select>
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__приоритет_a0f9f1af")}
           </label>
           <select
@@ -284,14 +293,11 @@ export default function TasksPage() {
           </select>
         </div>
         <div className="flex items-end">
-          <button
-            onClick={load}
-            className="w-full px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
-          >
+          <Button onClick={load} fullWidth>
             {t("ui__фильтр_2f884b41")}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       <DataTable
         columns={cols}
@@ -308,7 +314,7 @@ export default function TasksPage() {
           setEditId(r.id);
           setOpen(true);
         }}
-        onDelete={del}
+        onDelete={(r) => setConfirmDelete(r)}
       />
 
       <Modal
@@ -375,41 +381,27 @@ export default function TasksPage() {
               />
             </Field>
           </div>
-          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button
-              onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-            >
+          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("ui__отмена_987b33c6")}
-            </button>
-            <button
-              onClick={save}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
-            >
+            </Button>
+            <Button type="button" onClick={save}>
               {t("ui__сохранить_74ea58b6")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
-    </div>
-  );
-}
 
-function Card({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-4">
-      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-        {label}
-      </div>
-      <div className={`text-2xl font-bold mt-1 font-mono ${color}`}>{value}</div>
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={doDelete}
+        loading={deleting}
+        variant="danger"
+        title="Vazifani o'chirish"
+        message={`"${confirmDelete?.title}" vazifasi o'chirilsinmi?`}
+        confirmLabel="O'chirish"
+      />
     </div>
   );
 }

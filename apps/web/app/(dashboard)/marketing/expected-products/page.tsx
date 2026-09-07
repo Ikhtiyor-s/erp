@@ -8,6 +8,10 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Expected = {
@@ -38,12 +42,12 @@ const fmt = (v: any) =>
 const statusLabel = (s: string) =>
   ({ pending: "Kutilmoqda", received: "Olindi", cancelled: "Bekor qilindi" }[s] ||
     s);
-const statusColor = (s: string) =>
+const statusTone = (s: string) =>
   ({
-    pending: "text-yellow-700 dark:text-yellow-400",
-    received: "text-green-700 dark:text-green-400",
-    cancelled: "text-red-700 dark:text-red-400",
-  }[s] || "text-slate-500 dark:text-slate-400");
+    pending: "warning" as const,
+    received: "success" as const,
+    cancelled: "danger" as const,
+  }[s] || "neutral" as const);
 
 export default function ExpectedProductsPage() {
   const t = useTranslations("ui");
@@ -54,6 +58,8 @@ export default function ExpectedProductsPage() {
   const [filters, setFilters] = useState({ q: "", status: "" });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
+  const [deleteTarget, setDeleteTarget] = useState<Expected | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -115,11 +121,20 @@ export default function ExpectedProductsPage() {
       toast.error(getErrorMessage(e, "Xato"));
     }
   }
-  async function del(r: Expected) {
-    if (!confirm("Yozuvni o'chirasizmi?")) return;
-    await api.delete(`/marketing/expected-products/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40"));
-    load();
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await api.delete(`/marketing/expected-products/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleteLoading(false);
+    }
   }
 
   const columns: Column<Expected>[] = [
@@ -154,7 +169,7 @@ export default function ExpectedProductsPage() {
       header: t("ui__статус_7203f7a4"),
       width: "130px",
       render: (r) => (
-        <span className={statusColor(r.status)}>{statusLabel(r.status)}</span>
+        <Badge tone={statusTone(r.status)}>{statusLabel(r.status)}</Badge>
       ),
     },
     {
@@ -167,7 +182,7 @@ export default function ExpectedProductsPage() {
           <div className="flex gap-1 justify-center">
             <button
               onClick={() => setStatus(r, "received")}
-              className="p-1 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded"
+              className="p-1 text-success-600 dark:text-success-500 hover:bg-success-50 dark:hover:bg-success-500/15 rounded"
               title={t("ui__получено_470c2b83")}
               aria-label="Qabul qilindi deb belgilash"
             >
@@ -175,7 +190,7 @@ export default function ExpectedProductsPage() {
             </button>
             <button
               onClick={() => setStatus(r, "cancelled")}
-              className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+              className="p-1 text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15 rounded"
               title={t("ui__отменить_ecdbdc8b")}
               aria-label="Bekor qilish"
             >
@@ -197,14 +212,14 @@ export default function ExpectedProductsPage() {
         }}
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <Card className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="sm:col-span-2 relative">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_товар_поставщик_01ee0aba")}
           </label>
           <Search
             size={14}
-            className="absolute left-2.5 top-[34px] text-slate-400"
+            className="absolute left-2.5 top-[34px] text-ink-400"
           />
           <input
             className={`${input} pl-8`}
@@ -215,7 +230,7 @@ export default function ExpectedProductsPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__статус_7203f7a4")}
           </label>
           <select
@@ -230,20 +245,17 @@ export default function ExpectedProductsPage() {
           </select>
         </div>
         <div className="flex items-end">
-          <button
-            onClick={load}
-            className="w-full px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
-          >
+          <Button onClick={load} fullWidth>
             {t("ui__фильтр_2f884b41")}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       <DataTable
         columns={columns}
         rows={rows}
         loading={loading}
-        onDelete={del}
+        onDelete={(r) => setDeleteTarget(r)}
       />
 
       <Modal
@@ -318,22 +330,26 @@ export default function ExpectedProductsPage() {
               />
             </Field>
           </div>
-          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button
-              onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-            >
+          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("ui__отмена_987b33c6")}
-            </button>
-            <button
-              onClick={save}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
-            >
+            </Button>
+            <Button type="button" onClick={save}>
               {t("ui__сохранить_74ea58b6")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="O'chirish"
+        message="Yozuvni o'chirasizmi?"
+        variant="danger"
+        loading={deleteLoading}
+      />
     </div>
   );
 }

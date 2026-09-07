@@ -8,6 +8,9 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type NP = {
@@ -37,6 +40,8 @@ export default function NaturalPersonPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<NP | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -65,11 +70,20 @@ export default function NaturalPersonPage() {
       toast.error(getErrorMessage(e, "Xato"));
     }
   }
-  async function del(r: NP) {
-    if (!confirm(`��${r.full_name}�� o'chirilsinmi?`)) return;
-    await api.delete(`/reference/natural-persons/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40"));
-    load();
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await api.delete(`/reference/natural-persons/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
+    } catch (e: any) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleteLoading(false);
+    }
   }
 
   const filtered = q
@@ -82,10 +96,10 @@ export default function NaturalPersonPage() {
 
   const cols: Column<NP>[] = [
     { key: "full_name", header: t("ui__фио_72d974de") },
-    { key: "passport", header: t("ui__паспорт_d25f6619"), width: "150px", render: (r) => r.passport || "���" },
-    { key: "pinfl", header: t("ui__пинфл_69a74a6d"), width: "150px", render: (r) => r.pinfl || "���" },
-    { key: "phone", header: t("ui__телефон_2928e19c"), width: "150px", render: (r) => r.phone || "���" },
-    { key: "address", header: t("ui__адрес_80148fa5"), render: (r) => r.address || "���" },
+    { key: "passport", header: t("ui__паспорт_d25f6619"), width: "150px", render: (r) => r.passport || "—" },
+    { key: "pinfl", header: t("ui__пинфл_69a74a6d"), width: "150px", render: (r) => r.pinfl || "—" },
+    { key: "phone", header: t("ui__телефон_2928e19c"), width: "150px", render: (r) => r.phone || "—" },
+    { key: "address", header: t("ui__адрес_80148fa5"), render: (r) => r.address || "—" },
   ];
 
   return (
@@ -100,12 +114,12 @@ export default function NaturalPersonPage() {
         }}
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 flex gap-3 items-end">
+      <Card padding="md">
         <div className="relative flex-1 max-w-md">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_bfc95980")}
           </label>
-          <Search size={14} className="absolute left-2.5 top-[34px] text-slate-400" />
+          <Search size={14} className="absolute left-2.5 top-[34px] text-ink-400" />
           <input
             className={`${input} pl-8`}
             placeholder={t("ui__фио_паспорт_пинфл_45c46e75")}
@@ -113,7 +127,7 @@ export default function NaturalPersonPage() {
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
-      </div>
+      </Card>
 
       <DataTable
         columns={cols}
@@ -131,7 +145,7 @@ export default function NaturalPersonPage() {
           setEditId(r.id);
           setOpen(true);
         }}
-        onDelete={del}
+        onDelete={(r) => setDeleteTarget(r)}
       />
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Tahrirlash" : "Yangi jis. shaxs"}>
@@ -160,12 +174,22 @@ export default function NaturalPersonPage() {
           <Field label={t("ui__заметки_c8866295")}>
             <textarea className={input} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </Field>
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button onClick={() => setOpen(false)} className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700">{t("ui__отмена_987b33c6")}</button>
-            <button onClick={save} className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700">{t("ui__сохранить_74ea58b6")}</button>
+          <div className="flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t("ui__отмена_987b33c6")}</Button>
+            <Button type="button" onClick={save}>{t("ui__сохранить_74ea58b6")}</Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="O'chirish"
+        message={`«${deleteTarget?.full_name}» o'chirilsinmi?`}
+        variant="danger"
+        loading={deleteLoading}
+      />
     </div>
   );
 }

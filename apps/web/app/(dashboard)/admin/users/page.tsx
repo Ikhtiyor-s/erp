@@ -8,6 +8,9 @@ import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Card, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 type OrgUser = {
   id: string;
@@ -27,13 +30,15 @@ type Role = {
   name: string;
 };
 
-const ROLE_COLORS: Record<string, string> = {
-  superadmin: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
-  admin: "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300",
-  manager: "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
-  accountant: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  cashier: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-  viewer: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+type RoleTone = "danger" | "purple" | "primary" | "warning" | "success" | "neutral";
+
+const ROLE_TONE: Record<string, RoleTone> = {
+  superadmin: "danger",
+  admin: "purple",
+  manager: "primary",
+  accountant: "warning",
+  cashier: "success",
+  viewer: "neutral",
 };
 
 type ConfirmState =
@@ -177,14 +182,16 @@ export default function AdminUsersPage() {
       />
 
       {/* DESKTOP table */}
-      <div className="hidden md:block bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2 text-slate-900 dark:text-slate-100">
-          <Users size={16} />
-          <span className="font-semibold">Foydalanuvchilar ({users.length})</span>
-        </div>
+      <Card padding="none" className="hidden md:block">
+        <CardHeader>
+          <div className="flex items-center gap-2 text-ink-900 dark:text-ink-100">
+            <Users size={16} />
+            <span className="font-semibold">Foydalanuvchilar ({users.length})</span>
+          </div>
+        </CardHeader>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-900/40 text-xs text-slate-500 dark:text-slate-400 uppercase">
+            <thead className="bg-ink-50 dark:bg-ink-900/40 text-xs text-ink-500 dark:text-ink-400 uppercase">
               <tr>
                 <th className="text-left px-4 py-3 font-medium">Ism / Email</th>
                 <th className="text-left px-4 py-3 font-medium">Rol</th>
@@ -195,43 +202,37 @@ export default function AdminUsersPage() {
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={5} className="text-center py-10 text-slate-400">Yuklanmoqda...</td></tr>
+                <tr><td colSpan={5} className="text-center py-10 text-ink-400">Yuklanmoqda...</td></tr>
               )}
               {!loading && users.length === 0 && (
-                <tr><td colSpan={5} className="text-center py-10 text-slate-400">Foydalanuvchilar yo'q</td></tr>
+                <tr><td colSpan={5} className="text-center py-10 text-ink-400">Foydalanuvchilar yo'q</td></tr>
               )}
               {users.map((u) => (
                 <tr key={u.id}
-                  className="border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/30">
+                  className="border-t border-ink-100 dark:border-ink-800/40 hover:bg-ink-50 dark:hover:bg-ink-900/30">
                   <td className="px-4 py-2">
-                    <div className="font-medium text-slate-900 dark:text-slate-100">{u.full_name || "—"}</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">{u.email}</div>
+                    <div className="font-medium text-ink-900 dark:text-ink-100">{u.full_name || "—"}</div>
+                    <div className="text-xs text-ink-500 dark:text-ink-400">{u.email}</div>
                   </td>
                   <td className="px-4 py-2">
                     {u.role_code ? (
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[u.role_code] || "bg-slate-100 text-slate-700"}`}>
-                        {u.role_name}
-                      </span>
+                      <Badge tone={ROLE_TONE[u.role_code] || "neutral"}>{u.role_name}</Badge>
                     ) : (
-                      <span className="text-xs text-slate-400">— rol yo'q —</span>
+                      <span className="text-xs text-ink-400">— rol yo'q —</span>
                     )}
                   </td>
                   <td className="px-4 py-2">
-                    {u.is_active ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 text-xs">
-                        <UserCheck size={12} /> Faol
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400">Bloklangan</span>
-                    )}
+                    <Badge tone={u.is_active ? "success" : "neutral"} dot>
+                      {u.is_active ? "Faol" : "Bloklangan"}
+                    </Badge>
                   </td>
-                  <td className="px-4 py-2 text-xs text-slate-500 dark:text-slate-400">
+                  <td className="px-4 py-2 text-xs text-ink-500 dark:text-ink-400">
                     {new Date(u.joined_at).toLocaleDateString("uz-UZ")}
                   </td>
                   <td className="px-4 py-2 text-right">
                     <div className="inline-flex items-center gap-2">
                       <select
-                        className="text-sm border border-slate-300 dark:border-slate-600 rounded-md px-2 py-1 bg-white dark:bg-slate-800"
+                        className="text-sm border border-ink-300 dark:border-ink-700 rounded-md px-2 py-1 bg-white dark:bg-ink-900 text-ink-700 dark:text-ink-200"
                         value={u.role_id ?? ""}
                         onChange={(e) => setRole(u.id, Number(e.target.value))}
                         disabled={savingId === u.id}
@@ -245,7 +246,7 @@ export default function AdminUsersPage() {
                       <button
                         type="button"
                         onClick={() => setConfirm({ kind: "toggle", user: u })}
-                        className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500"
+                        className="p-1.5 rounded hover:bg-ink-200/70 dark:hover:bg-ink-800 text-ink-500 dark:text-ink-400 hover:text-ink-900 dark:hover:text-ink-100 transition-colors"
                         title={u.is_active ? "Bloklash" : "Faollashtirish"}
                         aria-label={`${u.email} ni ${u.is_active ? "bloklash" : "faollashtirish"}`}
                       >
@@ -254,7 +255,7 @@ export default function AdminUsersPage() {
                       <button
                         type="button"
                         onClick={() => setConfirm({ kind: "remove", user: u })}
-                        className="p-1.5 rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-600"
+                        className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-ink-500 dark:text-ink-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                         title="Tashkilotdan o'chirish"
                         aria-label={`${u.email} ni tashkilotdan o'chirish`}
                       >
@@ -267,50 +268,48 @@ export default function AdminUsersPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
       {/* MOBILE card list */}
-      <div className="md:hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
-        <div className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2 text-slate-900 dark:text-slate-100">
-          <Users size={16} />
-          <span className="font-semibold text-sm">Foydalanuvchilar ({users.length})</span>
-        </div>
-        {loading && <div className="py-10 text-center text-slate-400 text-sm">Yuklanmoqda...</div>}
+      <Card padding="none" className="md:hidden">
+        <CardHeader>
+          <div className="flex items-center gap-2 text-ink-900 dark:text-ink-100">
+            <Users size={16} />
+            <span className="font-semibold text-sm">Foydalanuvchilar ({users.length})</span>
+          </div>
+        </CardHeader>
+        {loading && <div className="py-10 text-center text-ink-400 text-sm">Yuklanmoqda...</div>}
         {!loading && users.length === 0 && (
-          <div className="py-10 text-center text-slate-400 text-sm">Foydalanuvchilar yo'q</div>
+          <div className="py-10 text-center text-ink-400 text-sm">Foydalanuvchilar yo'q</div>
         )}
-        <ul className="divide-y divide-slate-100 dark:divide-slate-700">
+        <ul className="divide-y divide-ink-100 dark:divide-ink-800/40">
           {users.map((u) => (
             <li key={u.id} className="p-3 space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-slate-900 dark:text-slate-100 truncate">
+                  <div className="font-medium text-ink-900 dark:text-ink-100 truncate">
                     {u.full_name || "—"}
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{u.email}</div>
+                  <div className="text-xs text-ink-500 dark:text-ink-400 truncate">{u.email}</div>
                 </div>
                 {u.role_code && (
-                  <span className={`shrink-0 px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[u.role_code] || "bg-slate-100 text-slate-700"}`}>
+                  <Badge tone={ROLE_TONE[u.role_code] || "neutral"} className="shrink-0">
                     {u.role_name}
-                  </span>
+                  </Badge>
                 )}
               </div>
               <div className="flex items-center gap-2 text-xs">
-                {u.is_active ? (
-                  <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
-                    <UserCheck size={11} /> Faol
-                  </span>
-                ) : (
-                  <span className="text-slate-400">Bloklangan</span>
-                )}
-                <span className="text-slate-400">·</span>
-                <span className="text-slate-500">
+                <Badge tone={u.is_active ? "success" : "neutral"} dot>
+                  {u.is_active ? "Faol" : "Bloklangan"}
+                </Badge>
+                <span className="text-ink-400">·</span>
+                <span className="text-ink-500">
                   {new Date(u.joined_at).toLocaleDateString("uz-UZ")}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <select
-                  className="flex-1 text-sm border border-slate-300 dark:border-slate-600 rounded-md px-2 py-1.5 bg-white dark:bg-slate-800"
+                  className="flex-1 text-sm border border-ink-300 dark:border-ink-700 rounded-md px-2 py-1.5 bg-white dark:bg-ink-900 text-ink-700 dark:text-ink-200"
                   value={u.role_id ?? ""}
                   onChange={(e) => setRole(u.id, Number(e.target.value))}
                   disabled={savingId === u.id}
@@ -324,7 +323,7 @@ export default function AdminUsersPage() {
                 <button
                   type="button"
                   onClick={() => setConfirm({ kind: "toggle", user: u })}
-                  className="p-2 rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400"
+                  className="p-2 rounded border border-ink-300 dark:border-ink-700 text-ink-600 dark:text-ink-400"
                   aria-label={`${u.email} ni ${u.is_active ? "bloklash" : "faollashtirish"}`}
                 >
                   <Power size={14} aria-hidden="true" />
@@ -332,7 +331,7 @@ export default function AdminUsersPage() {
                 <button
                   type="button"
                   onClick={() => setConfirm({ kind: "remove", user: u })}
-                  className="p-2 rounded border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-400"
+                  className="p-2 rounded border border-danger-500/40 dark:border-danger-500/40 text-danger-600 dark:text-danger-500"
                   aria-label={`${u.email} ni tashkilotdan o'chirish`}
                 >
                   <UserMinus size={14} aria-hidden="true" />
@@ -341,7 +340,7 @@ export default function AdminUsersPage() {
             </li>
           ))}
         </ul>
-      </div>
+      </Card>
 
       <Modal open={inviteOpen} onClose={() => setInviteOpen(false)} title="Yangi foydalanuvchi">
         <form onSubmit={doInvite} className="space-y-3">
@@ -386,27 +385,18 @@ export default function AdminUsersPage() {
               placeholder="kamida 6 belgi"
               minLength={6}
             />
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-ink-500 mt-1">
               Bo'sh qoldirsangiz va email allaqachon ro'yxatda bo'lsa — taklif jo'natiladi
               (foydalanuvchi tasdiqlashi shart). Yangi foydalanuvchi uchun parol kerak.
             </p>
           </Field>
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button
-              type="button"
-              onClick={() => setInviteOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600"
-            >
+          <div className="flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>
               Bekor
-            </button>
-            <button
-              type="submit"
-              disabled={inviting}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-50 inline-flex items-center gap-1.5"
-            >
-              <UserPlus size={14} aria-hidden="true" />
+            </Button>
+            <Button type="submit" disabled={inviting} loading={inviting} icon={UserPlus}>
               {inviting ? "Qo'shilmoqda..." : "Qo'shish"}
-            </button>
+            </Button>
           </div>
         </form>
       </Modal>

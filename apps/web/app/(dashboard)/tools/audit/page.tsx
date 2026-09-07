@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { Search, Filter, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
-import { input } from "@/components/ui/modal";
+import { input, Modal } from "@/components/ui/modal";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 type AuditRow = {
   id: number;
@@ -26,13 +29,15 @@ type ListResponse = {
   offset: number;
 };
 
-const ACTION_COLORS: Record<string, string> = {
-  create:    "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
-  update:    "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  delete:    "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
-  pay:       "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-  cancel:    "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
-  duplicate: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300",
+type BadgeTone = "success" | "warning" | "danger" | "info" | "primary" | "neutral" | "teal" | "purple";
+
+const ACTION_TONE: Record<string, BadgeTone> = {
+  create:    "success",
+  update:    "info",
+  delete:    "danger",
+  pay:       "success",
+  cancel:    "warning",
+  duplicate: "purple",
 };
 
 function actionLabel(a: string): string {
@@ -153,14 +158,14 @@ export default function AuditLogPage() {
       />
 
       {/* Filters card */}
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4">
+      <Card padding="md">
         <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
           <div className="md:col-span-2">
-            <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
               Qidirish (JSON ichida)
             </label>
             <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
+              <Search size={14} className="absolute left-2.5 top-2.5 text-ink-400" />
               <input
                 className={`${input} pl-8`}
                 placeholder="Mahsulot nomi, summa, ID..."
@@ -171,7 +176,7 @@ export default function AuditLogPage() {
             </div>
           </div>
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
               Modul
             </label>
             <select
@@ -188,7 +193,7 @@ export default function AuditLogPage() {
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
               Harakat
             </label>
             <select
@@ -205,7 +210,7 @@ export default function AuditLogPage() {
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
               Sanadan
             </label>
             <input
@@ -216,7 +221,7 @@ export default function AuditLogPage() {
             />
           </div>
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
               Sanagacha
             </label>
             <input
@@ -228,26 +233,20 @@ export default function AuditLogPage() {
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-4">
-          <button
-            onClick={resetFilters}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700"
-          >
-            <RotateCcw size={14} /> Tozalash
-          </button>
-          <button
-            onClick={applyFilters}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-brand-600 hover:bg-brand-700 text-white rounded-md font-medium"
-          >
-            <Filter size={14} /> Filtrlash
-          </button>
+          <Button variant="outline" size="md" icon={RotateCcw} onClick={resetFilters}>
+            Tozalash
+          </Button>
+          <Button variant="primary" size="md" icon={Filter} onClick={applyFilters}>
+            Filtrlash
+          </Button>
         </div>
-      </div>
+      </Card>
 
       {/* Result table */}
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
+      <Card padding="none">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-900/50 text-xs text-slate-500 dark:text-slate-400 uppercase">
+            <thead className="bg-ink-50 dark:bg-ink-900 text-xs text-ink-500 dark:text-ink-400 uppercase tracking-wider">
               <tr>
                 <th className="text-left px-4 py-3 font-medium">Vaqt</th>
                 <th className="text-left px-4 py-3 font-medium">Foydalanuvchi</th>
@@ -261,14 +260,14 @@ export default function AuditLogPage() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={7} className="text-center py-10 text-slate-400 dark:text-slate-500">
+                  <td colSpan={7} className="text-center py-10 text-ink-400 dark:text-ink-600">
                     Yuklanmoqda...
                   </td>
                 </tr>
               )}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center py-10 text-slate-400 dark:text-slate-500">
+                  <td colSpan={7} className="text-center py-10 text-ink-400 dark:text-ink-600">
                     Ma'lumot yo'q
                   </td>
                 </tr>
@@ -277,43 +276,41 @@ export default function AuditLogPage() {
                 rows.map((r) => (
                   <tr
                     key={r.id}
-                    className="border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/30"
+                    className="border-t border-ink-100 dark:border-ink-800/40 hover:bg-ink-50/80 dark:hover:bg-ink-900/40"
                   >
-                    <td className="px-4 py-2 font-mono text-xs text-slate-700 dark:text-slate-300">
+                    <td className="px-4 py-2 font-mono text-xs text-ink-700 dark:text-ink-300">
                       {formatDate(r.created_at)}
                     </td>
-                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">
+                    <td className="px-4 py-2 text-ink-900 dark:text-ink-100">
                       {r.user_name || r.user_email || (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-ink-400">—</span>
                       )}
                     </td>
                     <td className="px-4 py-2">
-                      <span
-                        className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          ACTION_COLORS[r.action] ||
-                          "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
-                        }`}
-                      >
+                      <Badge tone={ACTION_TONE[r.action] || "neutral"}>
                         {actionLabel(r.action)}
-                      </span>
+                      </Badge>
                     </td>
-                    <td className="px-4 py-2 text-slate-700 dark:text-slate-300">
+                    <td className="px-4 py-2 text-ink-700 dark:text-ink-300">
                       {entityLabel(r.entity)}
                     </td>
-                    <td className="px-4 py-2 font-mono text-xs text-slate-500 dark:text-slate-400">
+                    <td className="px-4 py-2 font-mono text-xs text-ink-500 dark:text-ink-400">
                       {r.entity_id ? r.entity_id.slice(0, 8) : "—"}
                     </td>
-                    <td className="px-4 py-2 font-mono text-xs text-slate-500 dark:text-slate-400">
+                    <td className="px-4 py-2 font-mono text-xs text-ink-500 dark:text-ink-400">
                       {r.ip || "—"}
                     </td>
                     <td className="px-4 py-2 text-right">
                       {r.diff && (
-                        <button
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="xs"
                           onClick={() => setSelected(r)}
-                          className="text-brand-600 dark:text-brand-400 text-xs hover:underline"
+                          className="text-brand-600 dark:text-brand-400"
                         >
                           Ko'rish
-                        </button>
+                        </Button>
                       )}
                     </td>
                   </tr>
@@ -324,88 +321,76 @@ export default function AuditLogPage() {
 
         {/* Pagination */}
         {total > limit && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 dark:border-slate-700 text-sm">
-            <div className="text-slate-500 dark:text-slate-400">
+          <div className="flex items-center justify-between px-4 py-3 border-t border-ink-100 dark:border-ink-800/40 text-sm">
+            <div className="text-ink-500 dark:text-ink-400">
               {page * limit + 1}–{Math.min((page + 1) * limit, total)} / {total}
             </div>
             <div className="flex gap-2">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
+                icon={ChevronLeft}
                 disabled={page === 0}
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
-                className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <ChevronLeft size={14} /> Oldingi
-              </button>
-              <button
+                Oldingi
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                iconRight={ChevronRight}
                 disabled={page >= lastPage}
                 onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
-                className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Keyingi <ChevronRight size={14} />
-              </button>
+                Keyingi
+              </Button>
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Detail modal */}
-      {selected && (
-        <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-          onClick={() => setSelected(null)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-          >
-            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-              <div>
-                <div className="font-semibold text-slate-900 dark:text-slate-100">
-                  {actionLabel(selected.action)} — {entityLabel(selected.entity)}
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  {formatDate(selected.created_at)} •{" "}
-                  {selected.user_name || selected.user_email || "—"}
-                </div>
-              </div>
-              <button
-                onClick={() => setSelected(null)}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-2xl leading-none"
-              >
-                &times;
-              </button>
+      <Modal
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title={selected ? `${actionLabel(selected.action)} — ${entityLabel(selected.entity)}` : ""}
+        size="lg"
+      >
+        {selected && (
+          <div className="space-y-3 text-sm">
+            <div className="text-xs text-ink-500 dark:text-ink-400">
+              {formatDate(selected.created_at)} •{" "}
+              {selected.user_name || selected.user_email || "—"}
             </div>
-            <div className="p-5 space-y-3 text-sm">
-              {selected.entity_id && (
-                <div>
-                  <span className="text-slate-500 dark:text-slate-400">Yozuv ID: </span>
-                  <span className="font-mono">{selected.entity_id}</span>
-                </div>
-              )}
-              {selected.ip && (
-                <div>
-                  <span className="text-slate-500 dark:text-slate-400">IP: </span>
-                  <span className="font-mono">{selected.ip}</span>
-                </div>
-              )}
-              {selected.user_agent && (
-                <div>
-                  <span className="text-slate-500 dark:text-slate-400">User Agent: </span>
-                  <span className="font-mono text-xs break-all">
-                    {selected.user_agent}
-                  </span>
-                </div>
-              )}
+            {selected.entity_id && (
               <div>
-                <div className="text-slate-500 dark:text-slate-400 mb-1">O'zgarishlar:</div>
-                <pre className="bg-slate-50 dark:bg-slate-900 rounded p-3 text-xs overflow-x-auto font-mono text-slate-800 dark:text-slate-200">
-                  {JSON.stringify(selected.diff, null, 2)}
-                </pre>
+                <span className="text-ink-500 dark:text-ink-400">Yozuv ID: </span>
+                <span className="font-mono">{selected.entity_id}</span>
               </div>
+            )}
+            {selected.ip && (
+              <div>
+                <span className="text-ink-500 dark:text-ink-400">IP: </span>
+                <span className="font-mono">{selected.ip}</span>
+              </div>
+            )}
+            {selected.user_agent && (
+              <div>
+                <span className="text-ink-500 dark:text-ink-400">User Agent: </span>
+                <span className="font-mono text-xs break-all">
+                  {selected.user_agent}
+                </span>
+              </div>
+            )}
+            <div>
+              <div className="text-ink-500 dark:text-ink-400 mb-1">O'zgarishlar:</div>
+              <pre className="bg-ink-50 dark:bg-ink-900 rounded p-3 text-xs overflow-x-auto font-mono text-ink-800 dark:text-ink-200">
+                {JSON.stringify(selected.diff, null, 2)}
+              </pre>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 }

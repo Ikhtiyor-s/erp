@@ -8,6 +8,9 @@ import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal, Field, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslations } from "next-intl";
 
 type Discount = {
@@ -45,6 +48,8 @@ export default function DiscountPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Discount | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -82,11 +87,20 @@ export default function DiscountPage() {
       toast.error(getErrorMessage(e, "Xato"));
     }
   }
-  async function del(r: Discount) {
-    if (!confirm(`«${r.name}» chegirmasi o'chirilsinmi?`)) return;
-    await api.delete(`/marketing/discounts/${r.id}`);
-    toast.success(t("ui__удалено_0c450c40"));
-    load();
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await api.delete(`/marketing/discounts/${deleteTarget.id}`);
+      toast.success(t("ui__удалено_0c450c40"));
+      setDeleteTarget(null);
+      load();
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setDeleteLoading(false);
+    }
   }
 
   const columns: Column<Discount>[] = [
@@ -143,11 +157,11 @@ export default function DiscountPage() {
       width: "100px",
       render: (r) =>
         r.is_active ? (
-          <span className="text-green-600 dark:text-green-400 text-xs">
+          <span className="text-success-600 dark:text-success-500 text-xs">
             ●
           </span>
         ) : (
-          <span className="text-slate-400 text-xs">○</span>
+          <span className="text-ink-400 text-xs">○</span>
         ),
     },
   ];
@@ -164,14 +178,14 @@ export default function DiscountPage() {
         }}
       />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 flex gap-3 items-end">
+      <Card className="flex gap-3 items-end">
         <div className="relative flex-1 max-w-md">
-          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_bfc95980")}
           </label>
           <Search
             size={14}
-            className="absolute left-2.5 top-[34px] text-slate-400"
+            className="absolute left-2.5 top-[34px] text-ink-400"
           />
           <input
             className={`${input} pl-8`}
@@ -181,13 +195,8 @@ export default function DiscountPage() {
             onKeyDown={(e) => e.key === "Enter" && load()}
           />
         </div>
-        <button
-          onClick={load}
-          className="px-4 py-2 bg-brand-600 text-white rounded-md text-sm hover:bg-brand-700"
-        >
-          {t("ui__фильтр_2f884b41")}
-        </button>
-      </div>
+        <Button onClick={load}>{t("ui__фильтр_2f884b41")}</Button>
+      </Card>
 
       <DataTable
         columns={columns}
@@ -207,7 +216,7 @@ export default function DiscountPage() {
           setEditId(r.id);
           setOpen(true);
         }}
-        onDelete={del}
+        onDelete={(r) => setDeleteTarget(r)}
       />
 
       <Modal
@@ -298,22 +307,26 @@ export default function DiscountPage() {
               />
             </Field>
           </div>
-          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <button
-              onClick={() => setOpen(false)}
-              className="px-4 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-            >
+          <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-ink-200 dark:border-ink-800">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("ui__отмена_987b33c6")}
-            </button>
-            <button
-              onClick={save}
-              className="px-4 py-2 text-sm rounded-md bg-brand-600 text-white hover:bg-brand-700"
-            >
+            </Button>
+            <Button type="button" onClick={save}>
               {t("ui__сохранить_74ea58b6")}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="O'chirish"
+        message={`«${deleteTarget?.name}» chegirmasi o'chirilsinmi?`}
+        variant="danger"
+        loading={deleteLoading}
+      />
     </div>
   );
 }

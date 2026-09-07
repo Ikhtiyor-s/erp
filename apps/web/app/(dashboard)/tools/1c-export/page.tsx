@@ -7,6 +7,8 @@ import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
 import { Field, input } from "@/components/ui/modal";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 
 type ExportType = "sales" | "cash" | "counterparties" | "all";
@@ -115,7 +117,7 @@ export default function OnecExportPage() {
     <div className="space-y-6">
       <PageHeader title={t("title")} description={t("description")} />
 
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-6 max-w-2xl">
+      <Card padding="lg" className="max-w-2xl">
         <div className="space-y-5">
           <Field label={t("type")}>
             <select
@@ -153,7 +155,7 @@ export default function OnecExportPage() {
           </div>
 
           <div>
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <p className="text-sm font-medium text-ink-700 dark:text-ink-300 mb-2">
               {t("format")}
             </p>
             <div className="flex gap-4">
@@ -166,8 +168,8 @@ export default function OnecExportPage() {
                   onChange={() => setFormat("csv")}
                   className="accent-brand-600"
                 />
-                <FileText size={16} className="text-slate-500" />
-                <span className="text-sm text-slate-700 dark:text-slate-200">CSV</span>
+                <FileText size={16} className="text-ink-500" />
+                <span className="text-sm text-ink-700 dark:text-ink-200">CSV</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -178,44 +180,40 @@ export default function OnecExportPage() {
                   onChange={() => setFormat("xml")}
                   className="accent-brand-600"
                 />
-                <FileCode size={16} className="text-slate-500" />
-                <span className="text-sm text-slate-700 dark:text-slate-200">XML</span>
+                <FileCode size={16} className="text-ink-500" />
+                <span className="text-sm text-ink-700 dark:text-ink-200">XML</span>
               </label>
             </div>
           </div>
 
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-700 flex flex-wrap gap-3">
-            <button
-              onClick={handleDownload}
-              disabled={downloading}
-              className="inline-flex items-center gap-2 px-5 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-md font-medium text-sm transition-colors"
-            >
-              <Download size={16} />
+          <div className="pt-4 border-t border-ink-200 dark:border-ink-700 flex flex-wrap gap-3">
+            <Button variant="primary" icon={Download} loading={downloading} onClick={handleDownload}>
               {downloading ? t("loading") : t("download")}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              icon={Eye}
+              loading={previewing}
+              disabled={downloading}
               onClick={handlePreview}
-              disabled={previewing || downloading}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-md text-sm transition-colors disabled:opacity-50"
             >
-              <Eye size={16} />
               {previewing ? t("loading") : t("preview")}
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </Card>
 
       {previewRows !== null && (
-        <div className="max-w-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-5">
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
+        <Card padding="md" className="max-w-2xl">
+          <p className="text-xs font-semibold text-ink-500 dark:text-ink-400 uppercase tracking-wide mb-3">
             {t("preview")}
           </p>
           <div className="overflow-x-auto">
-            <pre className="text-xs text-slate-700 dark:text-slate-200 whitespace-pre leading-5">
+            <pre className="text-xs text-ink-700 dark:text-ink-200 whitespace-pre leading-5">
               {previewRows.length > 0 ? previewRows.join("\n") : "—"}
             </pre>
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );
