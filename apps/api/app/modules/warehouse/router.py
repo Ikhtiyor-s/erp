@@ -2821,15 +2821,12 @@ async def import_products(
                     )
                     category_id = ins.scalar()
 
-            # Unit: match by short_name within org (units table, not product_units)
+            # Unit: match by short_name in the global units table (no organization_id).
             unit_id = None
             if row["unit"]:
                 unit_res = await db.execute(
-                    text(
-                        "SELECT id FROM units "
-                        "WHERE organization_id = :o AND short_name = :n"
-                    ),
-                    {"o": org_id, "n": row["unit"]},
+                    text("SELECT id FROM units WHERE short_name = :n"),
+                    {"n": row["unit"]},
                 )
                 unit_id = unit_res.scalar()
 

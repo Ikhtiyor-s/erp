@@ -984,6 +984,10 @@ END $$
     """CREATE UNIQUE INDEX IF NOT EXISTS uq_warehouse_types_org_name
        ON warehouse_types(organization_id, name)""",
 
+    # warehouse_types lacked created_at; router queries SELECT created_at causes 500 without it
+    # Rollback: ALTER TABLE warehouse_types DROP COLUMN IF EXISTS created_at;
+    """ALTER TABLE warehouse_types ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()""",
+
     # Rows inside a warehouse
     """
     CREATE TABLE IF NOT EXISTS warehouse_rows (

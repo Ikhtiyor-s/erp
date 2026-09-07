@@ -221,6 +221,12 @@ async def create_sale(
             {"c": cost_snapshot, "sid": sale_item_id},
         )
 
+        # Check BOM before stock deduction: BOM parent products do not hold stock
+        # themselves — their components do. Allow negative balance for BOM parents
+        # since stock is tracked and deducted at the component level during pick.
+        leaves = await explode_bom(db, org_id, str(it.product_id), Decimal(str(it.quantity)))
+        is_bom_parent = bool(leaves)
+
         await _stock_apply(
             db,
             warehouse_id=resolved_warehouse_id,
@@ -228,7 +234,7 @@ async def create_sale(
             delta_qty=Decimal(str(-it.quantity)),
             cost=cost_snapshot,
             org_id=org_id,
-            allow_negative=False,
+            allow_negative=is_bom_parent,
             operation_type="sale",
             source_type="sale",
             source_id=str(sale_id),
@@ -238,7 +244,6 @@ async def create_sale(
         # Pick workflow bootstrap: create pending pick items.
         # BOM products → one pick_item per leaf component (parent_product_id = sold product).
         # Non-BOM products → one pick_item for the product itself (parent_product_id NULL).
-        leaves = await explode_bom(db, org_id, str(it.product_id), Decimal(str(it.quantity)))
         if leaves:
             for leaf in leaves:
                 await db.execute(
