@@ -34,7 +34,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://erp:erp@postgres:5432/erp
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-dev-secret-change-me}
-      CORS_ORIGINS: http://localhost:3010
+      CORS_ORIGINS: http://localhost:3010,http://localhost:3000
       ENV: dev
       DEBUG: "true"
     ports:

@@ -1,8 +1,17 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
+
+
+class RequestRegisterOtpIn(BaseModel):
+    phone: str
+
+
+class VerifyRegisterOtpIn(BaseModel):
+    phone: str
+    code: str
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    phone: str
     password: str = Field(min_length=6)
     twofa_code: str | None = None
 
@@ -22,7 +31,8 @@ class TwoFADisableRequest(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
+    ticket: str
+    phone: str
     password: str = Field(min_length=6)
     full_name: str
     organization_name: str
@@ -40,6 +50,7 @@ class RefreshRequest(BaseModel):
 
 class UserOut(BaseModel):
     id: str
-    email: EmailStr
+    phone: str | None = None
+    email: str | None = None
     full_name: str | None = None
     locale: str = "ru"

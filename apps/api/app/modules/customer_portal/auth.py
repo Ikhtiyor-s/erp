@@ -12,7 +12,6 @@ Flow:
 from __future__ import annotations
 
 import logging
-import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -23,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import get_db
+from app.core.phone import normalize_phone as _normalize_phone, generate_otp
 
 
 log = logging.getLogger(__name__)
@@ -32,40 +32,6 @@ log = logging.getLogger(__name__)
 CUSTOMER_JWT_SECRET = f"customer:{settings.SECRET_KEY}"
 CUSTOMER_JWT_ALGO = "HS256"
 CUSTOMER_JWT_EXPIRES_MINUTES = 60 * 24 * 30  # 30 days
-
-
-def _normalize_phone(phone: str) -> str:
-    """Normalize a phone number to canonical +998XXXXXXXXX form.
-
-    Sprint #2 HI-7: callers MUST validate the result. The previous
-    implementation silently returned partial strings on bad input, which
-    combined with LIKE-based lookups enabled prefix-collision attacks.
-    This function now ALWAYS returns the canonical form for a valid Uzbek
-    mobile number; for any other input it raises ValueError so callers can
-    map it to HTTP 422.
-    """
-    if phone is None:
-        raise ValueError("phone is required")
-    digits = "".join(ch for ch in str(phone) if ch.isdigit())
-    if not digits:
-        raise ValueError("phone must contain digits")
-    if digits.startswith("998") and len(digits) == 12:
-        # Full international format: 998XXXXXXXXX → take last 9
-        digits = digits[-9:]
-    elif digits.startswith("0") and len(digits) == 10:
-        # Local format with leading 0: 0XXXXXXXXX → take last 9
-        digits = digits[1:]
-    # After stripping prefix, must be exactly 9 national digits
-    if len(digits) != 9:
-        raise ValueError(
-            f"invalid phone: national part must be 9 digits, got {len(digits)}"
-        )
-    return "+998" + digits
-
-
-def generate_otp(length: int = 6) -> str:
-    """Crypto-random numeric OTP."""
-    return "".join(str(secrets.randbelow(10)) for _ in range(length))
 
 
 def create_customer_token(customer_id: str, org_id: str, phone: str) -> str:

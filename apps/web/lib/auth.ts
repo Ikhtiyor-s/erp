@@ -17,8 +17,8 @@ async function ensureOrgId(): Promise<void> {
   }
 }
 
-export async function login(email: string, password: string) {
-  const { data } = await api.post("/auth/login", { email, password });
+export async function login(phone: string, password: string) {
+  const { data } = await api.post("/auth/login", { phone, password });
   localStorage.setItem("access_token", data.access_token);
   localStorage.setItem("refresh_token", data.refresh_token);
   if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
@@ -32,8 +32,19 @@ export async function login(email: string, password: string) {
   return data;
 }
 
+export async function requestRegisterOtp(phone: string) {
+  const { data } = await api.post("/auth/register/request-otp", { phone });
+  return data as { ok: boolean; message: string; dev_code?: string; dev_note?: string };
+}
+
+export async function verifyRegisterOtp(phone: string, code: string) {
+  const { data } = await api.post("/auth/register/verify-otp", { phone, code });
+  return data as { verified: boolean; ticket: string };
+}
+
 export async function register(payload: {
-  email: string;
+  ticket: string;
+  phone: string;
   password: string;
   full_name: string;
   organization_name: string;

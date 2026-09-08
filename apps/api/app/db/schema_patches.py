@@ -1817,6 +1817,26 @@ END $$
     ALTER TABLE stock_ins
         ADD COLUMN IF NOT EXISTS reason_id INT REFERENCES stock_in_reasons(id)
     """,
+
+    # Registration now collects phone instead of email (staff sign-up moved to phone+OTP).
+    # No organization exists yet at OTP-request time, so this table has no org FK
+    # (unlike customer_otp_codes). Rollback: DROP TABLE IF EXISTS registration_otp_codes CASCADE;
+    """
+    CREATE TABLE IF NOT EXISTS registration_otp_codes (
+        id          BIGSERIAL PRIMARY KEY,
+        phone       VARCHAR(20) NOT NULL,
+        code        VARCHAR(8) NOT NULL,
+        attempts    INT DEFAULT 0,
+        used        BOOLEAN DEFAULT FALSE,
+        expires_at  TIMESTAMPTZ NOT NULL,
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    # Email is no longer collected at registration; phone (already UNIQUE, nullable) is primary.
+    # Rollback: ALTER TABLE users ALTER COLUMN email SET NOT NULL; -- only if no NULLs exist
+    """
+    ALTER TABLE users ALTER COLUMN email DROP NOT NULL
+    """,
 ]
 
 # Enum value additions — must run outside a transaction (AUTOCOMMIT).

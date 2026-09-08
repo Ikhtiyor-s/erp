@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Mail, Smartphone, Fingerprint } from "lucide-react";
+import { Lock, Phone, Fingerprint } from "lucide-react";
 import { toast } from "sonner";
 import { login } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { isBiometricSupported, authenticateWithBiometric } from "@/lib/biometric";
+import { normalizeUzPhoneInput, toApiPhone } from "@/lib/phone";
 
 function deviceId(): string {
   let id = localStorage.getItem("device_id");
@@ -21,7 +22,7 @@ function deviceId(): string {
 export default function MobileLogin() {
   const router = useRouter();
   const [mode, setMode] = useState<"passcode" | "password">("passcode");
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [passcode, setPasscode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -47,7 +48,7 @@ export default function MobileLogin() {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(email, password);
+      await login(toApiPhone(phone), password);
       toast.success("Xush kelibsiz!");
       window.location.href = "/m";
     } catch (err) {
@@ -87,10 +88,10 @@ export default function MobileLogin() {
   }
 
   async function doBiometricLogin() {
-    if (!lastUser?.email) return;
+    if (!lastUser?.phone) return;
     setLoading(true);
     try {
-      const ok = await authenticateWithBiometric(lastUser.email);
+      const ok = await authenticateWithBiometric(lastUser.phone);
       if (ok) {
         if (lastUser) localStorage.setItem("user", JSON.stringify(lastUser));
         toast.success("Xush kelibsiz!");
@@ -135,7 +136,7 @@ export default function MobileLogin() {
         {mode === "passcode" && hasPasscode && lastUser ? (
           <form id="pcform" onSubmit={doPasscodeLogin} className="space-y-6">
             <div className="text-center text-sm text-slate-600 dark:text-slate-300">
-              {lastUser.full_name || lastUser.email}
+              {lastUser.full_name || lastUser.phone}
             </div>
             <div className="flex justify-center gap-2.5">
               {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -163,7 +164,7 @@ export default function MobileLogin() {
                 ⌫
               </button>
             </div>
-            {biometricAvailable && lastUser?.email && (
+            {biometricAvailable && lastUser?.phone && (
               <button
                 type="button"
                 disabled={loading}
@@ -184,11 +185,13 @@ export default function MobileLogin() {
           </form>
         ) : (
           <form onSubmit={doPasswordLogin} className="space-y-4">
-            <div className="relative">
-              <Mail size={16} className="absolute left-3 top-3 text-slate-400" />
-              <input type="email" required autoFocus value={email}
-                onChange={(e) => setEmail(e.target.value)} placeholder="Email"
-                className="w-full pl-10 pr-3 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 rounded-lg" />
+            <div className="relative flex items-stretch border border-slate-300 dark:border-slate-600 rounded-lg overflow-hidden bg-white dark:bg-slate-800">
+              <span className="flex items-center gap-1.5 pl-3 pr-2 text-slate-400">
+                <Phone size={16} /> +998
+              </span>
+              <input type="tel" inputMode="numeric" required autoFocus value={phone}
+                onChange={(e) => setPhone(normalizeUzPhoneInput(e.target.value))} placeholder="90 123 45 67"
+                className="flex-1 min-w-0 border-0 bg-transparent py-3 pr-3 focus:outline-none" />
             </div>
             <div className="relative">
               <Lock size={16} className="absolute left-3 top-3 text-slate-400" />
@@ -199,11 +202,6 @@ export default function MobileLogin() {
             <button type="submit" disabled={loading}
               className="w-full py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-lg font-medium">
               {loading ? "Yuborilmoqda..." : "Kirish"}
-            </button>
-            <button type="button"
-              onClick={() => { setEmail("qa@example.com"); setPassword("Qa12345!"); }}
-              className="block mx-auto text-xs text-slate-500 hover:text-slate-700">
-              Demo (qa@example.com)
             </button>
           </form>
         )}
