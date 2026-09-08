@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -8,7 +9,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_org_id, get_current_user_id
+from app.modules.accounting.posting import JournalLine, post_journal_entry, get_default_account_id
 
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/supplier", tags=["supplier"])
 
@@ -318,6 +321,23 @@ async def create_supply(
                  "             / NULLIF(stock_balances.quantity + :q, 0)"),
             {"wh": p.warehouse_id, "p": str(it.product_id), "q": it.quantity, "c": it.price},
         )
+
+    # Accounting: Dr Tovar-moddiy zaxiralar / Cr Yetkazib beruvchilar qarzi.
+    try:
+        inv_id = await get_default_account_id(db, org_id, "inventory")
+        ap_id = await get_default_account_id(db, org_id, "ap")
+        await post_journal_entry(
+            db, org_id,
+            [
+                JournalLine(inv_id, debit=float(total), rate=float(p.rate or 1), currency_id=p.currency_id),
+                JournalLine(ap_id, credit=float(total), rate=float(p.rate or 1), currency_id=p.currency_id,
+                            counterparty_type="supplier", counterparty_id=str(p.supplier_id)),
+            ],
+            source_type="supply", source_id=str(sid),
+            description=f"Xarid #{sid}", user_id=user_id,
+        )
+    except Exception:
+        log.exception("Failed to post journal entry for supply %s", sid)
 
     await db.commit()
     return {"id": str(sid), "total_amount": total}

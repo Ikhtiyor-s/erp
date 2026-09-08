@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import logging
+
 from app.core.deps import get_db, get_current_user_id, get_current_org_id
 from app.modules.audit.logger import log_action
 from app.modules.integration.telegram import notify_sale
@@ -15,6 +17,9 @@ from app.modules.rbac.deps import get_user_permissions
 from app.modules.sale.pdf import render_sale_pdf, render_return_pdf
 from app.modules.tools.xlsx import make_sheet, new_workbook, workbook_to_bytes
 from app.modules.warehouse.service import explode_bom, _stock_apply
+from app.modules.accounting.posting import JournalLine, post_journal_entry, get_default_account_id, get_cashbox_account_id
+
+log = logging.getLogger(__name__)
 
 
 
@@ -179,6 +184,7 @@ async def create_sale(
 
     sale_id = uuid4()
     total = sum(i.quantity * i.price - i.discount for i in p.items)
+    total_cost = Decimal("0")
 
     await db.execute(
         text(
@@ -220,6 +226,7 @@ async def create_sale(
             text("UPDATE sale_items SET unit_cost = :c WHERE id = :sid"),
             {"c": cost_snapshot, "sid": sale_item_id},
         )
+        total_cost += Decimal(str(it.quantity)) * cost_snapshot
 
         # Check BOM before stock deduction: BOM parent products do not hold stock
         # themselves — their components do. Allow negative balance for BOM parents
@@ -289,6 +296,31 @@ async def create_sale(
                     "u": unit_id,
                 },
             )
+
+    # Accounting: Dr Mijozlar qarzi / Cr Sotuvdan tushum (+ Dr COGS / Cr Zaxira).
+    # Best-effort — a bug here must never block the sale itself.
+    try:
+        ar_id = await get_default_account_id(db, org_id, "ar")
+        revenue_id = await get_default_account_id(db, org_id, "revenue")
+        lines = [
+            JournalLine(ar_id, debit=float(total), rate=float(p.rate or 1), currency_id=p.currency_id,
+                        counterparty_type="customer" if p.customer_id else None,
+                        counterparty_id=str(p.customer_id) if p.customer_id else None),
+            JournalLine(revenue_id, credit=float(total), rate=float(p.rate or 1), currency_id=p.currency_id),
+        ]
+        if total_cost > 0:
+            cogs_id = await get_default_account_id(db, org_id, "cogs")
+            inventory_id = await get_default_account_id(db, org_id, "inventory")
+            lines += [
+                JournalLine(cogs_id, debit=float(total_cost)),
+                JournalLine(inventory_id, credit=float(total_cost)),
+            ]
+        await post_journal_entry(
+            db, org_id, lines, source_type="sale", source_id=str(sale_id),
+            description=f"Sotuv #{sale_id}", user_id=user_id,
+        )
+    except Exception:
+        log.exception("Failed to post journal entry for sale %s", sale_id)
 
     await db.commit()
 
@@ -565,6 +597,25 @@ async def pay_sale(
             text("UPDATE cashboxes SET balance = balance + :amt WHERE id = :cb"),
             {"amt": p.amount, "cb": p.cashbox_id},
         )
+
+    # Accounting: Dr Kassa / Cr Mijozlar qarzi — cash collected against the receivable.
+    try:
+        cash_id = await get_cashbox_account_id(db, org_id, p.cashbox_id)
+        ar_id = await get_default_account_id(db, org_id, "ar")
+        await post_journal_entry(
+            db, org_id,
+            [
+                JournalLine(cash_id, debit=float(p.amount)),
+                JournalLine(ar_id, credit=float(p.amount),
+                            counterparty_type="customer" if row.customer_id else None,
+                            counterparty_id=str(row.customer_id) if row.customer_id else None),
+            ],
+            source_type="sale_payment", source_id=str(sale_id),
+            description=f"Sotuv to'lovi #{sale_id}", user_id=user_id,
+        )
+    except Exception:
+        log.exception("Failed to post journal entry for sale payment %s", sale_id)
+
     await db.commit()
 
     await log_action(

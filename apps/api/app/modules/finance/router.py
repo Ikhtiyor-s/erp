@@ -24,6 +24,51 @@ from app.modules.integration.payments.click import create_bill_payment_link, BIL
 from app.modules.integration.payments.base import get_payment_settings
 from app.modules.integration.sms import eskiz as eskiz_sms
 from app.modules.rbac.deps import require_permission
+from app.modules.accounting.posting import (
+    JournalLine, post_journal_entry, get_default_account_id, get_cashbox_account_id,
+    ensure_cashbox_account,
+)
+
+
+async def _post_movement_entry(db, org_id, user_id, *, cashbox_id, direction, amount,
+                                customer_id=None, supplier_id=None, employee_id=None,
+                                description=None, source_type="cash_movement", source_id=None):
+    """Best-effort ledger posting for a single cash_movements-style in/out.
+    Counter-account is chosen by whichever counterparty is set; falls back to
+    equity (owner deposit/withdrawal) when there's none — never blocks the
+    caller's primary operation on failure.
+    """
+    try:
+        cash_id = await get_cashbox_account_id(db, org_id, cashbox_id)
+        if customer_id:
+            counter_id = await get_default_account_id(db, org_id, "ar")
+            ct, cid = "customer", str(customer_id)
+        elif supplier_id:
+            counter_id = await get_default_account_id(db, org_id, "ap")
+            ct, cid = "supplier", str(supplier_id)
+        elif employee_id:
+            counter_id = await get_default_account_id(db, org_id, "other_expense")
+            ct, cid = "employee", str(employee_id)
+        else:
+            counter_id = await get_default_account_id(db, org_id, "equity")
+            ct, cid = None, None
+
+        if direction == "in":
+            lines = [
+                JournalLine(cash_id, debit=float(amount)),
+                JournalLine(counter_id, credit=float(amount), counterparty_type=ct, counterparty_id=cid),
+            ]
+        else:
+            lines = [
+                JournalLine(counter_id, debit=float(amount), counterparty_type=ct, counterparty_id=cid),
+                JournalLine(cash_id, credit=float(amount)),
+            ]
+        await post_journal_entry(
+            db, org_id, lines, source_type=source_type, source_id=source_id,
+            description=description, user_id=user_id,
+        )
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to post journal entry for %s %s", source_type, source_id)
 
 
 router = APIRouter(prefix="/finance", tags=["finance"])
@@ -79,6 +124,10 @@ async def create_cashbox(
          "w": payload.warehouse_id},
     )
     row = res.first()
+    try:
+        await ensure_cashbox_account(db, org_id, row.id, payload.name)
+    except Exception:
+        log.exception("Failed to create ledger account for cashbox %s", row.id)
     await db.commit()
     return CashboxOut(id=row.id, name=payload.name, currency_id=payload.currency_id,
                       balance=row.balance, is_active=row.is_active,
@@ -245,6 +294,14 @@ async def create_movement(
         text("UPDATE cashboxes SET balance = balance + :d WHERE id = :id"),
         {"d": delta, "id": payload.cashbox_id},
     )
+
+    await _post_movement_entry(
+        db, org_id, user_id,
+        cashbox_id=payload.cashbox_id, direction=payload.direction, amount=payload.amount,
+        customer_id=payload.customer_id, supplier_id=payload.supplier_id, employee_id=payload.employee_id,
+        description=payload.description, source_type="cash_movement", source_id=str(row.id),
+    )
+
     await db.commit()
 
     return CashMovementOut(
@@ -305,6 +362,21 @@ async def cash_transfer(
         text("UPDATE cashboxes SET balance = balance + :a WHERE id = :id"),
         {"a": p.amount, "id": p.to_cashbox_id},
     )
+
+    try:
+        from_acc = await get_cashbox_account_id(db, org_id, p.from_cashbox_id)
+        to_acc = await get_cashbox_account_id(db, org_id, p.to_cashbox_id)
+        await post_journal_entry(
+            db, org_id,
+            [
+                JournalLine(to_acc, debit=float(p.amount)),
+                JournalLine(from_acc, credit=float(p.amount)),
+            ],
+            source_type="cash_transfer", source_id=None, description=desc, user_id=user_id,
+        )
+    except Exception:
+        log.exception("Failed to post journal entry for cash transfer %s->%s", p.from_cashbox_id, p.to_cashbox_id)
+
     await db.commit()
     return {"ok": True}
 
@@ -430,6 +502,21 @@ async def create_extra_cost(
             text("UPDATE cashboxes SET balance = balance - :a WHERE id = :id"),
             {"a": payload.amount, "id": payload.cashbox_id},
         )
+        try:
+            cash_id = await get_cashbox_account_id(db, org_id, payload.cashbox_id)
+            expense_id = await get_default_account_id(db, org_id, "other_expense")
+            await post_journal_entry(
+                db, org_id,
+                [
+                    JournalLine(expense_id, debit=float(payload.amount)),
+                    JournalLine(cash_id, credit=float(payload.amount)),
+                ],
+                source_type="extra_cost", source_id=str(doc_id),
+                description=f"{payload.category} — {payload.description or ''}".strip(" —"),
+                user_id=user_id,
+            )
+        except Exception:
+            log.exception("Failed to post journal entry for extra cost %s", doc_id)
     await db.commit()
     return {"id": str(doc_id)}
 

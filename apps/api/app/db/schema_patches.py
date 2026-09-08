@@ -1873,7 +1873,7 @@ END $$
         entry_date       DATE NOT NULL DEFAULT CURRENT_DATE,
         description      TEXT,
         source_type      VARCHAR(30) NOT NULL DEFAULT 'manual',
-        source_id        UUID,
+        source_id        TEXT,
         created_by       UUID REFERENCES users(id),
         created_at       TIMESTAMPTZ DEFAULT NOW()
     )
@@ -1977,6 +1977,13 @@ END $$
             END LOOP;
         END LOOP;
     END $$
+    """,
+
+    # Fix: source_id must accept any source table's PK format, not just UUID —
+    # cash_movements.id (and others) are integers. Rollback: no safe rollback
+    # (would require re-verifying every existing source_id is a valid UUID first).
+    """
+    ALTER TABLE journal_entries ALTER COLUMN source_id TYPE TEXT USING source_id::text
     """,
 ]
 

@@ -102,3 +102,85 @@ async def post_journal_entry_or_422(db: AsyncSession, *args, **kwargs) -> str:
         return await post_journal_entry(db, *args, **kwargs)
     except ValueError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e))
+
+
+# =========================================================
+# Phase 2 — helpers for automatic-posting hooks in other modules.
+# Standard account codes, matching the seed in schema_patches.py /
+# auth/router.py register(). Callers look these up by semantic name so
+# they never hardcode a numeric account id.
+# =========================================================
+
+DEFAULT_ACCOUNT_CODES = {
+    "cash": "1000",
+    "ar": "1200",              # Mijozlar qarzi
+    "inventory": "1300",       # Tovar-moddiy zaxiralar
+    "ap": "2000",              # Yetkazib beruvchilar qarzi
+    "equity": "3000",
+    "revenue": "4000",         # Sotuvdan tushum
+    "cogs": "5000",            # Sotilgan tovar tannarxi
+    "write_off_expense": "5100",
+    "other_expense": "5200",
+}
+
+
+async def get_default_account_id(db: AsyncSession, org_id: str, key: str) -> int | None:
+    code = DEFAULT_ACCOUNT_CODES[key]
+    res = await db.execute(
+        text("SELECT id FROM accounts WHERE organization_id = :o AND code = :c"),
+        {"o": org_id, "c": code},
+    )
+    return res.scalar()
+
+
+async def ensure_cashbox_account(db: AsyncSession, org_id: str, cashbox_id: int, cashbox_name: str) -> None:
+    """Auto-create a linked ledger sub-account for a cashbox, if it doesn't
+    have one yet. Called when a new cashbox is created after the org's
+    chart of accounts already exists (registration/backfill only cover
+    cashboxes that existed at that moment)."""
+    exists = await db.execute(
+        text("SELECT 1 FROM accounts WHERE organization_id = :o AND linked_cashbox_id = :cb"),
+        {"o": org_id, "cb": cashbox_id},
+    )
+    if exists.scalar():
+        return
+    parent_id = await get_default_account_id(db, org_id, "cash")
+    if parent_id is None:
+        return  # org has no chart of accounts at all (shouldn't happen post-Phase-1) — skip silently
+    await db.execute(
+        text("""
+            INSERT INTO accounts (organization_id, code, name, type, parent_id, linked_cashbox_id, is_system)
+            VALUES (:o, :code, :n, 'asset', :p, :cb, TRUE)
+            ON CONFLICT (organization_id, code) DO NOTHING
+        """),
+        {"o": org_id, "code": f"1000-{cashbox_id}", "n": cashbox_name, "p": parent_id, "cb": cashbox_id},
+    )
+
+
+async def get_cashbox_account_id(db: AsyncSession, org_id: str, cashbox_id: int | None) -> int | None:
+    """The ledger sub-account linked to a specific cashbox, or the top-level
+    'Kassa va bank' account if cashbox_id is None (e.g. online payments).
+    Self-healing: if the cashbox exists but has no linked account yet
+    (created via a code path that predates/skips ensure_cashbox_account),
+    create one on the fly rather than silently posting against the generic
+    parent account."""
+    if cashbox_id is not None:
+        res = await db.execute(
+            text("SELECT id FROM accounts WHERE organization_id = :o AND linked_cashbox_id = :cb"),
+            {"o": org_id, "cb": cashbox_id},
+        )
+        row = res.scalar()
+        if row:
+            return row
+        cb = await db.execute(text("SELECT name FROM cashboxes WHERE id = :cb"), {"cb": cashbox_id})
+        cb_row = cb.first()
+        if cb_row:
+            await ensure_cashbox_account(db, org_id, cashbox_id, cb_row.name)
+            res2 = await db.execute(
+                text("SELECT id FROM accounts WHERE organization_id = :o AND linked_cashbox_id = :cb"),
+                {"o": org_id, "cb": cashbox_id},
+            )
+            row2 = res2.scalar()
+            if row2:
+                return row2
+    return await get_default_account_id(db, org_id, "cash")

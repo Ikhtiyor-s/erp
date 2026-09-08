@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -11,6 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_user_id, get_current_org_id
 from app.modules.rbac.deps import require_permission, get_user_permissions
+from app.modules.accounting.posting import JournalLine, post_journal_entry, get_default_account_id
+
+log = logging.getLogger(__name__)
 from app.modules.warehouse.service import (
     _stock_qty, _stock_apply, _next_doc_number, _bom_check_cycle,
     get_products_paginated,
@@ -1773,6 +1777,23 @@ async def create_write_off(
             source_type="write_off", source_id=str(wid),
             user_id=user_id,
         )
+
+    # Accounting: Dr Hisobdan chiqarish xarajati / Cr Tovar-moddiy zaxiralar.
+    if total > 0:
+        try:
+            expense_id = await get_default_account_id(db, org_id, "write_off_expense")
+            inv_id = await get_default_account_id(db, org_id, "inventory")
+            await post_journal_entry(
+                db, org_id,
+                [
+                    JournalLine(expense_id, debit=float(total)),
+                    JournalLine(inv_id, credit=float(total)),
+                ],
+                source_type="write_off", source_id=str(wid),
+                description=f"Hisobdan chiqarish #{wid}", user_id=user_id,
+            )
+        except Exception:
+            log.exception("Failed to post journal entry for write-off %s", wid)
 
     await db.commit()
     return {"id": str(wid), "total_amount": float(total)}
