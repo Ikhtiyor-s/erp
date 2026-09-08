@@ -222,7 +222,10 @@ async def register(request: Request, req: RegisterRequest, db: AsyncSession = De
             "(:o, '4000', 'Sotuvdan tushum', 'income', TRUE), "
             "(:o, '5000', 'Sotilgan tovar tannarxi', 'expense', TRUE), "
             "(:o, '5100', 'Hisobdan chiqarish xarajati', 'expense', TRUE), "
-            "(:o, '5200', 'Boshqa operatsion xarajatlar', 'expense', TRUE) "
+            "(:o, '5200', 'Boshqa operatsion xarajatlar', 'expense', TRUE), "
+            "(:o, '2100', 'Ish haqi bo''yicha qarzdorlik', 'liability', TRUE), "
+            "(:o, '2200', 'Soliq bo''yicha qarz', 'liability', TRUE), "
+            "(:o, '5300', 'Ish haqi xarajati', 'expense', TRUE) "
             "RETURNING id, code"
         ),
         {"o": str(org_id)},

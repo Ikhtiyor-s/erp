@@ -47,7 +47,10 @@ async def _post_movement_entry(db, org_id, user_id, *, cashbox_id, direction, am
             counter_id = await get_default_account_id(db, org_id, "ap")
             ct, cid = "supplier", str(supplier_id)
         elif employee_id:
-            counter_id = await get_default_account_id(db, org_id, "other_expense")
+            # Advance to an employee reduces what we'll owe them at the next payroll
+            # run (not an immediate expense — the labor cost is recognized at payroll
+            # approval time, see accounting/payroll_router.py).
+            counter_id = await get_default_account_id(db, org_id, "payroll_payable")
             ct, cid = "employee", str(employee_id)
         else:
             counter_id = await get_default_account_id(db, org_id, "equity")

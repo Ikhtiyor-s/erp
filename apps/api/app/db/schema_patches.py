@@ -1985,6 +1985,70 @@ END $$
     """
     ALTER TABLE journal_entries ALTER COLUMN source_id TYPE TEXT USING source_id::text
     """,
+
+    # ============================================================
+    # Payroll module — monthly payroll runs on top of the accounting ledger.
+    # Rollback: DROP TABLE IF EXISTS payroll_items, payroll_runs CASCADE;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS payroll_runs (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id  UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        period_month     DATE NOT NULL,
+        status           VARCHAR(20) NOT NULL DEFAULT 'draft',  -- draft|approved|paid
+        tax_rate         NUMERIC(5,2) NOT NULL DEFAULT 0,
+        notes            TEXT,
+        created_by       UUID REFERENCES users(id),
+        created_at       TIMESTAMPTZ DEFAULT NOW(),
+        approved_at      TIMESTAMPTZ,
+        paid_at          TIMESTAMPTZ
+    )
+    """,
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_payroll_runs_org_period
+        ON payroll_runs(organization_id, period_month)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS payroll_items (
+        id               BIGSERIAL PRIMARY KEY,
+        run_id           UUID NOT NULL REFERENCES payroll_runs(id) ON DELETE CASCADE,
+        employee_id      UUID NOT NULL REFERENCES employees(id),
+        base_salary      NUMERIC(20,2) NOT NULL DEFAULT 0,
+        bonus            NUMERIC(20,2) NOT NULL DEFAULT 0,
+        deductions       NUMERIC(20,2) NOT NULL DEFAULT 0,
+        advance_deducted NUMERIC(20,2) NOT NULL DEFAULT 0,
+        net_pay          NUMERIC(20,2) NOT NULL DEFAULT 0,
+        notes            TEXT
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_payroll_items_run ON payroll_items(run_id)
+    """,
+
+    # New chart-of-accounts entries for payroll (2100/2200/5300), added to every
+    # org that doesn't have them yet — same idempotent-per-code pattern as the
+    # original 9-account backfill above.
+    """
+    DO $$
+    DECLARE
+        org RECORD;
+    BEGIN
+        FOR org IN SELECT id FROM organizations LOOP
+            IF NOT EXISTS (SELECT 1 FROM accounts WHERE organization_id = org.id AND code = '2100') THEN
+                INSERT INTO accounts (organization_id, code, name, type, is_system)
+                VALUES (org.id, '2100', 'Ish haqi bo''yicha qarzdorlik', 'liability', TRUE);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM accounts WHERE organization_id = org.id AND code = '2200') THEN
+                INSERT INTO accounts (organization_id, code, name, type, is_system)
+                VALUES (org.id, '2200', 'Soliq bo''yicha qarz', 'liability', TRUE);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM accounts WHERE organization_id = org.id AND code = '5300') THEN
+                INSERT INTO accounts (organization_id, code, name, type, is_system)
+                VALUES (org.id, '5300', 'Ish haqi xarajati', 'expense', TRUE);
+            END IF;
+        END LOOP;
+    END $$
+    """,
 ]
 
 # Enum value additions — must run outside a transaction (AUTOCOMMIT).

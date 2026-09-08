@@ -81,6 +81,7 @@ ALL_PERMISSIONS: list[Permission] = [
     # HR
     p("hr", "view"), p("hr", "create"), p("hr", "update"),
     p("hr", "delete"), p("hr", "salary"),
+    p3("hr", "payroll", "approve"), p3("hr", "payroll", "pay"),
 
     # Manufacturing
     p("manufacturing", "view"), p("manufacturing", "create"),
@@ -216,7 +217,7 @@ ROLE_GRANTS: dict[str, list[str]] = {
         "mxik.view",
         "customer.view", "customer.export",
         "supplier.view", "supplier.export",
-        "hr.view", "hr.salary",
+        "hr.view", "hr.salary", "hr.payroll.approve", "hr.payroll.pay",
         "reference.view",
         "tools.view", "tools.export",
         "statistics.view", "statistics.cogs.view", "statistics.cogs.export", "audit.view",

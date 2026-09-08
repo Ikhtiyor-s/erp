@@ -60,6 +60,7 @@ from app.modules.customer_portal.router import router as customer_portal_router
 from app.modules.mobile.router import router as mobile_router
 from app.modules.warehouse.pick_router import router as pick_router
 from app.modules.accounting.router import router as accounting_router
+from app.modules.hr.payroll_router import router as payroll_router
 
 
 @asynccontextmanager
@@ -127,6 +128,7 @@ app.include_router(customer_portal_router, prefix=API_PREFIX)
 app.include_router(mobile_router, prefix=API_PREFIX)
 app.include_router(pick_router, prefix=API_PREFIX)
 app.include_router(accounting_router, prefix=API_PREFIX)
+app.include_router(payroll_router, prefix=API_PREFIX)
 
 
 if __name__ == "__main__":

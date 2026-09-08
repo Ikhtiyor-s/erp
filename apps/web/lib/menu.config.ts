@@ -164,6 +164,7 @@ export const menuTree: MenuGroup[] = [
       { i18nKey: "hr_positions",           label: "Должности",        href: "/hr/positions" },
       { i18nKey: "hr_kpi",                 label: "KPI",              href: "/hr/kpi" },
       { i18nKey: "hr_courier",             label: "Курьеры",          href: "/hr/courier" },
+      { i18nKey: "hr_payroll",             label: "Ish haqi",         href: "/hr/payroll" },
       { i18nKey: "manufacturing_orders",   label: "Производство",     href: "/manufacturing/orders",    permission: "manufacturing.view" },
       { i18nKey: "manufacturing_ingredient", label: "Ингредиенты (BOM)", href: "/manufacturing/ingredient", permission: "manufacturing.view" },
       { i18nKey: "marketing_discount",     label: "Скидки",           href: "/marketing/discount",      permission: "marketing.view" },

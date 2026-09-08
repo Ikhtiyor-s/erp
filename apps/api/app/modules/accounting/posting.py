@@ -121,6 +121,9 @@ DEFAULT_ACCOUNT_CODES = {
     "cogs": "5000",            # Sotilgan tovar tannarxi
     "write_off_expense": "5100",
     "other_expense": "5200",
+    "payroll_payable": "2100",  # Ish haqi bo'yicha qarzdorlik
+    "tax_payable": "2200",      # Soliq bo'yicha qarz (ushlab qolingan NDFL)
+    "payroll_expense": "5300",  # Ish haqi xarajati
 }
 
 
