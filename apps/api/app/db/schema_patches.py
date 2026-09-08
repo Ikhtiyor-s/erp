@@ -1837,6 +1837,147 @@ END $$
     """
     ALTER TABLE users ALTER COLUMN email DROP NOT NULL
     """,
+
+    # ============================================================
+    # Accounting module (Phase 1) — chart of accounts + double-entry journal.
+    # journal_entries/journal_lines are append-only (immutable trigger, same
+    # pattern as stock_movements) — corrections are posted as new reversing
+    # entries, never edited/deleted.
+    # Rollback:
+    #   DROP TRIGGER IF EXISTS trg_journal_entries_immutable ON journal_entries;
+    #   DROP FUNCTION IF EXISTS journal_entries_immutable();
+    #   DROP TABLE IF EXISTS journal_lines, journal_entries, accounts CASCADE;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS accounts (
+        id               SERIAL PRIMARY KEY,
+        organization_id  UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        code             VARCHAR(20) NOT NULL,
+        name             VARCHAR(200) NOT NULL,
+        type             VARCHAR(20) NOT NULL,  -- asset|liability|equity|income|expense
+        parent_id        INT REFERENCES accounts(id),
+        linked_cashbox_id INT REFERENCES cashboxes(id),
+        is_system        BOOLEAN DEFAULT FALSE,
+        is_active        BOOLEAN DEFAULT TRUE,
+        created_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_accounts_org_code ON accounts(organization_id, code)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS journal_entries (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id  UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        entry_number     VARCHAR(50),
+        entry_date       DATE NOT NULL DEFAULT CURRENT_DATE,
+        description      TEXT,
+        source_type      VARCHAR(30) NOT NULL DEFAULT 'manual',
+        source_id        UUID,
+        created_by       UUID REFERENCES users(id),
+        created_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_journal_entries_org_date
+        ON journal_entries(organization_id, entry_date)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_journal_entries_source
+        ON journal_entries(source_type, source_id)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS journal_lines (
+        id               BIGSERIAL PRIMARY KEY,
+        entry_id         UUID NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+        account_id       INT NOT NULL REFERENCES accounts(id),
+        debit            NUMERIC(20,2) NOT NULL DEFAULT 0,
+        credit           NUMERIC(20,2) NOT NULL DEFAULT 0,
+        currency_id      INT REFERENCES currencies(id),
+        rate             NUMERIC(20,6) DEFAULT 1,
+        amount_base      NUMERIC(20,2) NOT NULL,
+        counterparty_type VARCHAR(20),  -- customer|supplier|employee
+        counterparty_id  UUID,
+        description      TEXT
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_journal_lines_entry ON journal_lines(entry_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_journal_lines_account ON journal_lines(account_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_journal_lines_counterparty
+        ON journal_lines(counterparty_type, counterparty_id) WHERE counterparty_id IS NOT NULL
+    """,
+    """
+    CREATE OR REPLACE FUNCTION journal_entries_immutable()
+    RETURNS TRIGGER LANGUAGE plpgsql AS $$
+    BEGIN
+        RAISE EXCEPTION 'journal_entries/journal_lines are append-only: UPDATE and DELETE are forbidden';
+    END;
+    $$
+    """,
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_trigger
+            WHERE tgname = 'trg_journal_entries_immutable'
+              AND tgrelid = 'journal_entries'::regclass
+        ) THEN
+            CREATE TRIGGER trg_journal_entries_immutable
+                BEFORE UPDATE OR DELETE ON journal_entries
+                FOR EACH ROW EXECUTE FUNCTION journal_entries_immutable();
+        END IF;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_trigger
+            WHERE tgname = 'trg_journal_lines_immutable'
+              AND tgrelid = 'journal_lines'::regclass
+        ) THEN
+            CREATE TRIGGER trg_journal_lines_immutable
+                BEFORE UPDATE OR DELETE ON journal_lines
+                FOR EACH ROW EXECUTE FUNCTION journal_entries_immutable();
+        END IF;
+    END $$
+    """,
+
+    # Backfill: seed the standard chart of accounts for every organization that
+    # doesn't have one yet (existing orgs; new orgs get this from the register
+    # endpoint instead). Idempotent — skips an org if it already has accounts.
+    """
+    DO $$
+    DECLARE
+        org RECORD;
+        cb RECORD;
+        cash_parent_id INT;
+    BEGIN
+        FOR org IN SELECT id FROM organizations LOOP
+            IF EXISTS (SELECT 1 FROM accounts WHERE organization_id = org.id) THEN
+                CONTINUE;
+            END IF;
+
+            INSERT INTO accounts (organization_id, code, name, type, is_system) VALUES
+                (org.id, '1000', 'Kassa va bank', 'asset', TRUE),
+                (org.id, '1200', 'Mijozlar qarzi (debitorlik)', 'asset', TRUE),
+                (org.id, '1300', 'Tovar-moddiy zaxiralar', 'asset', TRUE),
+                (org.id, '2000', 'Yetkazib beruvchilar qarzi (kreditorlik)', 'liability', TRUE),
+                (org.id, '3000', 'Kapital / Taqsimlanmagan foyda', 'equity', TRUE),
+                (org.id, '4000', 'Sotuvdan tushum', 'income', TRUE),
+                (org.id, '5000', 'Sotilgan tovar tannarxi', 'expense', TRUE),
+                (org.id, '5100', 'Hisobdan chiqarish xarajati', 'expense', TRUE),
+                (org.id, '5200', 'Boshqa operatsion xarajatlar', 'expense', TRUE);
+
+            SELECT id INTO cash_parent_id FROM accounts WHERE organization_id = org.id AND code = '1000';
+
+            FOR cb IN SELECT id, name FROM cashboxes WHERE organization_id = org.id LOOP
+                INSERT INTO accounts (organization_id, code, name, type, parent_id, linked_cashbox_id, is_system)
+                VALUES (org.id, '1000-' || cb.id, cb.name, 'asset', cash_parent_id, cb.id, TRUE);
+            END LOOP;
+        END LOOP;
+    END $$
+    """,
 ]
 
 # Enum value additions — must run outside a transaction (AUTOCOMMIT).

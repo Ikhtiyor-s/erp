@@ -190,13 +190,14 @@ async def register(request: Request, req: RegisterRequest, db: AsyncSession = De
         ),
         {"o": str(org_id)},
     )
-    await db.execute(
+    cashbox_res = await db.execute(
         text(
             "INSERT INTO cashboxes (organization_id, name, currency_id, is_active, balance) "
-            "VALUES (:o, 'Asosiy kassa', :c, TRUE, 0)"
+            "VALUES (:o, 'Asosiy kassa', :c, TRUE, 0) RETURNING id"
         ),
         {"o": str(org_id), "c": uzs_id},
     )
+    cashbox_id = cashbox_res.scalar()
     await db.execute(
         text(
             "INSERT INTO payment_types (organization_id, code, name, is_cash, is_active) "
@@ -206,6 +207,33 @@ async def register(request: Request, req: RegisterRequest, db: AsyncSession = De
             "ON CONFLICT (organization_id, code) DO NOTHING"
         ),
         {"o": str(org_id)},
+    )
+
+    # Standard chart of accounts (accounting module, Phase 1) — same defaults
+    # backfilled for pre-existing orgs in schema_patches.py.
+    coa_res = await db.execute(
+        text(
+            "INSERT INTO accounts (organization_id, code, name, type, is_system) VALUES "
+            "(:o, '1000', 'Kassa va bank', 'asset', TRUE), "
+            "(:o, '1200', 'Mijozlar qarzi (debitorlik)', 'asset', TRUE), "
+            "(:o, '1300', 'Tovar-moddiy zaxiralar', 'asset', TRUE), "
+            "(:o, '2000', 'Yetkazib beruvchilar qarzi (kreditorlik)', 'liability', TRUE), "
+            "(:o, '3000', 'Kapital / Taqsimlanmagan foyda', 'equity', TRUE), "
+            "(:o, '4000', 'Sotuvdan tushum', 'income', TRUE), "
+            "(:o, '5000', 'Sotilgan tovar tannarxi', 'expense', TRUE), "
+            "(:o, '5100', 'Hisobdan chiqarish xarajati', 'expense', TRUE), "
+            "(:o, '5200', 'Boshqa operatsion xarajatlar', 'expense', TRUE) "
+            "RETURNING id, code"
+        ),
+        {"o": str(org_id)},
+    )
+    cash_account_id = next(r.id for r in coa_res if r.code == "1000")
+    await db.execute(
+        text(
+            "INSERT INTO accounts (organization_id, code, name, type, parent_id, linked_cashbox_id, is_system) "
+            "VALUES (:o, :code, 'Asosiy kassa', 'asset', :parent, :cb, TRUE)"
+        ),
+        {"o": str(org_id), "code": f"1000-{cashbox_id}", "parent": cash_account_id, "cb": cashbox_id},
     )
 
     await db.commit()

@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Wallet, Warehouse, ShoppingCart, Users, Truck,
-  Factory, BarChart3, Settings, BookOpen,
+  Factory, BarChart3, Settings, BookOpen, Calculator,
   Wrench, Terminal, Plug, Sparkles, Shield,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -85,6 +85,18 @@ export const menuTree: MenuGroup[] = [
       { i18nKey: "finance_set_balance",      label: "Balans o'rnatish",   href: "/finance/set-balance",    permission: "finance.set_balance" },
       { i18nKey: "finance_installments",     label: "Рассрочка",          href: "/finance/installments" },
       { i18nKey: "finance_extra_cost",       label: "Доп. расходы",       href: "/finance/extra-cost" },
+    ],
+  },
+
+  // ============ ACCOUNTING ============
+  {
+    key: "accounting",
+    label: "Buxgalteriya",
+    icon: Calculator,
+    permission: "accounting.view",
+    children: [
+      { i18nKey: "accounting_accounts", label: "Hisoblar rejasi", href: "/accounting/accounts" },
+      { i18nKey: "accounting_journal",  label: "Jurnal",          href: "/accounting/journal" },
     ],
   },
 

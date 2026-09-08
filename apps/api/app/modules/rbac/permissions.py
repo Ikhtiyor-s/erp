@@ -143,6 +143,10 @@ ALL_PERMISSIONS: list[Permission] = [
 
     # Sprint 5 — T-210: oprihodovanie (stock-in posting)
     p("warehouse", "manage_stock_ins"),
+
+    # Accounting — chart of accounts + double-entry journal
+    p("accounting", "view"), p("accounting", "create"),
+    p("accounting", "update"), p("accounting", "delete"),
 ]
 
 
@@ -218,6 +222,7 @@ ROLE_GRANTS: dict[str, list[str]] = {
         "statistics.view", "statistics.cogs.view", "statistics.cogs.export", "audit.view",
         "warehouse.movements.view",
         "supplier.return.view",
+        "accounting.view", "accounting.create", "accounting.update", "accounting.delete",
     ],
 
     # Cashier — POS + create sale + pay only

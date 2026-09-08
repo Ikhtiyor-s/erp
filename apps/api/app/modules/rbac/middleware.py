@@ -45,6 +45,7 @@ URL_MODULE = {
     "assistant": "statistics",
     "integration": "settings",
     "integrations": "integrations",
+    "accounting": "accounting",
 }
 
 METHOD_ACTION = {
