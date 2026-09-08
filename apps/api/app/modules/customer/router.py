@@ -672,3 +672,105 @@ async def customers_locations(
     )
     return [dict(r._mapping) for r in res]
 
+
+# =========================================================
+# MARKETPLACE (customer self-service portal) ORDERS — staff view
+# Orders placed by customers via /customer-portal/me/orders land in
+# customer_portal_orders with status='new' and no staff-facing screen
+# to review them. These endpoints give staff that view.
+# =========================================================
+
+PORTAL_ORDER_STATUSES = {"new", "confirmed", "cancelled", "delivered"}
+
+
+@router.get("/portal-orders")
+async def list_portal_orders(
+    status: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    where = "o.organization_id = :o"
+    params: dict = {"o": org_id}
+    if status:
+        where += " AND o.status = :s"
+        params["s"] = status
+
+    res = await db.execute(
+        text(f"""
+            SELECT o.id, o.order_number, o.status, o.notes, o.total_amount, o.created_at,
+                   c.id AS customer_id, c.name AS customer_name, c.phone AS customer_phone,
+                   (SELECT COUNT(*) FROM customer_portal_order_items i WHERE i.order_id = o.id) AS item_count
+            FROM customer_portal_orders o
+            JOIN customers c ON c.id = o.customer_id
+            WHERE {where}
+            ORDER BY o.created_at DESC
+        """),
+        params,
+    )
+    return [dict(r._mapping) for r in res]
+
+
+@router.get("/portal-orders/{order_id}")
+async def get_portal_order(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    order_res = await db.execute(
+        text("""
+            SELECT o.id, o.order_number, o.status, o.notes, o.total_amount, o.created_at,
+                   c.id AS customer_id, c.name AS customer_name, c.phone AS customer_phone, c.address AS customer_address
+            FROM customer_portal_orders o
+            JOIN customers c ON c.id = o.customer_id
+            WHERE o.id = :id AND o.organization_id = :o
+        """),
+        {"id": str(order_id), "o": org_id},
+    )
+    order = order_res.first()
+    if not order:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+
+    items_res = await db.execute(
+        text("""
+            SELECT i.id, i.product_id, p.name AS product_name, p.sku,
+                   i.quantity, i.note, p.sale_price AS unit_price,
+                   (i.quantity * COALESCE(p.sale_price, 0)) AS line_total
+            FROM customer_portal_order_items i
+            JOIN products p ON p.id = i.product_id
+            WHERE i.order_id = :id
+        """),
+        {"id": str(order_id)},
+    )
+    return {
+        **dict(order._mapping),
+        "items": [dict(r._mapping) for r in items_res],
+    }
+
+
+class PortalOrderStatusIn(BaseModel):
+    status: str
+
+
+@router.put("/portal-orders/{order_id}/status")
+async def update_portal_order_status(
+    order_id: UUID,
+    body: PortalOrderStatusIn,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    if body.status not in PORTAL_ORDER_STATUSES:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Noto'g'ri status")
+
+    res = await db.execute(
+        text("""
+            UPDATE customer_portal_orders SET status = :s
+            WHERE id = :id AND organization_id = :o
+            RETURNING id
+        """),
+        {"s": body.status, "id": str(order_id), "o": org_id},
+    )
+    if not res.first():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+    await db.commit()
+    return {"ok": True, "status": body.status}
+

@@ -131,6 +131,7 @@ export const menuTree: MenuGroup[] = [
     children: [
       { i18nKey: "customer_customers", label: "Клиенты",       href: "/customer/customers" },
       { i18nKey: "customer_orders",    label: "Заказы",         href: "/customer/orders" },
+      { i18nKey: "customer_portal_orders", label: "Marketplace buyurtmalari", href: "/customer/portal-orders" },
       { i18nKey: "customer_category",  label: "Категории",      href: "/customer/category" },
       { i18nKey: "customer_abc_xyz",   label: "ABC/XYZ-анализ", href: "/customer/abc-xyz-analysis" },
       { i18nKey: "customer_analytics", label: "Аналитика",      href: "/customer/customers-analytics-dashboard" },

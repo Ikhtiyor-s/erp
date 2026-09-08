@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
+import { DataTable, type Column } from "@/components/ui/data-table";
 import { getPortalToken } from "../../portal-auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
@@ -18,11 +21,58 @@ type Sale = {
   warehouse: string;
 };
 
-const fmt = (v: number) => v.toLocaleString("ru-RU", { maximumFractionDigits: 0 });
+type SaleDetailItem = {
+  product_name: string;
+  quantity: number;
+  price: string | number;
+  amount: string | number;
+};
+
+type SaleDetail = {
+  head: {
+    id: string;
+    doc_number: string | null;
+    sale_date: string;
+    warehouse_name: string | null;
+    total_amount: string | number;
+    paid_amount: string | number;
+  };
+  items: SaleDetailItem[];
+};
+
+const fmt = (v: unknown) => Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 0 });
+
+type SaleStatusTone = "success" | "warning" | "info" | "neutral" | "danger";
+
+const SALE_STATUS_TONE: Record<string, SaleStatusTone> = {
+  paid: "success",
+  partial: "warning",
+  confirmed: "info",
+  draft: "neutral",
+  cancelled: "danger",
+};
+
+const SALE_STATUS_KEY: Record<string, string> = {
+  paid: "sale_status_paid",
+  partial: "sale_status_partial",
+  confirmed: "sale_status_confirmed",
+  draft: "sale_status_draft",
+  cancelled: "sale_status_cancelled",
+};
+
+function SaleStatusBadge({ status }: { status: string }) {
+  const t = useTranslations("portal");
+  const tone = SALE_STATUS_TONE[status] ?? "neutral";
+  const label = SALE_STATUS_KEY[status] ? t(SALE_STATUS_KEY[status]) : status;
+  return <Badge tone={tone}>{label}</Badge>;
+}
 
 export default function PortalSalesPage() {
+  const t = useTranslations("portal");
+  const tc = useTranslations("common");
+
   const [sales, setSales] = useState<Sale[]>([]);
-  const [selected, setSelected] = useState<any>(null);
+  const [selected, setSelected] = useState<SaleDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function load() {
@@ -49,99 +99,175 @@ export default function PortalSalesPage() {
     setSelected(await r.json());
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
-  if (loading) return <div className="py-20 text-center text-slate-400">Yuklanmoqda...</div>;
+  if (loading) {
+    return <div className="py-20 text-center text-sm text-ink-400">{tc("loading")}</div>;
+  }
+
+  const columns: Column<Sale>[] = [
+    {
+      key: "doc_number",
+      header: "№",
+      render: (r) => (r.doc_number ? `№ ${r.doc_number}` : `№ ${r.id.slice(0, 8)}`),
+    },
+    {
+      key: "date",
+      header: tc("date"),
+      render: (r) => new Date(r.date).toLocaleDateString("uz-Cyrl-UZ"),
+    },
+    {
+      key: "warehouse",
+      header: tc("warehouse"),
+    },
+    {
+      key: "status",
+      header: tc("status"),
+      render: (r) => <SaleStatusBadge status={r.status} />,
+    },
+    {
+      key: "total",
+      header: tc("total"),
+      align: "right",
+      render: (r) => <span className="font-mono">{fmt(r.total)}</span>,
+    },
+    {
+      key: "debt",
+      header: t("stat_debt"),
+      align: "right",
+      render: (r) =>
+        r.debt > 0 ? (
+          <span className="font-mono text-danger-600 dark:text-danger-500">{fmt(r.debt)}</span>
+        ) : (
+          <span className="text-ink-400">—</span>
+        ),
+    },
+  ];
+
+  const hasDetail = !!(selected && selected.head);
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-        Sotuvlar tarixi ({sales.length})
+      <h1 className="text-[clamp(16px,2.2vw,18px)] font-semibold text-ink-900 dark:text-ink-50 tracking-tight">
+        {t("sales_title")} ({sales.length})
       </h1>
 
-      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700">
+      {/* Desktop table */}
+      <div className="hidden md:block">
+        <DataTable
+          columns={columns}
+          rows={sales}
+          onRowClick={(r) => openDetail(r.id)}
+          emptyText={t("no_sales")}
+        />
+      </div>
+
+      {/* Mobile cards */}
+      <ul className="md:hidden space-y-2">
         {sales.length === 0 && (
-          <div className="px-4 py-12 text-center text-slate-400">Sotuvlar yo'q</div>
+          <li className="text-center text-sm text-ink-400 py-8">{t("no_sales")}</li>
         )}
         {sales.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => openDetail(s.id)}
-            className="w-full px-4 py-3 flex items-start justify-between hover:bg-slate-50 dark:hover:bg-slate-900/30 text-left"
-          >
-            <div className="flex-1">
-              <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                {s.doc_number ? `№ ${s.doc_number}` : `№ ${s.id.slice(0, 8)}`}
-              </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                {new Date(s.date).toLocaleDateString("uz-Cyrl-UZ")} • {s.warehouse}
-              </div>
-              <StatusBadge status={s.status} debt={s.debt} />
-            </div>
-            <div className="text-right ml-3">
-              <div className="text-sm font-mono font-semibold text-slate-900 dark:text-slate-100">
-                {fmt(s.total)}
-              </div>
-              {s.debt > 0 && (
-                <div className="text-xs text-red-600 dark:text-red-400 font-mono">
-                  Qarz: {fmt(s.debt)}
+          <li key={s.id}>
+            <button type="button" onClick={() => openDetail(s.id)} className="w-full text-left">
+              <Card
+                padding="sm"
+                className="hover:border-brand-300 dark:hover:border-brand-700 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-ink-900 dark:text-ink-100 truncate">
+                      {s.doc_number ? `№ ${s.doc_number}` : `№ ${s.id.slice(0, 8)}`}
+                    </div>
+                    <div className="text-xs text-ink-500 dark:text-ink-400 mt-0.5 truncate">
+                      {new Date(s.date).toLocaleDateString("uz-Cyrl-UZ")} • {s.warehouse}
+                    </div>
+                    <div className="mt-1">
+                      <SaleStatusBadge status={s.status} />
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-sm font-mono font-semibold text-ink-900 dark:text-ink-100">
+                      {fmt(s.total)}
+                    </div>
+                    {s.debt > 0 && (
+                      <div className="text-xs text-danger-600 dark:text-danger-500 font-mono mt-0.5">
+                        {t("stat_debt")}: {fmt(s.debt)}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-              <ChevronRight size={14} className="inline text-slate-400 mt-1" />
-            </div>
-          </button>
+              </Card>
+            </button>
+          </li>
         ))}
-      </div>
+      </ul>
 
       {/* Detail modal */}
       <Modal
         open={selected != null}
         onClose={() => setSelected(null)}
-        title={selected ? `Buyurtma tafsiloti — № ${selected.head.doc_number || selected.head.id.slice(0, 8)}` : "Buyurtma tafsiloti"}
+        title={
+          hasDetail
+            ? `${t("sale_detail")} — № ${selected!.head.doc_number || selected!.head.id.slice(0, 8)}`
+            : t("sale_detail")
+        }
         size="md"
       >
-        {selected && (
+        {!hasDetail ? (
+          <p className="text-center text-sm text-ink-400 py-8">{t("no_sales_detail")}</p>
+        ) : (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <div className="text-xs text-slate-500">Sana</div>
-                <div>{new Date(selected.head.sale_date).toLocaleString("uz-Cyrl-UZ")}</div>
+                <div className="text-xs text-ink-500 dark:text-ink-400">{tc("date")}</div>
+                <div className="text-ink-900 dark:text-ink-100">
+                  {new Date(selected!.head.sale_date).toLocaleString("uz-Cyrl-UZ")}
+                </div>
               </div>
               <div>
-                <div className="text-xs text-slate-500">Ombor</div>
-                <div>{selected.head.warehouse_name || "—"}</div>
+                <div className="text-xs text-ink-500 dark:text-ink-400">{tc("warehouse")}</div>
+                <div className="text-ink-900 dark:text-ink-100">
+                  {selected!.head.warehouse_name || "—"}
+                </div>
               </div>
             </div>
-            <div className="border-t border-slate-100 dark:border-slate-700 pt-3">
-              <div className="text-xs text-slate-500 mb-2">MAHSULOTLAR</div>
-              {selected.items.map((it: any, i: number) => (
+            <div className="border-t border-ink-100 dark:border-ink-800 pt-3">
+              <div className="text-xs text-ink-500 dark:text-ink-400 mb-2 uppercase tracking-wide">
+                Mahsulotlar
+              </div>
+              {selected!.items.map((it, i) => (
                 <div key={i} className="flex items-start justify-between py-1.5 text-sm">
-                  <div className="flex-1">
-                    <div className="text-slate-900 dark:text-slate-100">{it.product_name}</div>
-                    <div className="text-xs text-slate-500">
-                      {it.quantity} x {fmt(Number(it.price))}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-ink-900 dark:text-ink-100 truncate">{it.product_name}</div>
+                    <div className="text-xs text-ink-500 dark:text-ink-400">
+                      {it.quantity} x {fmt(it.price)}
                     </div>
                   </div>
-                  <div className="font-mono text-slate-900 dark:text-slate-100">
-                    {fmt(Number(it.amount))}
+                  <div className="font-mono text-ink-900 dark:text-ink-100 shrink-0">
+                    {fmt(it.amount)}
                   </div>
                 </div>
               ))}
             </div>
-            <div className="border-t border-slate-100 dark:border-slate-700 pt-3 space-y-1 text-sm">
+            <div className="border-t border-ink-100 dark:border-ink-800 pt-3 space-y-1 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-500">Jami:</span>
-                <span className="font-mono font-semibold">{fmt(Number(selected.head.total_amount))}</span>
+                <span className="text-ink-500 dark:text-ink-400">{tc("total")}:</span>
+                <span className="font-mono font-semibold text-ink-900 dark:text-ink-100">
+                  {fmt(selected!.head.total_amount)}
+                </span>
               </div>
-              <div className="flex justify-between text-green-700 dark:text-green-400">
-                <span>To'langan:</span>
-                <span className="font-mono">{fmt(Number(selected.head.paid_amount))}</span>
+              <div className="flex justify-between text-success-700 dark:text-success-500">
+                <span>{t("stat_paid")}:</span>
+                <span className="font-mono">{fmt(selected!.head.paid_amount)}</span>
               </div>
-              {Number(selected.head.total_amount) - Number(selected.head.paid_amount) > 0 && (
-                <div className="flex justify-between text-red-600 dark:text-red-400 font-semibold">
-                  <span>Qarz:</span>
+              {Number(selected!.head.total_amount) - Number(selected!.head.paid_amount) > 0 && (
+                <div className="flex justify-between text-danger-600 dark:text-danger-500 font-semibold">
+                  <span>{t("stat_debt")}:</span>
                   <span className="font-mono">
-                    {fmt(Number(selected.head.total_amount) - Number(selected.head.paid_amount))}
+                    {fmt(Number(selected!.head.total_amount) - Number(selected!.head.paid_amount))}
                   </span>
                 </div>
               )}
@@ -151,18 +277,4 @@ export default function PortalSalesPage() {
       </Modal>
     </div>
   );
-}
-
-function StatusBadge({ status, debt }: { status: string; debt: number }) {
-  const map: Record<string, { bg: string; label: string }> = {
-    paid: { bg: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300", label: "To'langan" },
-    partial: { bg: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300", label: "Qisman" },
-    confirmed: { bg: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300", label: "Tasdiqlangan" },
-    draft: { bg: "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300", label: "Qoralama" },
-    cancelled: { bg: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300", label: "Bekor" },
-  };
-  const cfg = map[status] ?? { bg: "bg-slate-100 text-slate-600", label: status };
-  // debt currently unused in this view, kept for prop compatibility
-  void debt;
-  return <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${cfg.bg}`}>{cfg.label}</span>;
 }

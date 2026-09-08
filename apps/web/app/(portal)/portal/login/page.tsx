@@ -2,16 +2,23 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Phone, ShieldCheck, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useLocale } from "@/i18n/locale-provider";
+import { formatUzPhone, normalizeUzPhoneInput, toApiPhone } from "@/lib/phone";
+import { Card, CardBody } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { setPortalAuth } from "../../portal-auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
 
 export default function PortalLoginPage() {
+  const t = useTranslations("portal");
+  const { locale, setLocale } = useLocale();
   const router = useRouter();
   const [step, setStep] = useState<"phone" | "otp">("phone");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(""); // 9 national digits
   const [orgCode, setOrgCode] = useState("ANIQ");
   const [code, setCode] = useState("");
   const [devCode, setDevCode] = useState("");
@@ -24,7 +31,7 @@ export default function PortalLoginPage() {
       const res = await fetch(`${API_BASE}/customer-portal/auth/request-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, org_code: orgCode }),
+        body: JSON.stringify({ phone: toApiPhone(phone), org_code: orgCode }),
         signal: AbortSignal.timeout(10000),
       });
       const data = await res.json();
@@ -32,9 +39,9 @@ export default function PortalLoginPage() {
       setStep("otp");
       if (data.dev_code) {
         setDevCode(data.dev_code);
-        toast.info(`Dev kod: ${data.dev_code}`, { duration: 8000 });
+        toast.info(`${t("dev_code_hint")}: ${data.dev_code}`, { duration: 8000 });
       } else {
-        toast.success("Kod telefoningizga yuborildi");
+        toast.success(t("otp_sent"));
       }
     } catch (e: any) {
       toast.error(e.message || "Xato");
@@ -50,7 +57,7 @@ export default function PortalLoginPage() {
       const res = await fetch(`${API_BASE}/customer-portal/auth/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, code, org_code: orgCode }),
+        body: JSON.stringify({ phone: toApiPhone(phone), code, org_code: orgCode }),
         signal: AbortSignal.timeout(10000),
       });
       const data = await res.json();
@@ -66,111 +73,117 @@ export default function PortalLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-slate-50 to-brand-50 dark:from-slate-950 dark:to-brand-950">
-      <div className="bg-white dark:bg-slate-800 shadow-xl rounded-2xl p-8 w-full max-w-sm">
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400 mb-3">
-            <Sparkles size={24} />
-          </div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-            Aniq — Mijoz kabineti
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            {step === "phone"
-              ? "Kirish uchun telefon raqamingizni kiriting"
-              : "Telefon raqamingizga yuborilgan kodni kiriting"}
-          </p>
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-ink-100 dark:bg-ink-950 relative px-4">
+      <div className="absolute top-4 right-4">
+        <select
+          value={locale}
+          onChange={(e) => setLocale(e.target.value as any)}
+          className="text-sm border border-ink-300 dark:border-ink-600 rounded-md px-2 py-1 bg-white dark:bg-ink-800 text-ink-700 dark:text-ink-200"
+          aria-label="Language"
+        >
+          <option value="uz">UZ</option>
+          <option value="ru">RU</option>
+          <option value="en">EN</option>
+          <option value="kaa">KAA</option>
+        </select>
+      </div>
 
-        {step === "phone" ? (
-          <form onSubmit={requestOtp} className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-slate-600 dark:text-slate-300 block mb-1">
-                Telefon raqami
-              </label>
-              <div className="relative">
-                <Phone size={16} className="absolute left-3 top-2.5 text-slate-400" />
-                <input
-                  type="tel"
-                  required
-                  placeholder="+998 90 123 45 67"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 rounded-md text-slate-900 dark:text-slate-100"
-                />
+      <Card className="w-full max-w-sm" padding="lg">
+        <CardBody className="space-y-4">
+          <div className="text-center mb-1">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400 mb-3">
+              <Sparkles size={24} />
+            </div>
+            <h1 className="text-xl font-bold text-ink-900 dark:text-ink-50">
+              {t("login_title")}
+            </h1>
+          </div>
+
+          {step === "phone" ? (
+            <form onSubmit={requestOtp} className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-ink-600 dark:text-ink-300 block mb-1">
+                  {t("phone")}
+                </label>
+                <div className="flex items-stretch border border-ink-300 dark:border-ink-600 rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-brand-500">
+                  <span className="flex items-center px-3 bg-ink-100 dark:bg-ink-700 text-ink-600 dark:text-ink-300 text-sm font-medium">
+                    +998
+                  </span>
+                  <input
+                    required
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder={t("phone_placeholder")}
+                    autoComplete="tel"
+                    value={formatUzPhone(phone)}
+                    onChange={(e) => setPhone(normalizeUzPhoneInput(e.target.value))}
+                    className="flex-1 min-w-0 border-0 bg-white dark:bg-ink-800 text-ink-900 dark:text-ink-100 px-3 py-2 focus:outline-none"
+                  />
+                </div>
               </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-600 dark:text-slate-300 block mb-1">
-                Tashkilot kodi
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="ANIQ"
-                value={orgCode}
-                onChange={(e) => setOrgCode(e.target.value.toUpperCase())}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 rounded-md font-mono text-sm text-slate-900 dark:text-slate-100"
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                Bu kodni sotuvchidan oling
-              </p>
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white py-2.5 rounded-md font-medium"
-            >
-              {loading ? "Yuborilmoqda..." : "Kod olish"}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={verifyOtp} className="space-y-4">
-            <div className="text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/40 p-3 rounded-md">
-              <Phone size={14} className="inline mr-1" /> {phone}
-            </div>
-            {devCode && (
-              <div className="text-xs bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 text-amber-800 dark:text-amber-200 p-2 rounded">
-                Dev rejim — kod: <code className="font-mono font-bold">{devCode}</code>
-              </div>
-            )}
-            <div>
-              <label className="text-xs font-medium text-slate-600 dark:text-slate-300 block mb-1">
-                SMS kod (6 raqam)
-              </label>
-              <div className="relative">
-                <ShieldCheck size={16} className="absolute left-3 top-2.5 text-slate-400" />
+              <div>
+                <label className="text-xs font-medium text-ink-600 dark:text-ink-300 block mb-1">
+                  {t("org_code")}
+                </label>
                 <input
                   type="text"
                   required
-                  maxLength={6}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="000000"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 rounded-md text-slate-900 dark:text-slate-100 font-mono text-lg tracking-widest"
-                  autoFocus
+                  placeholder="ANIQ"
+                  value={orgCode}
+                  onChange={(e) => setOrgCode(e.target.value.toUpperCase())}
+                  className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 bg-white dark:bg-ink-800 rounded-md font-mono text-sm text-ink-900 dark:text-ink-100"
                 />
+                <p className="text-xs text-ink-400 mt-1">{t("org_code_hint")}</p>
               </div>
-            </div>
-            <button
-              type="submit"
-              disabled={loading || code.length !== 6}
-              className="w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white py-2.5 rounded-md font-medium"
-            >
-              {loading ? "Tekshirilmoqda..." : "Kirish"}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setStep("phone"); setCode(""); setDevCode(""); }}
-              className="w-full text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-            >
-              ← Telefonni o'zgartirish
-            </button>
-          </form>
-        )}
-      </div>
+              <Button type="submit" fullWidth loading={loading}>
+                {t("send_code")}
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={verifyOtp} className="space-y-4">
+              <div className="text-sm text-ink-600 dark:text-ink-300 bg-ink-100 dark:bg-ink-900/40 p-3 rounded-md">
+                <Phone size={14} className="inline mr-1" /> +998 {formatUzPhone(phone)}
+              </div>
+              {devCode && (
+                <div className="text-xs bg-warn-50 dark:bg-warn-500/15 border border-warn-500/30 text-warn-700 dark:text-warn-500 p-2 rounded">
+                  {t("dev_code_hint")}: <code className="font-mono font-bold">{devCode}</code>
+                </div>
+              )}
+              <div>
+                <label className="text-xs font-medium text-ink-600 dark:text-ink-300 block mb-1">
+                  {t("otp_code")}
+                </label>
+                <div className="relative">
+                  <ShieldCheck size={16} className="absolute left-3 top-2.5 text-ink-400" />
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder={t("otp_placeholder")}
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                    className="w-full pl-9 pr-3 py-2 border border-ink-300 dark:border-ink-600 bg-white dark:bg-ink-800 rounded-md text-ink-900 dark:text-ink-100 font-mono text-lg tracking-widest"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <Button type="submit" fullWidth loading={loading} disabled={code.length !== 6}>
+                {t("verify_code")}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                fullWidth
+                onClick={() => { setStep("phone"); setCode(""); setDevCode(""); }}
+              >
+                ← {t("back")}
+              </Button>
+            </form>
+          )}
+        </CardBody>
+      </Card>
     </div>
   );
 }
