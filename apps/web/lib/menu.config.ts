@@ -97,6 +97,9 @@ export const menuTree: MenuGroup[] = [
     children: [
       { i18nKey: "accounting_accounts", label: "Hisoblar rejasi", href: "/accounting/accounts" },
       { i18nKey: "accounting_journal",  label: "Jurnal",          href: "/accounting/journal" },
+      { i18nKey: "accounting_trial_balance", label: "Aylanma-saldo", href: "/accounting/trial-balance" },
+      { i18nKey: "accounting_pnl",           label: "Foyda-zarar",   href: "/accounting/pnl" },
+      { i18nKey: "accounting_balance_sheet", label: "Balans",        href: "/accounting/balance-sheet" },
     ],
   },
 

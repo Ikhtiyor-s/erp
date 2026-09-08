@@ -196,3 +196,118 @@ async def create_journal_entry(
     )
     await db.commit()
     return {"id": entry_id}
+
+
+# =========================================================
+# REPORTS (Phase 3)
+# =========================================================
+
+async def _account_totals(db: AsyncSession, org_id: str, date_from: str | None, date_to: str | None):
+    """Per-account debit/credit totals (in base currency) for lines whose
+    entry falls in [date_from, date_to] — either bound may be None (open-ended).
+    Accounts with no activity in range still appear, with zero totals."""
+    where_date = "TRUE"
+    params: dict = {"o": org_id}
+    if date_from:
+        where_date += " AND e.entry_date >= :df"
+        params["df"] = date_from
+    if date_to:
+        where_date += " AND e.entry_date <= :dt"
+        params["dt"] = date_to
+
+    res = await db.execute(
+        text(f"""
+            SELECT a.id, a.code, a.name, a.type,
+                   COALESCE(SUM(CASE WHEN l.debit > 0 THEN l.amount_base ELSE 0 END), 0) AS total_debit,
+                   COALESCE(SUM(CASE WHEN l.credit > 0 THEN l.amount_base ELSE 0 END), 0) AS total_credit
+            FROM accounts a
+            LEFT JOIN journal_lines l ON l.account_id = a.id
+            LEFT JOIN journal_entries e ON e.id = l.entry_id
+            WHERE a.organization_id = :o AND (e.entry_date IS NULL OR ({where_date}))
+            GROUP BY a.id, a.code, a.name, a.type
+            ORDER BY a.code
+        """),
+        params,
+    )
+    return [dict(r._mapping) for r in res]
+
+
+@router.get("/reports/trial-balance")
+async def trial_balance(
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    rows = await _account_totals(db, org_id, date_from, date_to)
+    total_debit = sum(r["total_debit"] for r in rows)
+    total_credit = sum(r["total_credit"] for r in rows)
+    return {"rows": rows, "total_debit": total_debit, "total_credit": total_credit}
+
+
+@router.get("/reports/pnl")
+async def profit_and_loss(
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    rows = await _account_totals(db, org_id, date_from, date_to)
+    income_rows = [
+        {**r, "amount": float(r["total_credit"]) - float(r["total_debit"])}
+        for r in rows if r["type"] == "income"
+    ]
+    expense_rows = [
+        {**r, "amount": float(r["total_debit"]) - float(r["total_credit"])}
+        for r in rows if r["type"] == "expense"
+    ]
+    total_income = sum(r["amount"] for r in income_rows)
+    total_expense = sum(r["amount"] for r in expense_rows)
+    return {
+        "income": income_rows,
+        "expense": expense_rows,
+        "total_income": total_income,
+        "total_expense": total_expense,
+        "net_profit": total_income - total_expense,
+    }
+
+
+@router.get("/reports/balance-sheet")
+async def balance_sheet(
+    as_of: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    rows = await _account_totals(db, org_id, None, as_of)
+    assets = [
+        {**r, "balance": float(r["total_debit"]) - float(r["total_credit"])}
+        for r in rows if r["type"] == "asset"
+    ]
+    liabilities = [
+        {**r, "balance": float(r["total_credit"]) - float(r["total_debit"])}
+        for r in rows if r["type"] == "liability"
+    ]
+    equity = [
+        {**r, "balance": float(r["total_credit"]) - float(r["total_debit"])}
+        for r in rows if r["type"] == "equity"
+    ]
+    # Retained earnings: income/expense accounts are never formally closed to
+    # equity, so the balance sheet must fold current net profit into equity
+    # itself for Assets = Liabilities + Equity to hold.
+    net_profit = sum(float(r["total_credit"]) - float(r["total_debit"]) for r in rows if r["type"] == "income") - \
+                 sum(float(r["total_debit"]) - float(r["total_credit"]) for r in rows if r["type"] == "expense")
+
+    total_assets = sum(r["balance"] for r in assets)
+    total_liabilities = sum(r["balance"] for r in liabilities)
+    total_equity = sum(r["balance"] for r in equity) + net_profit
+
+    return {
+        "assets": assets,
+        "liabilities": liabilities,
+        "equity": equity,
+        "retained_earnings": net_profit,
+        "total_assets": total_assets,
+        "total_liabilities": total_liabilities,
+        "total_equity": total_equity,
+        "balanced": abs(total_assets - (total_liabilities + total_equity)) < 0.01,
+    }
