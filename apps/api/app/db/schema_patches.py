@@ -2084,6 +2084,17 @@ END $$
     CREATE INDEX IF NOT EXISTS idx_marketplace_orders_org
         ON marketplace_orders(organization_id, received_at DESC)
     """,
+
+    # Filiallar (branches) — locations jadvalini kengaytirish, warehouses/employees'ni bog'lash.
+    "ALTER TABLE locations ADD COLUMN IF NOT EXISTS code VARCHAR(30)",
+    "ALTER TABLE locations ADD COLUMN IF NOT EXISTS responsible_id UUID REFERENCES employees(id)",
+    "ALTER TABLE locations ADD COLUMN IF NOT EXISTS comment TEXT",
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_locations_code
+        ON locations(organization_id, code) WHERE code IS NOT NULL
+    """,
+    "ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS location_id INT REFERENCES locations(id)",
+    "ALTER TABLE employees ADD COLUMN IF NOT EXISTS location_id INT REFERENCES locations(id)",
 ]
 
 # Enum value additions — must run outside a transaction (AUTOCOMMIT).

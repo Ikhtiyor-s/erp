@@ -39,23 +39,29 @@ class WarehouseIn(BaseModel):
     address: str | None = None
     responsible_id: UUID | None = None
     type_id: int | None = None
+    location_id: int | None = None
 
 
 @router.get("/warehouses", dependencies=[Depends(require_permission("warehouse.warehouse.view"))])
 async def list_warehouses(
+    location_id: int | None = None,
     db: AsyncSession = Depends(get_db), org_id: str = Depends(get_current_org_id),
 ):
     res = await db.execute(
         text("SELECT w.id, w.name, w.address, w.responsible_id, "
              "e.full_name AS responsible_name, "
              "w.type_id, wt.name AS type_name, "
+             "w.location_id, l.name AS location_name, "
              "(SELECT COUNT(DISTINCT product_id) FROM stock_balances sb WHERE sb.warehouse_id = w.id AND sb.quantity > 0) AS product_count, "
              "(SELECT COALESCE(SUM(sb.quantity * sb.avg_cost), 0) FROM stock_balances sb WHERE sb.warehouse_id = w.id) AS stock_value "
              "FROM warehouses w "
              "LEFT JOIN employees e ON e.id = w.responsible_id "
              "LEFT JOIN warehouse_types wt ON wt.id = w.type_id "
-             "WHERE w.organization_id = :o AND w.is_active = TRUE ORDER BY w.name"),
-        {"o": org_id},
+             "LEFT JOIN locations l ON l.id = w.location_id "
+             "WHERE w.organization_id = :o AND w.is_active = TRUE "
+             "AND (CAST(:loc AS INT) IS NULL OR w.location_id = CAST(:loc AS INT)) "
+             "ORDER BY w.name"),
+        {"o": org_id, "loc": location_id},
     )
     return [dict(r._mapping) for r in res]
 
@@ -67,11 +73,11 @@ async def create_warehouse(
     org_id: str = Depends(get_current_org_id),
 ):
     res = await db.execute(
-        text("INSERT INTO warehouses (organization_id, name, address, responsible_id, type_id) "
-             "VALUES (:o, :n, :a, :r, :tid) RETURNING id"),
+        text("INSERT INTO warehouses (organization_id, name, address, responsible_id, type_id, location_id) "
+             "VALUES (:o, :n, :a, :r, :tid, :loc) RETURNING id"),
         {"o": org_id, "n": p.name, "a": p.address,
          "r": str(p.responsible_id) if p.responsible_id else None,
-         "tid": p.type_id},
+         "tid": p.type_id, "loc": p.location_id},
     )
     await db.commit()
     return {"id": res.scalar()}
@@ -83,11 +89,11 @@ async def update_warehouse(
     org_id: str = Depends(get_current_org_id),
 ):
     res = await db.execute(
-        text("UPDATE warehouses SET name=:n, address=:a, responsible_id=:r, type_id=:tid "
+        text("UPDATE warehouses SET name=:n, address=:a, responsible_id=:r, type_id=:tid, location_id=:loc "
              "WHERE id = :id AND organization_id = :o RETURNING id"),
         {"id": wid, "o": org_id, "n": p.name, "a": p.address,
          "r": str(p.responsible_id) if p.responsible_id else None,
-         "tid": p.type_id},
+         "tid": p.type_id, "loc": p.location_id},
     )
     if not res.scalar():
         raise HTTPException(status.HTTP_404_NOT_FOUND)

@@ -27,9 +27,12 @@ type Emp = {
   currency_code?: string;
   hire_date?: string;
   balance?: string;
+  location_id?: number | null;
+  location_name?: string | null;
 };
 type Pos = { id: number; name: string };
 type Cur = { id: number; code: string; name?: string };
+type Loc = { id: number; name: string };
 
 const empty = {
   full_name: "",
@@ -39,6 +42,7 @@ const empty = {
   salary: "",
   salary_currency: null as number | null,
   hire_date: "",
+  location_id: null as number | null,
 };
 
 const fmt = (v: any) =>
@@ -50,8 +54,9 @@ export default function EmployeesPage() {
   const [rows, setRows] = useState<Emp[]>([]);
   const [positions, setPositions] = useState<Pos[]>([]);
   const [currencies, setCurrencies] = useState<Cur[]>([]);
+  const [locations, setLocations] = useState<Loc[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ q: "", position_id: "" });
+  const [filters, setFilters] = useState({ q: "", position_id: "", location_id: "" });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [editId, setEditId] = useState<string | null>(null);
@@ -64,6 +69,7 @@ export default function EmployeesPage() {
       const p = new URLSearchParams();
       if (filters.q) p.set("q", filters.q);
       if (filters.position_id) p.set("position_id", filters.position_id);
+      if (filters.location_id) p.set("location_id", filters.location_id);
       const qs = p.toString();
       setRows((await api.get<Emp[]>(`/hr/employees${qs ? "?" + qs : ""}`)).data);
     } finally {
@@ -75,6 +81,7 @@ export default function EmployeesPage() {
     Promise.all([
       api.get<Pos[]>("/hr/positions").then((r) => setPositions(r.data)).catch(() => {}),
       api.get<Cur[]>("/reference/currencies").then((r) => setCurrencies(r.data)).catch(() => {}),
+      api.get<Loc[]>("/reference/locations").then((r) => setLocations(r.data)).catch(() => {}),
     ]);
     load();
   }, []);
@@ -87,6 +94,7 @@ export default function EmployeesPage() {
         salary: form.salary ? Number(form.salary) : null,
         salary_currency: form.salary_currency || null,
         hire_date: form.hire_date || null,
+        location_id: form.location_id || null,
       };
       if (editId) await api.put(`/hr/employees/${editId}`, payload);
       else await api.post("/hr/employees", payload);
@@ -130,6 +138,12 @@ export default function EmployeesPage() {
       header: t("ui__должность_b9723619"),
       width: "160px",
       render: (r) => r.position_name || "—",
+    },
+    {
+      key: "location_name",
+      header: "Filial",
+      width: "140px",
+      render: (r) => r.location_name || "—",
     },
     {
       key: "phone",
@@ -246,6 +260,25 @@ export default function EmployeesPage() {
             ))}
           </select>
         </div>
+        <div>
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
+            Filial
+          </label>
+          <select
+            className={input}
+            value={filters.location_id}
+            onChange={(e) =>
+              setFilters({ ...filters, location_id: e.target.value })
+            }
+          >
+            <option value="">{t("ui__все_a07b234e")}</option>
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="flex items-end gap-2">
           <Button onClick={load}>
             {t("ui__фильтр_2f884b41")}
@@ -253,7 +286,7 @@ export default function EmployeesPage() {
           <Button
             variant="outline"
             onClick={() => {
-              setFilters({ q: "", position_id: "" });
+              setFilters({ q: "", position_id: "", location_id: "" });
               setTimeout(load, 0);
             }}
           >
@@ -275,6 +308,7 @@ export default function EmployeesPage() {
             salary: r.salary || "",
             salary_currency: r.salary_currency || null,
             hire_date: r.hire_date?.slice(0, 10) || "",
+            location_id: r.location_id ?? null,
           });
           setEditId(r.id);
           setOpen(true);
@@ -313,6 +347,25 @@ export default function EmployeesPage() {
               {positions.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Filial">
+            <select
+              className={input}
+              value={form.location_id ?? ""}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  location_id: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+            >
+              <option value="">{t("ui__нет_7b07413e")}</option>
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
                 </option>
               ))}
             </select>

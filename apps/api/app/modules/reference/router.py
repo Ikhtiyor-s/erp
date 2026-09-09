@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -472,6 +473,9 @@ class LocationIn(BaseModel):
     name: str
     address: str | None = None
     phone: str | None = None
+    code: str | None = None
+    responsible_id: UUID | None = None
+    comment: str | None = None
 
 
 @router.get("/locations")
@@ -479,8 +483,12 @@ async def list_locations(
     db: AsyncSession = Depends(get_db), org_id: str = Depends(get_current_org_id),
 ):
     res = await db.execute(
-        text("SELECT id, name, address, phone FROM locations "
-             "WHERE organization_id = :o AND is_active = TRUE"),
+        text("SELECT l.id, l.name, l.address, l.phone, l.code, l.comment, "
+             "l.responsible_id, e.full_name AS responsible_name, "
+             "(SELECT COUNT(*) FROM warehouses w WHERE w.location_id = l.id AND w.is_active = TRUE) AS warehouse_count "
+             "FROM locations l "
+             "LEFT JOIN employees e ON e.id = l.responsible_id "
+             "WHERE l.organization_id = :o AND l.is_active = TRUE ORDER BY l.name"),
         {"o": org_id},
     )
     return [dict(r._mapping) for r in res]
@@ -492,9 +500,10 @@ async def create_location(
     org_id: str = Depends(get_current_org_id),
 ):
     res = await db.execute(
-        text("INSERT INTO locations (organization_id, name, address, phone) "
-             "VALUES (:o, :n, :a, :p) RETURNING id"),
-        {"o": org_id, "n": p.name, "a": p.address, "p": p.phone},
+        text("INSERT INTO locations (organization_id, name, address, phone, code, responsible_id, comment) "
+             "VALUES (:o, :n, :a, :p, :c, :r, :cm) RETURNING id"),
+        {"o": org_id, "n": p.name, "a": p.address, "p": p.phone, "c": p.code,
+         "r": str(p.responsible_id) if p.responsible_id else None, "cm": p.comment},
     )
     await db.commit()
     return {"id": res.scalar()}
@@ -506,9 +515,10 @@ async def update_location(
     org_id: str = Depends(get_current_org_id),
 ):
     res = await db.execute(
-        text("UPDATE locations SET name=:n, address=:a, phone=:p "
+        text("UPDATE locations SET name=:n, address=:a, phone=:p, code=:c, responsible_id=:r, comment=:cm "
              "WHERE id = :id AND organization_id = :o RETURNING id"),
-        {"id": lid, "o": org_id, "n": p.name, "a": p.address, "p": p.phone},
+        {"id": lid, "o": org_id, "n": p.name, "a": p.address, "p": p.phone, "c": p.code,
+         "r": str(p.responsible_id) if p.responsible_id else None, "cm": p.comment},
     )
     if not res.scalar():
         raise HTTPException(status.HTTP_404_NOT_FOUND)

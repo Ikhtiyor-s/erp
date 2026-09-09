@@ -22,13 +22,19 @@ type Wh = {
   responsible_name?: string;
   type_id?: number | null;
   type_name?: string | null;
+  location_id?: number | null;
+  location_name?: string | null;
   product_count?: number;
   stock_value?: string;
 };
 type Emp = { id: string; full_name: string };
 type WhType = { id: number; name: string; code: string | null };
+type Loc = { id: number; name: string };
 
-const empty = { name: "", address: "", responsible_id: null as string | null, type_id: null as number | null };
+const empty = {
+  name: "", address: "", responsible_id: null as string | null,
+  type_id: null as number | null, location_id: null as number | null,
+};
 const fmt = (v: any) =>
   Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 
@@ -38,6 +44,7 @@ export default function WarehousesPage() {
   const [rows, setRows] = useState<Wh[]>([]);
   const [employees, setEmployees] = useState<Emp[]>([]);
   const [whTypes, setWhTypes] = useState<WhType[]>([]);
+  const [locations, setLocations] = useState<Loc[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
@@ -63,6 +70,10 @@ export default function WarehousesPage() {
       .get<WhType[]>("/warehouse/types")
       .then((r) => setWhTypes(r.data))
       .catch(() => {});
+    api
+      .get<Loc[]>("/reference/locations")
+      .then((r) => setLocations(r.data))
+      .catch(() => {});
     load();
   }, []);
 
@@ -72,6 +83,7 @@ export default function WarehousesPage() {
         ...form,
         responsible_id: form.responsible_id || null,
         type_id: form.type_id || null,
+        location_id: form.location_id || null,
       };
       if (editId) await api.put(`/warehouse/warehouses/${editId}`, payload);
       else await api.post("/warehouse/warehouses", payload);
@@ -128,6 +140,12 @@ export default function WarehousesPage() {
       key: "address",
       header: t("ui__адрес_80148fa5"),
       render: (r) => r.address || "—",
+    },
+    {
+      key: "location_name",
+      header: "Filial",
+      width: "160px",
+      render: (r) => r.location_name || "—",
     },
     {
       key: "responsible_name",
@@ -223,6 +241,7 @@ export default function WarehousesPage() {
               address: r.address || "",
               responsible_id: r.responsible_id || null,
               type_id: r.type_id ?? null,
+              location_id: r.location_id ?? null,
             });
             setEditId(r.id);
             setOpen(true);
@@ -245,6 +264,9 @@ export default function WarehousesPage() {
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-ink-900 dark:text-ink-100 truncate">{r.name}</p>
                 {r.address && <p className="text-sm text-ink-500 dark:text-ink-400 truncate">{r.address}</p>}
+                {r.location_name && (
+                  <p className="text-xs text-ink-400 dark:text-ink-500 mt-0.5">Filial: {r.location_name}</p>
+                )}
                 {r.responsible_name && (
                   <p className="text-xs text-ink-400 dark:text-ink-500 mt-0.5">{t("ui__ответственный_ab60703b")}: {r.responsible_name}</p>
                 )}
@@ -259,7 +281,12 @@ export default function WarehousesPage() {
                   variant="outline"
                   size="xs"
                   onClick={() => {
-                    setForm({ name: r.name, address: r.address || "", responsible_id: r.responsible_id || null, type_id: r.type_id ?? null });
+                    setForm({
+                      name: r.name, address: r.address || "",
+                      responsible_id: r.responsible_id || null,
+                      type_id: r.type_id ?? null,
+                      location_id: r.location_id ?? null,
+                    });
                     setEditId(r.id);
                     setOpen(true);
                   }}
@@ -299,6 +326,25 @@ export default function WarehousesPage() {
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
             />
+          </Field>
+          <Field label="Filial">
+            <select
+              className={input}
+              value={form.location_id ?? ""}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  location_id: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+            >
+              <option value="">{t("ui__нет_7b07413e")}</option>
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label={t("ui__ответственный_ab60703b")}>
             <select

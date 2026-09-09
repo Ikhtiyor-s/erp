@@ -91,12 +91,14 @@ class EmployeeIn(BaseModel):
     salary: Decimal | None = None
     salary_currency: int | None = None
     hire_date: date | None = None
+    location_id: int | None = None
 
 
 @router.get("/employees")
 async def list_employees(
     q: str | None = None,
     position_id: int | None = None,
+    location_id: int | None = None,
     db: AsyncSession = Depends(get_db), org_id: str = Depends(get_current_org_id),
 ):
     where = "WHERE e.organization_id = :o AND e.is_active = TRUE"
@@ -107,16 +109,21 @@ async def list_employees(
     if position_id:
         where += " AND e.position_id = :pos"
         params["pos"] = position_id
+    if location_id:
+        where += " AND e.location_id = :loc"
+        params["loc"] = location_id
     res = await db.execute(
         text(f"SELECT e.id, e.full_name, e.position_id, p.name AS position_name, "
              f"('A' || SUBSTRING(e.id::text, 1, 8)) AS uuid_label, "
              f"e.phone, e.email, e.salary, e.salary_currency, e.hire_date, "
              f"cur.code AS currency_code, "
+             f"e.location_id, l.name AS location_name, "
              f"COALESCE((SELECT SUM(CASE WHEN direction='in' THEN amount ELSE -amount END) "
              f"          FROM cash_movements WHERE employee_id = e.id), 0) AS balance "
              f"FROM employees e "
              f"LEFT JOIN positions p ON p.id = e.position_id "
              f"LEFT JOIN currencies cur ON cur.id = e.salary_currency "
+             f"LEFT JOIN locations l ON l.id = e.location_id "
              f"{where} ORDER BY e.full_name"),
         params,
     )
@@ -131,10 +138,11 @@ async def create_employee(
     eid = uuid4()
     await db.execute(
         text("INSERT INTO employees (id, organization_id, full_name, position_id, phone, email, "
-             "salary, salary_currency, hire_date) "
-             "VALUES (:id, :o, :n, :pos, :ph, :e, :s, :sc, :hd)"),
+             "salary, salary_currency, hire_date, location_id) "
+             "VALUES (:id, :o, :n, :pos, :ph, :e, :s, :sc, :hd, :loc)"),
         {"id": str(eid), "o": org_id, "n": p.full_name, "pos": p.position_id,
-         "ph": p.phone, "e": p.email, "s": p.salary, "sc": p.salary_currency, "hd": p.hire_date},
+         "ph": p.phone, "e": p.email, "s": p.salary, "sc": p.salary_currency, "hd": p.hire_date,
+         "loc": p.location_id},
     )
     await db.commit()
     return {"id": str(eid)}
@@ -147,10 +155,11 @@ async def update_employee(
 ):
     res = await db.execute(
         text("UPDATE employees SET full_name=:n, position_id=:pos, phone=:ph, email=:e, "
-             "salary=:s, salary_currency=:sc, hire_date=:hd "
+             "salary=:s, salary_currency=:sc, hire_date=:hd, location_id=:loc "
              "WHERE id = :id AND organization_id = :o RETURNING id"),
         {"id": str(eid), "o": org_id, "n": p.full_name, "pos": p.position_id,
-         "ph": p.phone, "e": p.email, "s": p.salary, "sc": p.salary_currency, "hd": p.hire_date},
+         "ph": p.phone, "e": p.email, "s": p.salary, "sc": p.salary_currency, "hd": p.hire_date,
+         "loc": p.location_id},
     )
     if not res.scalar():
         raise HTTPException(status.HTTP_404_NOT_FOUND)
