@@ -18,6 +18,7 @@ from app.modules.integration.base import (
 from app.modules.integration.delivery.bts import BTSDeliveryIntegration
 from app.modules.integration.delivery.yandex import YandexDeliveryIntegration
 from app.modules.integration.didox import DidoxIntegration
+from app.modules.integration.marketplace import MarketplaceIntegration
 from app.modules.integration.payments.alif import AlifService
 from app.modules.integration.payments.multicard import MulticardService
 from app.modules.integration.payments.rahmat import RahmatService
@@ -277,6 +278,7 @@ INTEGRATION_REGISTRY: dict[str, type[IntegrationBase]] = {
     "barcode":          BarcodeIntegration,
     "1c_export":        OneCExportIntegration,
     "mxik":             MxikIntegration,
+    "marketplace":      MarketplaceIntegration,
 }
 
 

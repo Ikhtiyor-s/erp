@@ -2124,6 +2124,7 @@
       "filter_communication": "Communication",
       "filter_e_invoice": "E-Invoice",
       "filter_accounting": "Accounting",
+      "filter_marketplace": "Marketplace",
       "filter_tools": "Utility",
       "status_active": "Active",
       "status_configured": "Configured",

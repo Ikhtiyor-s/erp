@@ -1921,6 +1921,7 @@
       "filter_communication": "Baylanıs",
       "filter_e_invoice": "E-faktura",
       "filter_accounting": "Buxgalteriya",
+      "filter_marketplace": "Marketplace",
       "filter_tools": "Qurallar",
       "status_active": "Aktiv",
       "status_configured": "Sozlangan",

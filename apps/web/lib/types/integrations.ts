@@ -10,6 +10,7 @@ export type IntegrationCategory =
   | "e_invoice"
   | "accounting"
   | "communication"
+  | "marketplace"
   | "tools";
 
 export interface IntegrationInfo {

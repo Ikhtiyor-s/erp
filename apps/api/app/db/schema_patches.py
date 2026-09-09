@@ -2049,6 +2049,41 @@ END $$
         END LOOP;
     END $$
     """,
+
+    # Marketplace sync (audit gap #3) — sync attempt log + received order inbox.
+    # Rollback: DROP TABLE IF EXISTS marketplace_orders, marketplace_sync_log CASCADE;
+    """
+    CREATE TABLE IF NOT EXISTS marketplace_sync_log (
+        id               BIGSERIAL PRIMARY KEY,
+        organization_id  UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        direction        VARCHAR(20) NOT NULL,  -- export_products | import_orders
+        status           VARCHAR(20) NOT NULL,  -- success | error | skipped
+        item_count       INT DEFAULT 0,
+        message          TEXT,
+        created_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_marketplace_sync_log_org
+        ON marketplace_sync_log(organization_id, created_at DESC)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS marketplace_orders (
+        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        external_order_id VARCHAR(100),
+        customer_name     VARCHAR(200),
+        customer_phone    VARCHAR(20),
+        total_amount      NUMERIC(20,2) DEFAULT 0,
+        raw_payload       JSONB,
+        status            VARCHAR(20) NOT NULL DEFAULT 'new',  -- new | reviewed | dismissed
+        received_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_marketplace_orders_org
+        ON marketplace_orders(organization_id, received_at DESC)
+    """,
 ]
 
 # Enum value additions — must run outside a transaction (AUTOCOMMIT).

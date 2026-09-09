@@ -104,6 +104,9 @@ def _is_skipped(path: str) -> bool:
     # Delivery courier webhooks are public callbacks (no auth from courier side).
     if path.startswith("/api/v1/integrations/delivery/") and path.endswith("/webhook"):
         return True
+    # Marketplace order-import webhook — public, org identified via org_code in path.
+    if path.startswith("/api/v1/integrations/marketplace/webhook/"):
+        return True
     return False
 
 

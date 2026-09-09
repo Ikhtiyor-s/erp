@@ -2124,6 +2124,7 @@
       "filter_communication": "Связь",
       "filter_e_invoice": "Э-фактура",
       "filter_accounting": "Бухгалтерия",
+      "filter_marketplace": "Маркетплейс",
       "filter_tools": "Утилиты",
       "status_active": "Активен",
       "status_configured": "Настроен",

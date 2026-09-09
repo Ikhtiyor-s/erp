@@ -19,6 +19,7 @@ const CATEGORY_FILTER_KEYS: { value: FilterCategory; labelKey: string }[] = [
   { value: "communication", labelKey: "filter_communication" },
   { value: "e_invoice", labelKey: "filter_e_invoice" },
   { value: "accounting", labelKey: "filter_accounting" },
+  { value: "marketplace", labelKey: "filter_marketplace" },
   { value: "tools", labelKey: "filter_tools" },
 ];
 
@@ -45,6 +46,8 @@ function settingsUrlFor(code: string, category: IntegrationCategory): string {
       return "/tools/1c-export";
     case "mxik":
       return "/warehouse/products";
+    case "marketplace":
+      return "/settings/marketplace";
     case "barcode":
       return "/tools/label-print";
     default:

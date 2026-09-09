@@ -3,9 +3,11 @@
 Separate from the legacy /api/v1/integration/* router which handles
 Click/Payme/Telegram webhooks and MUST NOT be touched.
 """
+import json
 import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_org_id, get_db
@@ -13,6 +15,7 @@ from app.core.rate_limit import limiter
 from app.modules.integration.delivery.bts import BTSDeliveryIntegration
 from app.modules.integration.delivery.yandex import YandexDeliveryIntegration
 from app.modules.integration.registry import INTEGRATION_REGISTRY, get_integration
+from app.modules.integration.marketplace import build_export_payload
 
 log = logging.getLogger(__name__)
 
@@ -156,6 +159,158 @@ async def delivery_webhook(
         body = {}
     log.info("delivery_webhook provider=%s keys=%s", provider, list(body.keys()))
     return {"ok": True, "stubbed": True, "provider": provider, "note": f"{provider} webhook scaffold — real implementation pending credentials"}
+
+
+# ---------------------------------------------------------------------------
+# Marketplace sync (audit gap #3) — /integrations/marketplace/...
+# Must come BEFORE /{code} catch-all.
+# ---------------------------------------------------------------------------
+
+@router.post("/marketplace/sync")
+async def marketplace_sync(
+    org_id: str = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export active products+stock to the configured marketplace endpoint.
+    Always logs the attempt (success, http error, connection error, or
+    skipped-not-configured) so staff can see what happened."""
+    integration = get_integration("marketplace", db, org_id)
+    cfg = await integration.get_raw_config()
+    payload = await build_export_payload(db, org_id)
+
+    if not cfg.get("enabled") or not cfg.get("api_url"):
+        await db.execute(
+            text("""
+                INSERT INTO marketplace_sync_log (organization_id, direction, status, item_count, message)
+                VALUES (:o, 'export_products', 'skipped', :c, 'Integratsiya sozlanmagan yoki o''chirilgan')
+            """),
+            {"o": org_id, "c": payload["count"]},
+        )
+        await db.commit()
+        return {"status": "skipped", "message": "Integratsiya sozlanmagan yoki o'chirilgan", "item_count": payload["count"]}
+
+    import httpx
+    status_, message = "error", ""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                cfg["api_url"], json=payload,
+                headers={"Authorization": f"Bearer {cfg.get('api_key', '')}", "X-Store-Id": str(cfg.get("store_id", ""))},
+            )
+        status_ = "success" if resp.status_code < 300 else "error"
+        message = f"HTTP {resp.status_code}"
+    except Exception as e:
+        message = str(e)[:500]
+
+    await db.execute(
+        text("""
+            INSERT INTO marketplace_sync_log (organization_id, direction, status, item_count, message)
+            VALUES (:o, 'export_products', :s, :c, :m)
+        """),
+        {"o": org_id, "s": status_, "c": payload["count"], "m": message},
+    )
+    await db.commit()
+    return {"status": status_, "message": message, "item_count": payload["count"]}
+
+
+@router.get("/marketplace/sync-log")
+async def marketplace_sync_log(
+    org_id: str = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(
+        text("""
+            SELECT id, direction, status, item_count, message, created_at
+            FROM marketplace_sync_log WHERE organization_id = :o
+            ORDER BY created_at DESC LIMIT 50
+        """),
+        {"o": org_id},
+    )
+    return [dict(r._mapping) for r in res]
+
+
+@router.get("/marketplace/orders")
+async def marketplace_orders_list(
+    org_id: str = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(
+        text("""
+            SELECT id, external_order_id, customer_name, customer_phone, total_amount, status, received_at
+            FROM marketplace_orders WHERE organization_id = :o
+            ORDER BY received_at DESC LIMIT 100
+        """),
+        {"o": org_id},
+    )
+    return [dict(r._mapping) for r in res]
+
+
+@router.put("/marketplace/orders/{order_id}/status")
+async def marketplace_order_set_status(
+    order_id: str,
+    body: dict = Body(...),
+    org_id: str = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db),
+):
+    new_status = body.get("status")
+    if new_status not in ("new", "reviewed", "dismissed"):
+        raise HTTPException(422, "Noto'g'ri status")
+    res = await db.execute(
+        text("UPDATE marketplace_orders SET status = :s WHERE id = :id AND organization_id = :o RETURNING id"),
+        {"s": new_status, "id": order_id, "o": org_id},
+    )
+    if not res.first():
+        raise HTTPException(404, "Buyurtma topilmadi")
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/marketplace/webhook/{org_code}")
+@limiter.limit("60/minute")
+async def marketplace_webhook(
+    request: Request,
+    org_code: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public webhook — receives an incoming order from the marketplace.
+    No fixed payload contract is assumed (no real marketplace API confirmed
+    yet); we store the raw body plus a best-effort parse of common field
+    names so staff can review it manually (see /integrations/marketplace/orders)."""
+    # Org codes aren't consistently-cased across the app (auto-generated ones are
+    # lowercase, e.g. "org-8c68f7cd"; customer-portal-style ones are uppercase) —
+    # match case-insensitively rather than assuming one convention.
+    org_res = await db.execute(text("SELECT id FROM organizations WHERE UPPER(code) = UPPER(:c)"), {"c": org_code})
+    org = org_res.first()
+    if not org:
+        raise HTTPException(404, "Tashkilot topilmadi")
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    customer = body.get("customer") if isinstance(body.get("customer"), dict) else {}
+    customer_name = body.get("customer_name") or customer.get("name")
+    customer_phone = body.get("customer_phone") or body.get("phone") or customer.get("phone")
+
+    await db.execute(
+        text("""
+            INSERT INTO marketplace_orders
+                (organization_id, external_order_id, customer_name, customer_phone, total_amount, raw_payload)
+            VALUES (:o, :ext, :cn, :cp, :amt, CAST(:raw AS JSONB))
+        """),
+        {
+            "o": str(org.id),
+            "ext": str(body.get("order_id") or body.get("id") or ""),
+            "cn": customer_name,
+            "cp": customer_phone,
+            "amt": body.get("total_amount") or body.get("total") or 0,
+            "raw": json.dumps(body),
+        },
+    )
+    await db.commit()
+    log.info("marketplace_webhook org=%s keys=%s", org_code, list(body.keys()))
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

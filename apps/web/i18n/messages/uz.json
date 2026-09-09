@@ -2126,6 +2126,7 @@
       "filter_communication": "Aloqa",
       "filter_e_invoice": "E-faktura",
       "filter_accounting": "Buxgalteriya",
+      "filter_marketplace": "Marketplace",
       "filter_tools": "Utility",
       "status_active": "Aktiv",
       "status_configured": "Sozlangan",
