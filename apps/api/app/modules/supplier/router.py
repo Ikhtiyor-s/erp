@@ -1,6 +1,7 @@
 import logging
 from datetime import date
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_org_id, get_current_user_id
 from app.modules.accounting.posting import JournalLine, post_journal_entry, get_default_account_id
+from app.modules.warehouse.service import _stock_apply
 
 log = logging.getLogger(__name__)
 
@@ -265,6 +267,16 @@ class SupplyIn(BaseModel):
     rate: Decimal = Decimal("1")
     notes: str | None = None
     items: list[SupplyItemIn] = Field(min_length=1)
+    mode: Literal["immediate", "draft"] = "immediate"
+
+
+class SupplyReceiveItemIn(BaseModel):
+    product_id: UUID
+    qty: Decimal = Field(gt=0)
+
+
+class SupplyReceiveIn(BaseModel):
+    items: list[SupplyReceiveItemIn] = Field(min_length=1)
 
 
 @router.get("/supplies")
@@ -295,31 +307,37 @@ async def create_supply(
 ):
     sid = uuid4()
     total = sum(i.quantity * i.price for i in p.items)
+    init_status = "draft" if p.mode == "draft" else "received"
 
     await db.execute(
         text("INSERT INTO supplies (id, organization_id, supplier_id, warehouse_id, "
              "supply_date, currency_id, rate, total_amount, status, notes, created_by) "
-             "VALUES (:id, :o, :sup, :wh, :d, :cur, :r, :t, 'received', :n, :u)"),
+             "VALUES (:id, :o, :sup, :wh, :d, :cur, :r, :t, :st, :n, :u)"),
         {"id": str(sid), "o": org_id, "sup": str(p.supplier_id), "wh": p.warehouse_id,
-         "d": p.supply_date, "cur": p.currency_id, "r": p.rate, "t": total,
+         "d": p.supply_date, "cur": p.currency_id, "r": p.rate, "t": total, "st": init_status,
          "n": p.notes, "u": user_id},
     )
 
     for it in p.items:
+        received_qty = 0 if p.mode == "draft" else it.quantity
         await db.execute(
-            text("INSERT INTO supply_items (supply_id, product_id, quantity, price) "
-                 "VALUES (:s, :p, :q, :pr)"),
-            {"s": str(sid), "p": str(it.product_id), "q": it.quantity, "pr": it.price},
+            text("INSERT INTO supply_items (supply_id, product_id, quantity, price, received_qty) "
+                 "VALUES (:s, :p, :q, :pr, :rq)"),
+            {"s": str(sid), "p": str(it.product_id), "q": it.quantity, "pr": it.price, "rq": received_qty},
         )
-        # Stock increase
-        await db.execute(
-            text("INSERT INTO stock_balances (warehouse_id, product_id, quantity, avg_cost) "
-                 "VALUES (:wh, :p, :q, :c) "
-                 "ON CONFLICT (warehouse_id, product_id) DO UPDATE "
-                 "SET quantity = stock_balances.quantity + :q, "
-                 "    avg_cost = ((stock_balances.quantity * stock_balances.avg_cost) + (:q * :c)) "
-                 "             / NULLIF(stock_balances.quantity + :q, 0)"),
-            {"wh": p.warehouse_id, "p": str(it.product_id), "q": it.quantity, "c": it.price},
+
+    if p.mode == "draft":
+        await db.commit()
+        return {"id": str(sid), "total_amount": total, "status": init_status}
+
+    # "immediate" rejimi — joriy (eskicha) xatti-harakat: darhol to'liq qoldiqqa qo'shiladi.
+    correlation_id = str(uuid4())
+    for it in p.items:
+        await _stock_apply(
+            db, p.warehouse_id, str(it.product_id), it.quantity, it.price,
+            allow_negative=True, org_id=org_id, operation_type="purchase_in",
+            source_type="supply", source_id=str(sid), correlation_id=correlation_id,
+            user_id=user_id,
         )
 
     # Accounting: Dr Tovar-moddiy zaxiralar / Cr Yetkazib beruvchilar qarzi.
@@ -340,7 +358,96 @@ async def create_supply(
         log.exception("Failed to post journal entry for supply %s", sid)
 
     await db.commit()
-    return {"id": str(sid), "total_amount": total}
+    return {"id": str(sid), "total_amount": total, "status": init_status}
+
+
+@router.post("/supplies/{sid}/receive")
+async def receive_supply(
+    sid: UUID, p: SupplyReceiveIn, db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    head = await db.execute(
+        text("SELECT id, status, warehouse_id, supplier_id, currency_id, rate "
+             "FROM supplies WHERE id = :id AND organization_id = :o FOR UPDATE"),
+        {"id": str(sid), "o": org_id},
+    )
+    head_row = head.first()
+    if not head_row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if head_row.status not in ("draft", "partially_received"):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Faqat 'draft' yoki 'partially_received' holatidagi xarid qabul qilinishi mumkin",
+        )
+
+    items_res = await db.execute(
+        text("SELECT id, product_id, quantity, price, received_qty "
+             "FROM supply_items WHERE supply_id = :id"),
+        {"id": str(sid)},
+    )
+    remaining_by_product = {
+        str(r.product_id): (r.id, Decimal(str(r.quantity)) - Decimal(str(r.received_qty)), Decimal(str(r.price)))
+        for r in items_res
+    }
+
+    correlation_id = str(uuid4())
+    receive_total = Decimal("0")
+    for it in p.items:
+        key = str(it.product_id)
+        if key not in remaining_by_product:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Tovar bu xaridda yo'q: {key}")
+        item_id, remaining, price = remaining_by_product[key]
+        if it.qty > remaining:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Qabul miqdori qolgan miqdordan ko'p: {it.qty} > {remaining}",
+            )
+        await _stock_apply(
+            db, head_row.warehouse_id, key, it.qty, price,
+            allow_negative=True, org_id=org_id, operation_type="purchase_in",
+            source_type="supply", source_id=str(sid), correlation_id=correlation_id,
+            user_id=user_id,
+        )
+        await db.execute(
+            text("UPDATE supply_items SET received_qty = received_qty + :q WHERE id = :id"),
+            {"q": it.qty, "id": item_id},
+        )
+        receive_total += it.qty * price
+
+    if receive_total > 0:
+        try:
+            inv_id = await get_default_account_id(db, org_id, "inventory")
+            ap_id = await get_default_account_id(db, org_id, "ap")
+            await post_journal_entry(
+                db, org_id,
+                [
+                    JournalLine(inv_id, debit=float(receive_total), rate=float(head_row.rate or 1),
+                                currency_id=head_row.currency_id),
+                    JournalLine(ap_id, credit=float(receive_total), rate=float(head_row.rate or 1),
+                                currency_id=head_row.currency_id,
+                                counterparty_type="supplier", counterparty_id=str(head_row.supplier_id)),
+                ],
+                source_type="supply", source_id=str(sid),
+                description=f"Xarid qabul #{sid}", user_id=user_id,
+            )
+        except Exception:
+            log.exception("Failed to post journal entry for supply receive %s", sid)
+
+    fully_received = await db.execute(
+        text("SELECT COALESCE(SUM(quantity), 0) AS ordered, COALESCE(SUM(received_qty), 0) AS received "
+             "FROM supply_items WHERE supply_id = :id"),
+        {"id": str(sid)},
+    )
+    totals = fully_received.first()
+    new_status = "received" if totals.received >= totals.ordered else "partially_received"
+    await db.execute(
+        text("UPDATE supplies SET status = :s WHERE id = :id"),
+        {"s": new_status, "id": str(sid)},
+    )
+
+    await db.commit()
+    return {"ok": True, "status": new_status}
 
 
 @router.get("/supplies/{sid}")
@@ -357,7 +464,7 @@ async def get_supply(
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
     items = await db.execute(
-        text("SELECT si.product_id, p.name AS product_name, si.quantity, si.price, si.amount "
+        text("SELECT si.product_id, p.name AS product_name, si.quantity, si.price, si.amount, si.received_qty "
              "FROM supply_items si LEFT JOIN products p ON p.id = si.product_id "
              "WHERE si.supply_id = :id"),
         {"id": str(sid)},

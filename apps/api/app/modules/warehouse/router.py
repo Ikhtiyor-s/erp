@@ -1843,6 +1843,7 @@ class RecommendedIn(BaseModel):
 @router.get("/recommended-stock")
 async def list_recommended(
     warehouse_id: int | None = Query(None),
+    supplier_id: UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
     org_id: str = Depends(get_current_org_id),
 ):
@@ -1851,13 +1852,23 @@ async def list_recommended(
     if warehouse_id is not None:
         where += " AND rs.warehouse_id = :w"
         params["w"] = warehouse_id
+    if supplier_id is not None:
+        where += " AND p.default_supplier_id = :sup"
+        params["sup"] = str(supplier_id)
     res = await db.execute(
         text(f"SELECT rs.id, rs.warehouse_id, rs.product_id, rs.min_qty, rs.max_qty, "
              f"p.name AS product_name, w.name AS warehouse_name, "
+             f"p.default_supplier_id AS supplier_id, sup.name AS supplier_name, "
+             f"COALESCE("
+             f"  (SELECT si.price FROM supply_items si JOIN supplies s ON s.id = si.supply_id "
+             f"   WHERE si.product_id = rs.product_id AND s.organization_id = :o "
+             f"   ORDER BY s.supply_date DESC, s.created_at DESC LIMIT 1), "
+             f"  p.purchase_price) AS last_purchase_price, "
              f"COALESCE(sb.quantity, 0) AS current_qty, "
              f"CASE WHEN COALESCE(sb.quantity,0) < rs.min_qty THEN TRUE ELSE FALSE END AS below_min "
              f"FROM recommended_stock rs "
              f"LEFT JOIN products p ON p.id = rs.product_id "
+             f"LEFT JOIN suppliers sup ON sup.id = p.default_supplier_id "
              f"LEFT JOIN warehouses w ON w.id = rs.warehouse_id "
              f"LEFT JOIN stock_balances sb ON sb.warehouse_id = rs.warehouse_id "
              f"AND sb.product_id = rs.product_id "

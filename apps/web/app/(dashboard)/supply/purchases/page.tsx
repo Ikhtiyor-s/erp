@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Eye, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -26,12 +27,13 @@ type Line = { product_id: string; quantity: number; price: number };
 const today = () => new Date().toISOString().slice(0, 10);
 const empty = () => ({
   supplier_id: "", warehouse_id: null as number | null,
-  supply_date: today(), notes: "",
+  supply_date: today(), notes: "", mode: "immediate" as "immediate" | "draft",
   items: [{ product_id: "", quantity: 1, price: 0 }] as Line[],
 });
 
 export default function PurchasesPage() {
   const t = useTranslations("ui");
+  const router = useRouter();
   const [rows, setRows] = useState<Supply[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -84,6 +86,7 @@ export default function PurchasesPage() {
         warehouse_id: form.warehouse_id,
         supply_date: form.supply_date,
         notes: form.notes,
+        mode: form.mode,
         items: form.items.map((i) => ({
           product_id: i.product_id,
           quantity: Number(i.quantity),
@@ -136,15 +139,35 @@ export default function PurchasesPage() {
       key: "status",
       header: t("ui__статус_7203f7a4"),
       align: "center",
-      width: "120px",
+      width: "140px",
       render: (r) =>
         r.status === "received" ? (
           <Badge tone="success">{t("ui__принято_713e9366")}</Badge>
         ) : r.status === "cancelled" ? (
           <Badge tone="danger">{t("ui__отменено_81a04dab")}</Badge>
+        ) : r.status === "partially_received" ? (
+          <Badge tone="warning">Qisman qabul qilindi</Badge>
+        ) : r.status === "draft" ? (
+          <Badge tone="neutral">Qoralama</Badge>
         ) : (
           <Badge tone="neutral">{r.status}</Badge>
         ),
+    },
+    {
+      key: "id" as any,
+      header: "",
+      align: "center",
+      width: "50px",
+      render: (r) => (
+        <button
+          onClick={() => router.push(`/supply/purchases/${r.id}`)}
+          className="text-brand-600 hover:text-brand-700 dark:text-brand-400"
+          title="Ko'rish"
+          aria-label="Xaridni ko'rish"
+        >
+          <Eye size={14} aria-hidden="true" />
+        </button>
+      ),
     },
   ];
 
@@ -174,6 +197,13 @@ export default function PurchasesPage() {
             <Field label={t("ui__дата_8cdd8bb7")}>
               <input type="date" className={input} value={form.supply_date}
                 onChange={(e) => setForm({ ...form, supply_date: e.target.value })} />
+            </Field>
+            <Field label="Qabul rejimi">
+              <select className={input} value={form.mode}
+                onChange={(e) => setForm({ ...form, mode: e.target.value as "immediate" | "draft" })}>
+                <option value="immediate">To'liq qabul (darhol)</option>
+                <option value="draft">Bosqichma-bosqich (keyin qabul qilinadi)</option>
+              </select>
             </Field>
           </div>
 

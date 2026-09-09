@@ -17,9 +17,12 @@ type Row = {
   id: number; warehouse_id: number; product_id: string;
   warehouse_name: string; product_name: string;
   min_qty: string; max_qty?: string; current_qty: string; below_min: boolean;
+  supplier_id?: string | null; supplier_name?: string | null;
+  last_purchase_price?: string | null;
 };
 type Wh = { id: number; name: string };
 type Product = { id: string; name: string; sku?: string };
+type Supplier = { id: string; name: string };
 
 const fmt = (v: any) => Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 3 });
 
@@ -27,11 +30,14 @@ export default function RecommendedStockPage() {
   const t = useTranslations("ui");
   const [rows, setRows] = useState<Row[]>([]);
   const [warehouses, setWarehouses] = useState<Wh[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [whFilter, setWhFilter] = useState<number | "">("");
+  const [supplierFilter, setSupplierFilter] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [confirmItem, setConfirmItem] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [creatingPo, setCreatingPo] = useState(false);
 
   const [whId, setWhId] = useState<number | "">("");
   const [productId, setProductId] = useState<string>("");
@@ -41,18 +47,60 @@ export default function RecommendedStockPage() {
   const [productSearch, setProductSearch] = useState("");
   const [productOptions, setProductOptions] = useState<Product[]>([]);
 
-  async function load(wh?: number | "") {
+  async function load(wh?: number | "", supplierId?: string) {
     setLoading(true);
     try {
-      const url = wh ? `/warehouse/recommended-stock?warehouse_id=${wh}` : "/warehouse/recommended-stock";
-      setRows((await api.get<Row[]>(url)).data);
+      const params = new URLSearchParams();
+      if (wh) params.set("warehouse_id", String(wh));
+      if (supplierId) params.set("supplier_id", supplierId);
+      const qs = params.toString();
+      setRows((await api.get<Row[]>(`/warehouse/recommended-stock${qs ? "?" + qs : ""}`)).data);
     } finally { setLoading(false); }
   }
 
   useEffect(() => {
     api.get<Wh[]>("/warehouse/warehouses").then((r) => setWarehouses(r.data)).catch(() => {});
+    api.get<Supplier[]>("/supplier/suppliers").then((r) => setSuppliers(r.data)).catch(() => {});
     load();
   }, []);
+
+  async function createDraftPurchaseOrders() {
+    const candidates = rows.filter((r) => r.below_min && r.supplier_id);
+    if (candidates.length === 0) {
+      toast.error("Ta'minotchisi belgilangan, minimumdan past tovar topilmadi");
+      return;
+    }
+    const grouped = new Map<string, { supplierId: string; warehouseId: number; items: Row[] }>();
+    for (const r of candidates) {
+      const qty = Number(r.min_qty) - Number(r.current_qty);
+      if (qty <= 0) continue;
+      const key = `${r.supplier_id}:${r.warehouse_id}`;
+      const g = grouped.get(key) || { supplierId: r.supplier_id!, warehouseId: r.warehouse_id, items: [] };
+      g.items.push(r);
+      grouped.set(key, g);
+    }
+    setCreatingPo(true);
+    try {
+      let created = 0;
+      for (const { supplierId, warehouseId, items } of grouped.values()) {
+        await api.post("/supplier/purchase-orders", {
+          supplier_id: supplierId,
+          warehouse_id: warehouseId,
+          items: items.map((r) => ({
+            product_id: r.product_id,
+            quantity: Number(r.min_qty) - Number(r.current_qty),
+            price: Number(r.last_purchase_price) || 0,
+          })),
+        });
+        created += 1;
+      }
+      toast.success(`${created} ta zakupka arizasi (draft) yaratildi`);
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Xato"));
+    } finally {
+      setCreatingPo(false);
+    }
+  }
 
   useEffect(() => {
     if (productSearch.length < 2) { setProductOptions([]); return; }
@@ -108,6 +156,10 @@ export default function RecommendedStockPage() {
       render: (r) => <span className="font-mono">{fmt(r.min_qty)}</span> },
     { key: "max_qty", header: t("ui__максимум_81e223a9"), align: "right", width: "120px",
       render: (r) => r.max_qty ? <span className="font-mono">{fmt(r.max_qty)}</span> : "—" },
+    { key: "supplier_name", header: "Ta'minotchi", width: "180px",
+      render: (r) => r.supplier_name || "—" },
+    { key: "last_purchase_price", header: "Oxirgi narx", align: "right", width: "120px",
+      render: (r) => r.last_purchase_price ? <span className="font-mono">{fmt(r.last_purchase_price)}</span> : "—" },
   ];
 
   return (
@@ -120,11 +172,25 @@ export default function RecommendedStockPage() {
         <select className={`${input} max-w-xs`} value={whFilter}
           onChange={(e) => {
             const v = e.target.value ? Number(e.target.value) : "";
-            setWhFilter(v); load(v);
+            setWhFilter(v); load(v, supplierFilter);
           }}>
           <option value="">{t("ui__все_склады_ce2fe5e2")}</option>
           {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
+
+        <label className="text-sm text-ink-600 dark:text-ink-300">Ta'minotchi</label>
+        <select className={`${input} max-w-xs`} value={supplierFilter}
+          onChange={(e) => {
+            const v = e.target.value;
+            setSupplierFilter(v); load(whFilter, v);
+          }}>
+          <option value="">Barcha ta'minotchilar</option>
+          {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+
+        <Button variant="outline" size="sm" onClick={createDraftPurchaseOrders} disabled={creatingPo}>
+          Zakupka yaratish
+        </Button>
 
         {belowMinCount > 0 && (
           <Badge tone="danger" dot className="ml-auto">

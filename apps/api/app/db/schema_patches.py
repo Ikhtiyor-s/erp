@@ -2095,6 +2095,9 @@ END $$
     """,
     "ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS location_id INT REFERENCES locations(id)",
     "ALTER TABLE employees ADD COLUMN IF NOT EXISTS location_id INT REFERENCES locations(id)",
+
+    # Xarid qisman qabul (TZ Inventory) — supply_items.received_qty.
+    "ALTER TABLE supply_items ADD COLUMN IF NOT EXISTS received_qty NUMERIC(20,3) NOT NULL DEFAULT 0",
 ]
 
 # Enum value additions — must run outside a transaction (AUTOCOMMIT).
@@ -2102,6 +2105,7 @@ END $$
 ENUM_PATCHES = [
     "ALTER TYPE inventory_status ADD VALUE IF NOT EXISTS 'paused'",
     "ALTER TYPE inventory_status ADD VALUE IF NOT EXISTS 'pending_confirmation'",
+    "ALTER TYPE supply_status ADD VALUE IF NOT EXISTS 'partially_received'",
 ]
 
 
