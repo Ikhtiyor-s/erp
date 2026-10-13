@@ -2319,6 +2319,17 @@ END $$
     # negative row back to it, both kept for audit (never deleted/UPDATEd away).
     """ALTER TABLE cash_movements ADD COLUMN IF NOT EXISTS voided_at TIMESTAMPTZ""",
     """ALTER TABLE cash_movements ADD COLUMN IF NOT EXISTS void_of_id BIGINT REFERENCES cash_movements(id)""",
+
+    # PosPoint-parity: customer debt limit + birthday — docs/pospoint-pos/
+    # operations/customers.md. debt_limit NULL means no limit (default,
+    # matches current unlimited-debt behavior); 0 blocks any debt sale.
+    """ALTER TABLE customers ADD COLUMN IF NOT EXISTS debt_limit NUMERIC(20,2)""",
+    """ALTER TABLE customers ADD COLUMN IF NOT EXISTS birthday DATE""",
+
+    # PosPoint-parity: ulgurji (wholesale) narx — docs/pospoint-pos/
+    # operations/wholesale-prices.md. NULL means the product has no wholesale
+    # price set — POS falls back to sale_price even when wholesale mode is on.
+    """ALTER TABLE products ADD COLUMN IF NOT EXISTS wholesale_price NUMERIC(20,2)""",
 ]
 
 # Enum value additions — must run outside a transaction (AUTOCOMMIT).

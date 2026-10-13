@@ -29,6 +29,8 @@ type Customer = {
   org_name?: string;
   address?: string;
   balance?: string;
+  debt_limit?: number | null;
+  birthday?: string | null;
   created_at?: string;
 };
 type Category = { id: number; name: string };
@@ -42,6 +44,8 @@ const empty = {
   tin: "",
   category_id: null,
   notes: "",
+  debt_limit: "",
+  birthday: "",
 };
 
 const fmt = (v: any) =>
@@ -83,7 +87,12 @@ export default function CustomersPage() {
 
   async function save() {
     try {
-      const payload = { ...form, category_id: form.category_id || null };
+      const payload = {
+        ...form,
+        category_id: form.category_id || null,
+        debt_limit: form.debt_limit ? Number(form.debt_limit) : null,
+        birthday: form.birthday || null,
+      };
       if (editId) await api.put(`/customer/customers/${editId}`, payload);
       else await api.post("/customer/customers", payload);
       toast.success(t("ui__сохранено_54a59b19"));
@@ -325,6 +334,8 @@ export default function CustomersPage() {
               tin: r.tin || "",
               category_id: r.category_id || null,
               notes: "",
+              debt_limit: r.debt_limit ?? "",
+              birthday: r.birthday ? r.birthday.slice(0, 10) : "",
             });
             setEditId(r.id);
             setOpen(true);
@@ -467,6 +478,25 @@ export default function CustomersPage() {
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label="Tug'ilgan kun">
+            <input
+              type="date"
+              className={input}
+              value={form.birthday}
+              onChange={(e) => setForm({ ...form, birthday: e.target.value })}
+            />
+          </Field>
+          <Field label="Qarz limiti">
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Cheklanmagan"
+              className={input}
+              value={form.debt_limit}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setForm({ ...form, debt_limit: e.target.value })}
+            />
           </Field>
           <div className="col-span-2">
             <Field label={t("ui__адрес_80148fa5")}>

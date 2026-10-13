@@ -37,9 +37,11 @@ type Profile = {
     location_name?: string;
     created_at?: string;
     is_active?: boolean;
+    debt_limit?: number | null;
+    birthday?: string | null;
   };
   balance: { bal: string; cnt: number };
-  sales: { cnt: number; total: string; paid: string; last_sale?: string };
+  sales: { cnt: number; total: string; paid: string; debt?: string; last_sale?: string };
   movements: {
     id: number;
     direction: "in" | "out";
@@ -239,6 +241,16 @@ export default function CustomerProfilePage() {
                   </span>
                 </div>
               )}
+              {h.birthday && (
+                <div>
+                  <span className="text-ink-500 dark:text-ink-400">
+                    Tug'ilgan kun:
+                  </span>{" "}
+                  <span className="text-ink-900 dark:text-ink-100">
+                    {new Date(h.birthday).toLocaleDateString("ru-RU")}
+                  </span>
+                </div>
+              )}
               {h.address && (
                 <div className="col-span-2 md:col-span-4">
                   <span className="text-ink-500 dark:text-ink-400">
@@ -294,7 +306,11 @@ export default function CustomerProfilePage() {
         <StatWidget
           label={t("ui__долг_7e49b743")}
           value={fmt(debt)}
-          subValue="To'lanmagan sotuvlar"
+          subValue={
+            h.debt_limit != null
+              ? `Limit: ${fmt(h.debt_limit)}${debt > Number(h.debt_limit) ? " — oshib ketgan!" : ""}`
+              : "To'lanmagan sotuvlar"
+          }
           icon={DollarSign}
           color={debt > 0 ? "danger" : "success"}
           mono

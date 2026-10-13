@@ -97,6 +97,8 @@ class CustomerIn(BaseModel):
     category_id: int | None = None
     location_id: int | None = None
     notes: str | None = None
+    debt_limit: Decimal | None = None
+    birthday: date | None = None
 
 
 @router.get("/customers")
@@ -120,6 +122,7 @@ async def list_customers(
         text(f"SELECT c.id, c.code, "
              f"('A' || COALESCE(c.code, SUBSTRING(c.id::text, 1, 8))) AS uuid_label, "
              f"c.name, c.phone, c.email, c.tin, c.category_id, c.address, c.created_at, "
+             f"c.debt_limit, c.birthday, "
              f"cc.name AS category_name, "
              f"l.name AS location_name, "
              f"o.name AS org_name, "
@@ -143,11 +146,11 @@ async def create_customer(
     cid = uuid4()
     await db.execute(
         text("INSERT INTO customers (id, organization_id, code, name, phone, email, address, "
-             "tin, category_id, location_id, notes) "
-             "VALUES (:id, :o, :c, :n, :ph, :e, :a, :t, :cat, :loc, :nt)"),
+             "tin, category_id, location_id, notes, debt_limit, birthday) "
+             "VALUES (:id, :o, :c, :n, :ph, :e, :a, :t, :cat, :loc, :nt, :dl, :bd)"),
         {"id": str(cid), "o": org_id, "c": p.code, "n": p.name, "ph": p.phone,
          "e": p.email, "a": p.address, "t": p.tin, "cat": p.category_id,
-         "loc": p.location_id, "nt": p.notes},
+         "loc": p.location_id, "nt": p.notes, "dl": p.debt_limit, "bd": p.birthday},
     )
     await db.commit()
     return {"id": str(cid)}
@@ -160,11 +163,12 @@ async def update_customer(
 ):
     res = await db.execute(
         text("UPDATE customers SET code=:c, name=:n, phone=:ph, email=:e, address=:a, "
-             "tin=:t, category_id=:cat, location_id=:loc, notes=:nt "
+             "tin=:t, category_id=:cat, location_id=:loc, notes=:nt, "
+             "debt_limit=:dl, birthday=:bd "
              "WHERE id = :id AND organization_id = :o RETURNING id"),
         {"id": str(cid), "o": org_id, "c": p.code, "n": p.name, "ph": p.phone,
          "e": p.email, "a": p.address, "t": p.tin, "cat": p.category_id,
-         "loc": p.location_id, "nt": p.notes},
+         "loc": p.location_id, "nt": p.notes, "dl": p.debt_limit, "bd": p.birthday},
     )
     if not res.scalar():
         raise HTTPException(status.HTTP_404_NOT_FOUND)
@@ -205,7 +209,7 @@ async def customer_profile(
 ):
     head = await db.execute(
         text("SELECT c.id, c.code, c.name, c.phone, c.email, c.tin, c.address, "
-             "c.created_at, c.is_active, "
+             "c.created_at, c.is_active, c.debt_limit, c.birthday, "
              "('A' || COALESCE(c.code, SUBSTRING(c.id::text, 1, 8))) AS uuid_label, "
              "cc.name AS category_name, c.category_id, "
              "loc.name AS location_name "
@@ -228,6 +232,7 @@ async def customer_profile(
     sales = await db.execute(
         text("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount), 0) AS total, "
              "COALESCE(SUM(paid_amount), 0) AS paid, "
+             "COALESCE(SUM(total_amount - paid_amount), 0) AS debt, "
              "MAX(sale_date) AS last_sale "
              "FROM sales WHERE customer_id = :id AND organization_id = :o "
              "AND status <> 'cancelled'"),

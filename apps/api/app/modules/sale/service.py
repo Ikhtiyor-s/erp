@@ -119,6 +119,34 @@ async def get_online_warehouse_id(db: AsyncSession, org_id: str) -> int | None:
     return int(wid) if wid is not None else None
 
 
+async def _check_debt_limit(
+    db: AsyncSession, org_id: str, customer_id: str, additional_debt: Decimal,
+) -> None:
+    """PosPoint-parity: block a sale that would push a customer's total unpaid
+    balance past their debt_limit. NULL debt_limit means unlimited (default,
+    matches pre-existing behavior) — see docs/pospoint-pos/operations/customers.md."""
+    limit_row = await db.execute(
+        text("SELECT debt_limit FROM customers WHERE id = :c AND organization_id = :o"),
+        {"c": customer_id, "o": org_id},
+    )
+    limit_val = limit_row.scalar()
+    if limit_val is None:
+        return
+    limit = Decimal(str(limit_val))
+    debt_row = await db.execute(
+        text("SELECT COALESCE(SUM(total_amount - paid_amount), 0) FROM sales "
+             "WHERE customer_id = :c AND organization_id = :o AND status <> 'cancelled'"),
+        {"c": customer_id, "o": org_id},
+    )
+    current_debt = Decimal(str(debt_row.scalar() or 0))
+    if current_debt + additional_debt > limit:
+        raise HTTPException(
+            422,
+            f"Mijozning qarz limiti oshib ketadi: joriy qarz {current_debt}, "
+            f"limit {limit}, yangi qarz {current_debt + additional_debt} bo'ladi",
+        )
+
+
 async def create_sale_core(
     db: AsyncSession,
     *,
@@ -160,6 +188,10 @@ async def create_sale_core(
         if paid_amount > total:
             raise HTTPException(422, "To'lov summasi sotuv summasidan oshmasligi kerak")
         sale_status = "paid" if paid_amount >= total else "partial"
+
+    remaining = total - paid_amount
+    if customer_id and remaining > 0:
+        await _check_debt_limit(db, org_id, customer_id, remaining)
 
     await db.execute(
         text(
