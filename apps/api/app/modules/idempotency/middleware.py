@@ -29,6 +29,11 @@ log = logging.getLogger(__name__)
 # Only state-changing, non-idempotent paths are listed here.
 _WHITELIST: tuple[tuple[str, str], ...] = (
     ("POST",   "/api/v1/sale/sales"),
+    # No trailing slash above: startswith() already matches every POST
+    # sub-resource under /sale/sales/{id}/... (pay, pay-split, cancel,
+    # duplicate). The explicit trailing-slash entry below documents that
+    # coverage so it survives a future tightening of the bare prefix above.
+    ("POST",   "/api/v1/sale/sales/"),
     ("POST",   "/api/v1/sale/returns"),
     ("POST",   "/api/v1/warehouse/receipts"),
     ("POST",   "/api/v1/warehouse/write-offs"),
@@ -44,7 +49,80 @@ _WHITELIST: tuple[tuple[str, str], ...] = (
     ("POST",   "/api/v1/warehouse/stock-in-reasons"),
     ("POST",   "/api/v1/warehouse/inventories/"),
     ("POST",   "/api/v1/warehouse/supplier-returns/"),
+    ("POST",   "/api/v1/customer-portal/me/orders"),
+    ("POST",   "/api/v1/shop/checkout"),
+    ("POST",   "/api/v1/customer/customers/"),  # covers .../{cid}/loyalty/adjust (RG-6)
+    ("POST",   "/api/v1/kiosk/checkout"),
 )
+
+# These whitelisted paths have no X-Organization-Id header to key on: the
+# B2B portal derives org purely from the customer JWT, the B2C storefront is
+# fully anonymous (org resolved from org_code in the body), and the kiosk
+# path authenticates with a device bearer token instead of a staff JWT (no
+# human RBAC at all on this path — SKIP_PATHS_PREFIX in rbac/middleware.py).
+# Each needs a path-specific fallback to resolve a real organizations.id —
+# the idempotency_keys.organization_id column is a NOT NULL FK, so anything
+# else (e.g. keying by a synthetic value) would just fail the INSERT silently.
+_PORTAL_ORDERS_PATH = "/api/v1/customer-portal/me/orders"
+_SHOP_CHECKOUT_PATH = "/api/v1/shop/checkout"
+_KIOSK_CHECKOUT_PATH = "/api/v1/kiosk/checkout"
+
+
+def _resolve_portal_order_org(request: Request) -> str | None:
+    auth = request.headers.get("authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return None
+    token = auth.split(" ", 1)[1].strip()
+    from app.modules.customer_portal.auth import decode_customer_token
+    payload = decode_customer_token(token)
+    if not payload:
+        return None
+    org = payload.get("org")
+    return str(org) if org else None
+
+
+async def _resolve_shop_checkout_org(db, body_bytes: bytes) -> str | None:
+    try:
+        payload = json.loads(body_bytes)
+        code = payload.get("org_code")
+    except Exception:
+        return None
+    if not code or not isinstance(code, str):
+        return None
+    res = await db.execute(
+        text("SELECT id FROM organizations WHERE UPPER(code) = :c AND is_active = TRUE"),
+        {"c": code.upper()},
+    )
+    row = res.first()
+    return str(row.id) if row else None
+
+
+async def _resolve_kiosk_checkout_org(db, request: Request) -> str | None:
+    """Mirror of kiosk/auth.py::get_current_kiosk_device's own token lookup
+    (parse Bearer, strip the cosmetic "kiosk_" prefix, SHA-256 hash, look up
+    kiosk_devices.token_hash) — deliberately not imported from there, since
+    that function needs a live Request/commits last_used_at; here we only
+    need the organization_id, read-only, before the real dependency runs.
+    Revoked/unknown tokens resolve to None here exactly like they 401 there —
+    this middleware then just forwards to call_next() and lets the real
+    get_current_kiosk_device() dependency reject the request normally.
+    """
+    auth = request.headers.get("authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return None
+    token = auth.split(" ", 1)[1].strip().removeprefix("kiosk_")
+    if not token:
+        return None
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    res = await db.execute(
+        text(
+            "SELECT organization_id FROM kiosk_devices "
+            "WHERE token_hash = :h AND status = 'active'"
+        ),
+        {"h": token_hash},
+    )
+    row = res.first()
+    return str(row.organization_id) if row else None
 
 
 def _is_whitelisted(method: str, path: str) -> bool:
@@ -60,11 +138,30 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         if not ikey or not _is_whitelisted(request.method, request.url.path):
             return await call_next(request)
 
+        # Body must be read (and re-injected) up front: the two auth-header-less
+        # paths below resolve org_id from the body/JWT instead of a header.
+        body_bytes = await request.body()
+
+        async def _receive():
+            return {"type": "http.request", "body": body_bytes, "more_body": False}
+        request._receive = _receive  # type: ignore[attr-defined]
+
         # Both org_id and user_id must be present — auth middleware runs first (LIFO).
+        path = request.url.path
         org_id = request.headers.get("X-Organization-Id")
         user_id = getattr(request.state, "user_id", None)
         if not org_id:
-            # Let the auth/org middleware reject the request normally.
+            if request.method == "POST" and path == _PORTAL_ORDERS_PATH:
+                org_id = _resolve_portal_order_org(request)
+            elif request.method == "POST" and path == _SHOP_CHECKOUT_PATH:
+                async with AsyncSessionLocal() as db:
+                    org_id = await _resolve_shop_checkout_org(db, body_bytes)
+            elif request.method == "POST" and path == _KIOSK_CHECKOUT_PATH:
+                async with AsyncSessionLocal() as db:
+                    org_id = await _resolve_kiosk_checkout_org(db, request)
+        if not org_id:
+            # Let the auth/org middleware (or the endpoint itself) reject the
+            # request normally — nothing mutates without a resolved org.
             return await call_next(request)
 
         # Validate key length (max 128 chars per contract).
@@ -74,13 +171,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Idempotency-Key must be at most 128 characters"},
             )
 
-        body_bytes = await request.body()
         request_hash = hashlib.sha256(body_bytes).hexdigest()
-
-        # Re-inject body so downstream handlers can read it.
-        async def _receive():
-            return {"type": "http.request", "body": body_bytes, "more_body": False}
-        request._receive = _receive  # type: ignore[attr-defined]
 
         async with AsyncSessionLocal() as db:
             # Probabilistic lazy TTL cleanup (~1% per qualifying request).

@@ -61,6 +61,9 @@ from app.modules.mobile.router import router as mobile_router
 from app.modules.warehouse.pick_router import router as pick_router
 from app.modules.accounting.router import router as accounting_router
 from app.modules.hr.payroll_router import router as payroll_router
+from app.modules.storefront.router import router as storefront_router
+from app.modules.kiosk.router import router as kiosk_router
+from app.modules.kiosk.devices_router import router as kiosk_devices_router
 
 
 @asynccontextmanager
@@ -129,6 +132,9 @@ app.include_router(mobile_router, prefix=API_PREFIX)
 app.include_router(pick_router, prefix=API_PREFIX)
 app.include_router(accounting_router, prefix=API_PREFIX)
 app.include_router(payroll_router, prefix=API_PREFIX)
+app.include_router(storefront_router, prefix=API_PREFIX)
+app.include_router(kiosk_router, prefix=API_PREFIX)
+app.include_router(kiosk_devices_router, prefix=API_PREFIX)
 
 
 if __name__ == "__main__":

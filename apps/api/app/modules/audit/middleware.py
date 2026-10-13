@@ -32,6 +32,10 @@ SKIP_PATH_PREFIXES = (
     "/api/v1/rbac/me",
     "/api/v1/integration/telegram/webhook",  # external webhook, no user
     "/api/v1/sale/sales",      # self-logged with richer diff
+    "/api/v1/shop/checkout",   # self-logged with org_id resolved from org_code,
+                               # not the X-Organization-Id header anonymous requests lack
+    "/api/v1/customer-portal/me/orders",  # self-logged in create_order() with the
+                                           # resulting sale_id in the diff
 )
 
 # Map HTTP method → audit action

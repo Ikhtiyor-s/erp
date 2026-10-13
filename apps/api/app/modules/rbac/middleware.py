@@ -46,6 +46,7 @@ URL_MODULE = {
     "integration": "settings",
     "integrations": "integrations",
     "accounting": "accounting",
+    "kiosk-devices": "kiosk",
 }
 
 METHOD_ACTION = {
@@ -61,6 +62,9 @@ SUFFIX_ACTION = {
     "import": "import",
     "report": "report",
     "reports": "report",
+    # kiosk-devices/{id}/rotate — POST would otherwise default to
+    # module.create; DESIGN requires kiosk.update for rotate specifically.
+    "rotate": "update",
 }
 
 SKIP_PATHS_EXACT = frozenset({
@@ -91,6 +95,16 @@ SKIP_PATHS_PREFIX = (
     # Didox e-invoice — endpoint-level require_permission("settings.integration") takes over;
     # middleware also checks settings.create (which admin has) as secondary gate.
     "/api/v1/integration/didox/invoice",
+    # Public B2C storefront (EC-5) — "shop" isn't in URL_MODULE so it's already
+    # skipped implicitly; this entry is defensive against "shop" being added
+    # to URL_MODULE later and accidentally gating an anonymous endpoint.
+    "/api/v1/shop/",
+    # Kiosk device-token path (SC-2) — org/cashbox/warehouse are resolved
+    # from the Bearer device token (kiosk/auth.py::get_current_kiosk_device),
+    # never from an X-Organization-Id header, so this is skipped just like
+    # /shop/ and /customer-portal/ above. The admin CRUD at /kiosk-devices/
+    # is a different prefix and stays fully gated (see URL_MODULE above).
+    "/api/v1/kiosk/",
 )
 
 

@@ -6,19 +6,27 @@ when run inside the container, or http://localhost:8001 when run from host).
 
 Override via env vars:
   API_URL           - base URL (default: http://localhost:8000)
-  TEST_EMAIL        - login email (default: qa@example.com)
-  TEST_PASSWORD     - login password (default: Qa12345!)
-  TEST_ORG_CODE     - organization code (default: ANIQ)
+  TEST_PASSWORD     - password used for the self-registered QA admin (default: Qa12345!)
+  TEST_ORG_CODE     - organization code the QA admin's org is pinned to (default: ANIQ)
+
+Auth setup: the QA admin is NOT a pre-seeded user. The API's /auth/login now
+takes {"phone", "password"} (moved off email+password in 81f7235), and no
+seed script has ever created a login-capable user — so a fresh org+admin is
+self-registered once per test session via the real phone+OTP /auth/register
+flow (see _register_session_admin below), the same proven pattern already
+used in test_ecommerce_idempotency.py. This makes the whole suite
+reproducible against any fresh DB, with no manual one-off setup required.
 """
-import asyncio
 import os
+import random
+import uuid
+
 import pytest
 import pytest_asyncio
 import httpx
 
 
 API_URL = os.environ.get("API_URL", "http://localhost:8000")
-TEST_EMAIL = os.environ.get("TEST_EMAIL", "qa@example.com")
 TEST_PASSWORD = os.environ.get("TEST_PASSWORD", "Qa12345!")
 TEST_ORG_CODE = os.environ.get("TEST_ORG_CODE", "ANIQ")
 
@@ -54,8 +62,110 @@ def _reset_test_rate_limits() -> None:
         pass
 
 
+_CACHED_TOKEN: dict = {}
+
+
+def _rand_phone() -> str:
+    return "+998" + "".join(str(random.randint(0, 9)) for _ in range(9))
+
+
+def _pin_org_code(org_id: str) -> str:
+    """Point the freshly self-registered org's `code` at TEST_ORG_CODE.
+
+    /auth/register always assigns a random lowercase code ("org-<hex>"). A
+    handful of tests hardcode the literal org code (webhook URL path params,
+    customer-portal OTP `org_code`) instead of resolving it dynamically, so
+    this makes the session's org resolve under that literal too. Falls back
+    to a TEST_ORG_CODE-prefixed random code if that code is already taken by
+    another organization in this DB (e.g. a manually-run seed_demo.py) —
+    `organizations.code` is globally UNIQUE, so stealing it outright would
+    break whatever already owns it.
+    """
+    import asyncio
+    import asyncpg
+
+    async def _update(code: str) -> None:
+        conn = await asyncpg.connect(_PG_DSN)
+        try:
+            await conn.execute("UPDATE organizations SET code = $1 WHERE id = $2", code, org_id)
+        finally:
+            await conn.close()
+
+    try:
+        asyncio.run(_update(TEST_ORG_CODE))
+        return TEST_ORG_CODE
+    except asyncpg.exceptions.UniqueViolationError:
+        fallback = TEST_ORG_CODE + uuid.uuid4().hex[:8].upper()
+        asyncio.run(_update(fallback))
+        return fallback
+
+
+def _register_session_admin() -> None:
+    """Self-register a fresh org+admin via the real phone+OTP flow and cache
+    the result for the whole pytest session.
+
+    Idempotent: a no-op once _CACHED_TOKEN is populated, so it is safe to
+    call both from pytest_sessionstart (the normal path, runs once before
+    collection) and defensively from the auth_token fixture itself.
+    """
+    if "token" in _CACHED_TOKEN:
+        return
+
+    phone = _rand_phone()
+    with httpx.Client(base_url=API_URL, timeout=10) as c:
+        otp = c.post("/api/v1/auth/register/request-otp", json={"phone": phone})
+        assert otp.status_code == 200, f"register/request-otp failed: {otp.text}"
+        dev_code = otp.json()["dev_code"]
+
+        verify = c.post(
+            "/api/v1/auth/register/verify-otp",
+            json={"phone": phone, "code": dev_code},
+        )
+        assert verify.status_code == 200, f"register/verify-otp failed: {verify.text}"
+        ticket = verify.json()["ticket"]
+
+        reg = c.post(
+            "/api/v1/auth/register",
+            json={
+                "ticket": ticket,
+                "phone": phone,
+                "password": TEST_PASSWORD,
+                "full_name": "QA Bot",
+                "organization_name": "QA Test Org",
+            },
+        )
+        assert reg.status_code == 201, f"register failed: {reg.text}"
+        token = reg.json()["access_token"]
+
+        orgs = c.get(
+            "/api/v1/organizations/mine",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert orgs.status_code == 200, f"/organizations/mine: {orgs.text}"
+        org_id = orgs.json()[0]["id"]
+
+        # A handful of tests (e.g. test_cashbox_warehouse.py) fetch "any
+        # existing product" generically and fail if none exists yet. Currency
+        # and warehouse are already auto-provisioned by /auth/register's
+        # onboarding seed, but products are not — create one so the session
+        # org is self-sufficient regardless of which test file runs first.
+        headers = {"Authorization": f"Bearer {token}", "X-Organization-Id": org_id}
+        c.post(
+            "/api/v1/warehouse/products",
+            headers=headers,
+            json={"name": "QA Seed Product", "sale_price": "10000"},
+        )
+
+    org_code = _pin_org_code(org_id)
+
+    _CACHED_TOKEN["token"] = token
+    _CACHED_TOKEN["org"] = org_id
+    _CACHED_TOKEN["org_code"] = org_code
+
+
 def pytest_sessionstart(session):
     _reset_test_rate_limits()
+    _register_session_admin()
 
 
 @pytest_asyncio.fixture
@@ -65,48 +175,22 @@ async def http_client():
         yield c
 
 
-_CACHED_TOKEN: dict = {}
-
-
 @pytest_asyncio.fixture
 async def auth_token():
-    """Log in as the QA tester and return the access token.
+    """Return the access token for the session's self-registered QA admin.
 
-    Sprint #2: cache across tests in this session. The login endpoint is rate
-    limited to 10/min (login throttle is part of the security baseline); doing
-    a fresh login per test triggers 429 once the suite has more than 10 tests.
+    Registration happens once in pytest_sessionstart (see
+    _register_session_admin); this just reads the cache. The defensive call
+    here covers the unlikely case of a test run that skips session hooks.
     """
-    if "token" in _CACHED_TOKEN:
-        return _CACHED_TOKEN["token"]
-    async with httpx.AsyncClient(base_url=API_URL, timeout=10) as c:
-        resp = await c.post(
-            "/api/v1/auth/login",
-            json={"email": TEST_EMAIL, "password": TEST_PASSWORD},
-        )
-    assert resp.status_code == 200, f"Login failed: {resp.text}"
-    token = resp.json()["access_token"]
-    _CACHED_TOKEN["token"] = token
-    return token
+    _register_session_admin()
+    return _CACHED_TOKEN["token"]
 
 
 @pytest_asyncio.fixture
 async def org_id(http_client: httpx.AsyncClient, auth_token: str) -> str:
-    """Resolve the ANIQ organization UUID via /organizations/mine."""
-    if "org" in _CACHED_TOKEN:
-        return _CACHED_TOKEN["org"]
-    resp = await http_client.get(
-        "/api/v1/organizations/mine",
-        headers={"Authorization": f"Bearer {auth_token}"},
-    )
-    assert resp.status_code == 200, f"/organizations/mine: {resp.status_code} {resp.text[:200]}"
-    orgs = resp.json()
-    if not isinstance(orgs, list):
-        pytest.fail(f"/organizations/mine returned non-list: {orgs}")
-    for o in orgs:
-        if o.get("code") == TEST_ORG_CODE:
-            _CACHED_TOKEN["org"] = o["id"]
-            return o["id"]
-    pytest.skip(f"Test org {TEST_ORG_CODE} not found in user's orgs")
+    """Return the session's self-registered organization UUID."""
+    return _CACHED_TOKEN["org"]
 
 
 @pytest_asyncio.fixture

@@ -74,6 +74,10 @@ ALL_PERMISSIONS: list[Permission] = [
     p("customer", "view"), p("customer", "create"), p("customer", "update"),
     p("customer", "delete"), p("customer", "export"),
 
+    # Customer — loyalty points manual correction (RG-6; admin-only, like
+    # finance.set_balance — not granted to manager/accountant/cashier below)
+    p3("customer", "loyalty", "manage"),
+
     # Supplier
     p("supplier", "view"), p("supplier", "create"), p("supplier", "update"),
     p("supplier", "delete"), p("supplier", "export"),
@@ -82,6 +86,9 @@ ALL_PERMISSIONS: list[Permission] = [
     p("hr", "view"), p("hr", "create"), p("hr", "update"),
     p("hr", "delete"), p("hr", "salary"),
     p3("hr", "payroll", "approve"), p3("hr", "payroll", "pay"),
+
+    # HR — shift schedule & attendance (RG-5)
+    p3("hr", "shifts", "manage"), p3("hr", "attendance", "view"),
 
     # Manufacturing
     p("manufacturing", "view"), p("manufacturing", "create"),
@@ -148,6 +155,12 @@ ALL_PERMISSIONS: list[Permission] = [
     # Accounting — chart of accounts + double-entry journal
     p("accounting", "view"), p("accounting", "create"),
     p("accounting", "update"), p("accounting", "delete"),
+
+    # SC-1 — kiosk device credentials (tickets/DESIGN-self-checkout-auth.md, RBAC section).
+    # admin-only by design — NOT auto-granted to manager/cashier/accountant/viewer
+    # (see ROLE_GRANTS and the viewer comprehension's module exclusion below).
+    p("kiosk", "view"), p("kiosk", "create"),
+    p("kiosk", "update"), p("kiosk", "delete"),
 ]
 
 
@@ -186,6 +199,7 @@ ROLE_GRANTS: dict[str, list[str]] = {
         "customer.view", "customer.create", "customer.update", "customer.export",
         "supplier.view", "supplier.create", "supplier.update", "supplier.export",
         "hr.view", "hr.create", "hr.update",
+        "hr.shifts.manage", "hr.attendance.view",
         "manufacturing.view", "manufacturing.create", "manufacturing.update",
         "manufacturing.approve",
         "marketing.view", "marketing.create", "marketing.update",
@@ -218,6 +232,7 @@ ROLE_GRANTS: dict[str, list[str]] = {
         "customer.view", "customer.export",
         "supplier.view", "supplier.export",
         "hr.view", "hr.salary", "hr.payroll.approve", "hr.payroll.pay",
+        "hr.attendance.view",
         "reference.view",
         "tools.view", "tools.export",
         "statistics.view", "statistics.cogs.view", "statistics.cogs.export", "audit.view",
@@ -240,9 +255,11 @@ ROLE_GRANTS: dict[str, list[str]] = {
         "settings.integration",
     ],
 
-    # Viewer — read-only everywhere; also gets warehouse.product.export per ticket T-002
+    # Viewer — read-only everywhere; also gets warehouse.product.export per ticket T-002.
+    # "kiosk" excluded per SC-1 DESIGN: kiosk.* is admin-only, not auto-granted even
+    # for read-only roles — a bearer-credential catalog is not a view-safe resource.
     "viewer": [pm["code"] for pm in ALL_PERMISSIONS
-               if pm["action"] in ("view",) and pm["module"] not in ("rbac",)]
+               if pm["action"] in ("view",) and pm["module"] not in ("rbac", "kiosk")]
               + ["warehouse.product.export"],
 
     # Picker — warehouse pick execution (T-021; not a DB role yet, grants only)

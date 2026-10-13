@@ -2098,6 +2098,220 @@ END $$
 
     # Xarid qisman qabul (TZ Inventory) — supply_items.received_qty.
     "ALTER TABLE supply_items ADD COLUMN IF NOT EXISTS received_qty NUMERIC(20,3) NOT NULL DEFAULT 0",
+
+    # ============================================================
+    # EC-5 — B2C public storefront catalog (tickets/DESIGN-ecommerce-b2c.md)
+    # 1) products.is_published_online — merchant opt-in flag for /shop/products.
+    # 2) idx_customers_org_phone — NOT used by EC-5 itself; added now because
+    #    EC-6 (guest checkout dedup, same sprint) needs it for exact-match
+    #    phone lookup and we're already touching this file. Do not remove
+    #    without checking EC-6/storefront checkout first.
+    # Rollback:
+    #   DROP INDEX IF EXISTS idx_customers_org_phone;
+    #   DROP INDEX IF EXISTS idx_products_published_online;
+    #   ALTER TABLE products DROP COLUMN IF EXISTS is_published_online;
+    # ============================================================
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS is_published_online BOOLEAN NOT NULL DEFAULT FALSE",
+    """CREATE INDEX IF NOT EXISTS idx_products_published_online
+       ON products (organization_id, name)
+       WHERE is_published_online = TRUE AND is_active = TRUE AND is_archived = FALSE""",
+    """CREATE INDEX IF NOT EXISTS idx_customers_org_phone
+       ON customers (organization_id, phone) WHERE phone IS NOT NULL""",
+
+    # ============================================================
+    # EC-2/EC-3 — B2B customer-specific product price overrides.
+    # Precedence: customer_product_prices > customer_categories.discount_pct
+    # > products.sale_price (resolved by customer/pricing.py).
+    # Rollback: DROP TABLE IF EXISTS customer_product_prices;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS customer_product_prices (
+        id              BIGSERIAL PRIMARY KEY,
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        customer_id     UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        product_id      UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        price           NUMERIC(20,2) NOT NULL CHECK (price >= 0),
+        notes           TEXT,
+        created_by      UUID REFERENCES users(id),
+        created_at      TIMESTAMPTZ DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (organization_id, customer_id, product_id)
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_cpp_org_customer
+       ON customer_product_prices(organization_id, customer_id)""",
+
+    # ============================================================
+    # EC-3 — customer_portal_orders.sale_id: links a portal-order metadata
+    # row to the real sales row created by sale/service.py::create_sale_core().
+    # Nullable because pre-existing rows predate this handoff.
+    # Rollback: ALTER TABLE customer_portal_orders DROP COLUMN IF EXISTS sale_id;
+    # ============================================================
+    """ALTER TABLE customer_portal_orders ADD COLUMN IF NOT EXISTS sale_id UUID REFERENCES sales(id)""",
+
+    # ============================================================
+    # EC-6 — B2C storefront order metadata (tickets/DESIGN-ecommerce-b2c.md)
+    # sale_id is NOT NULL (unlike customer_portal_orders.sale_id) because
+    # checkout always creates a real sales row first via create_sale_core().
+    # Rollback:
+    #   DROP TABLE IF EXISTS storefront_orders;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS storefront_orders (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        sale_id         UUID NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+        customer_id     UUID NOT NULL REFERENCES customers(id),
+        order_number    VARCHAR(50),
+        status          VARCHAR(20) NOT NULL DEFAULT 'new',
+        payment_mode    VARCHAR(20) NOT NULL DEFAULT 'manual',
+        notes           TEXT,
+        created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    """CREATE UNIQUE INDEX IF NOT EXISTS uq_storefront_orders_sale ON storefront_orders(sale_id)""",
+    """CREATE INDEX IF NOT EXISTS idx_storefront_orders_org_status
+       ON storefront_orders(organization_id, status)""",
+
+    # ============================================================
+    # RG-5 — HR employee shift schedule + clock-in/out attendance.
+    # Distinct from cashbox_sessions (cashier cash-handling shift) — this is
+    # general employee scheduling (office/warehouse/sales staff too).
+    # Rollback:
+    #   DROP TABLE IF EXISTS employee_attendance;
+    #   DROP TABLE IF EXISTS employee_shifts;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS employee_shifts (
+        id               BIGSERIAL PRIMARY KEY,
+        organization_id  UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        employee_id      UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        work_date        DATE NOT NULL,
+        start_time       TIME NOT NULL,
+        end_time         TIME NOT NULL,
+        created_at       TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (employee_id, work_date)
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_employee_shifts_org_date
+       ON employee_shifts(organization_id, work_date)""",
+    """
+    CREATE TABLE IF NOT EXISTS employee_attendance (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id  UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        employee_id      UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        shift_id         BIGINT REFERENCES employee_shifts(id) ON DELETE SET NULL,
+        clock_in         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        clock_out        TIMESTAMPTZ,
+        created_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_employee_attendance_org_employee
+       ON employee_attendance(organization_id, employee_id, clock_in DESC)""",
+    # Enforces one open (not-yet-clocked-out) attendance row per employee at
+    # the DB level — a second concurrent clock-in request cannot race past
+    # the app-level check (defense in depth for the 409 guard in router.py).
+    """CREATE UNIQUE INDEX IF NOT EXISTS uq_employee_attendance_open
+       ON employee_attendance(employee_id) WHERE clock_out IS NULL""",
+
+    # ============================================================
+    # RG-6 — Loyalty points ledger (tickets/RG-6-loyalty-points-ledger.md).
+    # loyalty_ledger is the source of truth; customers.loyalty_balance is a
+    # denormalized fast-read cache kept in sync by app.modules.customer.loyalty
+    # (never written to directly outside that module). `points` is a SIGNED
+    # delta (earn > 0, redeem < 0, adjust either sign) so balance maintenance
+    # is always `loyalty_balance + points` — no per-direction branching.
+    # Rollback:
+    #   DROP TABLE IF EXISTS loyalty_ledger;
+    #   ALTER TABLE customers DROP COLUMN IF EXISTS loyalty_balance;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS loyalty_ledger (
+        id              BIGSERIAL PRIMARY KEY,
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        customer_id     UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        sale_id         UUID REFERENCES sales(id),
+        direction       VARCHAR(10) NOT NULL, -- 'earn'|'redeem'|'adjust'
+        points          NUMERIC(20,2) NOT NULL,
+        notes           TEXT,
+        created_by      UUID REFERENCES users(id),
+        created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_loyalty_ledger_customer
+       ON loyalty_ledger(organization_id, customer_id, created_at DESC)""",
+    """CREATE INDEX IF NOT EXISTS idx_loyalty_ledger_sale
+       ON loyalty_ledger(sale_id) WHERE sale_id IS NOT NULL""",
+    """ALTER TABLE customers ADD COLUMN IF NOT EXISTS loyalty_balance NUMERIC(20,2) NOT NULL DEFAULT 0""",
+
+    # ============================================================
+    # SC-1 — kiosk_devices (tickets/DESIGN-self-checkout-auth.md, "DB o'zgarishlari", FROZEN).
+    # Device-credential auth for self-checkout kiosks: one row = one physical kiosk,
+    # bound to one cashbox (→ one warehouse via cashboxes.warehouse_id, T-206 Case 3
+    # pattern reused — no warehouse_id column here by design, see DESIGN doc).
+    # token_hash is SHA-256 hex of a secrets.token_urlsafe(32) bearer token, same
+    # pattern as rbac/router.py::_hash_invitation_token (not bcrypt — see DESIGN doc
+    # for rationale). ON DELETE RESTRICT on cashbox_id: a cashbox with a live kiosk
+    # device cannot be deleted (no silent orphaning of a bearer credential).
+    # Rollback: DROP TABLE IF EXISTS kiosk_devices;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS kiosk_devices (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        cashbox_id      INT NOT NULL REFERENCES cashboxes(id) ON DELETE RESTRICT,
+        name            VARCHAR(100) NOT NULL,
+        token_hash      VARCHAR(64) NOT NULL,
+        token_prefix    VARCHAR(10) NOT NULL,
+        status          VARCHAR(20) NOT NULL DEFAULT 'active',
+        last_used_at    TIMESTAMPTZ,
+        last_used_ip    VARCHAR(64),
+        created_by      UUID REFERENCES users(id),
+        created_at      TIMESTAMPTZ DEFAULT NOW(),
+        revoked_at      TIMESTAMPTZ,
+        revoked_by      UUID REFERENCES users(id)
+    )
+    """,
+    """CREATE UNIQUE INDEX IF NOT EXISTS uq_kiosk_devices_token_hash ON kiosk_devices(token_hash)""",
+    """CREATE INDEX IF NOT EXISTS idx_kiosk_devices_org_status ON kiosk_devices(organization_id, status)""",
+    """CREATE INDEX IF NOT EXISTS idx_kiosk_devices_cashbox ON kiosk_devices(cashbox_id)""",
+
+    # ============================================================
+    # SC-3 — kiosk_orders (tickets/SC-3-kiosk-checkout-flow.md): sale-level
+    # metadata for a kiosk checkout, same role storefront_orders plays for
+    # /shop/checkout. sale_id/device_id are both NOT NULL + CASCADE/RESTRICT
+    # like storefront_orders/kiosk_devices (a kiosk checkout always creates a
+    # real sales row first via create_sale_core(), and a kiosk_orders row
+    # must never outlive the sale it describes). organization_id is kept as
+    # a direct column (not only derivable via sale_id -> sales.organization_id)
+    # to match every other org-scoped table in this schema and to make the
+    # cross-tenant isolation check in GET /kiosk/order/{sale_id} a single
+    # indexed WHERE clause, same convention storefront_orders already uses.
+    # `status` is a cache of the value GET /kiosk/order/{sale_id} computes
+    # live from sales.status/payment_transactions — it is opportunistically
+    # re-synced on each poll, never advanced by a timeout/cron (see
+    # kiosk/service.py::get_kiosk_order_status).
+    # `requires_staff_check` is a reserved, write-once-never column (SPEC MAY,
+    # explicitly deferred) — no code in this ticket populates or reads it.
+    # Rollback:
+    #   DROP TABLE IF EXISTS kiosk_orders;
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS kiosk_orders (
+        id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id      UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        sale_id              UUID NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+        device_id            UUID NOT NULL REFERENCES kiosk_devices(id) ON DELETE RESTRICT,
+        order_number         VARCHAR(50),
+        payment_mode         VARCHAR(20) NOT NULL DEFAULT 'unavailable',
+        status               VARCHAR(20) NOT NULL DEFAULT 'awaiting_payment',
+        requires_staff_check BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at           TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    """CREATE UNIQUE INDEX IF NOT EXISTS uq_kiosk_orders_sale ON kiosk_orders(sale_id)""",
+    """CREATE INDEX IF NOT EXISTS idx_kiosk_orders_org_status ON kiosk_orders(organization_id, status)""",
+    """CREATE INDEX IF NOT EXISTS idx_kiosk_orders_device ON kiosk_orders(device_id)""",
 ]
 
 # Enum value additions — must run outside a transaction (AUTOCOMMIT).
