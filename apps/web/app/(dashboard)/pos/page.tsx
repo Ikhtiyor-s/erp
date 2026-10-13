@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Search, Plus, Minus, Trash2, ScanLine, Scale, Printer, PackageOpen, Percent, LogOut, RotateCcw, ChevronUp, ChevronDown, Pencil, X } from "lucide-react";
+import { Search, Plus, Minus, Trash2, ScanLine, Scale, Printer, PackageOpen, Percent, LogOut, RotateCcw, ChevronUp, ChevronDown, Pencil, X, MoreVertical } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { newIdempotencyKey, postIdempotent } from "@/lib/idempotency";
@@ -777,6 +777,22 @@ export default function PosPage() {
   const [holding, setHolding] = useState(false);
   const [resumingId, setResumingId] = useState<string | null>(null);
 
+  // Secondary REGOS actions (Chegirma/Sotuvchi/Kutish rejimi/...) collapsed
+  // into a top-right ⋮ menu instead of a permanently-visible grid — 2026-10-13
+  // user request.
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!actionMenuOpen) return;
+    function onDocClick(e: MouseEvent) {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
+        setActionMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [actionMenuOpen]);
+
   async function submitCashMovement() {
     const amt = Number(cashMoveAmount) || 0;
     if (amt <= 0) {
@@ -1011,6 +1027,102 @@ export default function PosPage() {
                 </div>
               </div>
             )}
+
+            <div className="relative" ref={actionMenuRef}>
+              <button
+                type="button"
+                onClick={() => setActionMenuOpen((v) => !v)}
+                title="Qo'shimcha amallar"
+                className="w-9 h-9 rounded-md border border-ink-300 dark:border-ink-700 flex items-center justify-center text-ink-600 dark:text-ink-300 hover:bg-ink-100 dark:hover:bg-ink-800"
+              >
+                <MoreVertical size={18} />
+              </button>
+              {actionMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-ink-900 border border-ink-200 dark:border-ink-800 rounded-md shadow-lg z-20 py-1 text-sm">
+                  <button
+                    type="button"
+                    disabled={!!saleId}
+                    onClick={() => {
+                      startDiscountEntry("percent");
+                      setActionMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-ink-700 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40"
+                  >
+                    <Percent size={14} /> Chegirma
+                  </button>
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-ink-400 dark:text-ink-600 cursor-not-allowed"
+                  >
+                    Sotuvchi
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!saleId || fullyPaid || holding}
+                    onClick={() => {
+                      holdCurrentSale();
+                      setActionMenuOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 text-left text-ink-700 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40"
+                  >
+                    Kutish rejimi <span className="text-[11px] text-ink-400">Ctrl+G</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openHeldModal();
+                      setActionMenuOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 text-left text-ink-700 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-800"
+                  >
+                    Kutayotganlar <span className="text-[11px] text-ink-400">Ctrl+J</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCashMoveOpen(true);
+                      setActionMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-ink-700 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-800"
+                  >
+                    Kassa harakati
+                  </button>
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-ink-400 dark:text-ink-600 cursor-not-allowed"
+                  >
+                    Bloklash
+                  </button>
+                  <div className="my-1 border-t border-ink-100 dark:border-ink-800" />
+                  <button
+                    type="button"
+                    onClick={() => router.push("/sale/contract")}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-ink-700 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-800"
+                  >
+                    Cheklar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/sale/return")}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
+                  >
+                    <RotateCcw size={14} /> Qaytarish <span className="ml-auto text-[11px] text-ink-400">F5</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      cancelWholeSale();
+                      setActionMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
+                  >
+                    <LogOut size={14} /> Chiqish <span className="ml-auto text-[11px] text-ink-400">F9/F12</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {lastAddedLine && (
@@ -1143,85 +1255,6 @@ export default function PosPage() {
                 <Trash2 size={14} />
               </button>
             </div>
-          </div>
-
-          {/* REGOS action-button grid — always visible under the table, same
-              layout slot as the reference (not a hidden menu). Wired where
-              Aniq ERP already has the capability; otherwise visibly present
-              but disabled (never fake a feature that isn't built — see
-              project_erp_regos_pos_workflow.md). */}
-          <div className="border-t border-ink-200 dark:border-ink-800 p-3 grid grid-cols-3 gap-1.5 text-xs">
-            <button
-              type="button"
-              disabled={!!saleId}
-              onClick={() => startDiscountEntry("percent")}
-              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40 flex items-center justify-center gap-1"
-            >
-              <Percent size={12} /> Chegirma
-            </button>
-            <button
-              type="button"
-              disabled
-              title="Tez orada"
-              className="h-10 rounded-md border border-ink-200 dark:border-ink-800 text-ink-400 dark:text-ink-600 font-medium cursor-not-allowed"
-            >
-              Sotuvchi
-            </button>
-            <button
-              type="button"
-              disabled={!saleId || fullyPaid || holding}
-              onClick={holdCurrentSale}
-              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40"
-              title="Ctrl+G"
-            >
-              Kutish rejimi
-            </button>
-            <button
-              type="button"
-              onClick={openHeldModal}
-              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
-              title="Ctrl+J"
-            >
-              Kutayotganlar
-            </button>
-            <button
-              type="button"
-              onClick={() => setCashMoveOpen(true)}
-              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
-            >
-              Kassa harakati
-            </button>
-            <button
-              type="button"
-              disabled
-              title="Tez orada"
-              className="h-10 rounded-md border border-ink-200 dark:border-ink-800 text-ink-400 dark:text-ink-600 font-medium cursor-not-allowed"
-            >
-              Bloklash
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/sale/contract")}
-              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
-            >
-              Cheklar
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/sale/return")}
-              className="h-10 rounded-md border border-danger-300 dark:border-danger-700 text-danger-600 dark:text-danger-500 font-medium hover:bg-danger-50 dark:hover:bg-danger-500/15 flex items-center justify-center gap-1"
-              title="Qaytarish (F5)"
-            >
-              <RotateCcw size={12} /> Qaytarish
-            </button>
-            <button
-              type="button"
-              onClick={cancelWholeSale}
-              className="h-10 rounded-md border border-danger-400 dark:border-danger-600 bg-danger-50 dark:bg-danger-500/15 text-danger-700 dark:text-danger-500 font-semibold hover:bg-danger-100 dark:hover:bg-danger-500/25 flex items-center justify-center gap-1"
-              title="Bekor qilish / chiqish (F9 / F12)"
-            >
-              <LogOut size={12} /> Chiqish
-            </button>
           </div>
 
           <div className="border-t border-ink-200 dark:border-ink-800 p-3">
