@@ -2330,6 +2330,11 @@ END $$
     # operations/wholesale-prices.md. NULL means the product has no wholesale
     # price set — POS falls back to sale_price even when wholesale mode is on.
     """ALTER TABLE products ADD COLUMN IF NOT EXISTS wholesale_price NUMERIC(20,2)""",
+
+    # PosPoint-parity: PIN tezkor kirish — docs/pospoint-pos/operations/
+    # settings.md. NULL means the user has not set a PIN (pin-login stays
+    # unavailable for them — no behavior change from before this column).
+    """ALTER TABLE users ADD COLUMN IF NOT EXISTS pin_hash VARCHAR(255)""",
 ]
 
 # Enum value additions — must run outside a transaction (AUTOCOMMIT).

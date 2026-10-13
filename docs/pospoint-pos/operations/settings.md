@@ -30,12 +30,16 @@ paket puli odatiy amaliyot.)
 2. Ko'rsatish, lekin chekka qo'shishga ruxsat bermaslik.
 3. Manfiy qoldiqli mahsulotlarni umuman ko'rsatmaslik.
 
-**Aniq ERP holati:** ⚠️ qisman. Backend'da ikkilik `allow_negative`
-bayrog'i bor (`warehouse/service.py:41` — standart `False`, ya'ni
-manfiy qoldiqqa sotishni block qiladi), lekin bu **org darajasida
-sozlanadigan, UI'dan tanlanadigan 3-variantli** siyosat emas — kod
-darajasida qattiq belgilangan. "Ko'rsatish, lekin sotishga ruxsat
-bermaslik" va "umuman yashirish" variantlari aniq amalga oshirilmagan.
+**Aniq ERP holati:** ✅ qurildi (2026-10-14). `Склад (настройки)`
+(`/settings/warehouse`, kalit `warehouse`) sahifasida
+`negative_stock_policy` select-maydoni — uchala variant ham bor.
+`sale/service.py::create_sale_core` sotuv yaratishda shu sozlamani
+o'qiydi va `allow`da `_stock_apply`ga `allow_negative=True` beradi
+(standart — eski, qattiq belgilangan `block_sale` xatti-harakati
+saqlanadi, orqaga moslik buzilmagan). `hide` POS'da butunlay
+frontend-tomonlama ishlaydi — `pos/page.tsx` mahsulot ro'yxatini
+`total_stock <= 0` bo'yicha filtrlaydi (xizmatlar bundan mustasno).
+Production'da API orqali sinaldi.
 
 ### Katalogni ko'rsatish turi
 
@@ -53,9 +57,14 @@ foydali bo'lishi mumkin.
 
 Sotishga ruxsat berish / Sotishni taqiqlash.
 
-**Aniq ERP holati:** ❌ Yo'q — `has_expiration` mahsulot darajasida
-bor, lekin sotuv vaqtida muddat tekshiruvi/bloklash topilmadi
-(`sale/service.py`da bunday tekshiruv yo'q).
+**Aniq ERP holati:** ❌ Hali yo'q — ataylab kechiktirildi (2026-10-14
+tahlili). `has_expiration` faqat mahsulot darajasida bitta bayroq;
+haqiqiy **muddat sanasi** hech qayerda — na `stock_in_items`da, na
+alohida partiya (batch/lot) jadvalida — saqlanmaydi. Buni to'g'ri
+qurish uchun avval partiya-darajasidagi muddat-tracking infratuzilmasi
+(stock-in'ga `expiry_date`, stock_balances'ni partiya bo'yicha
+bo'lish yoki alohida jadval, sotuvda FEFO tanlash) kerak — bu
+"kichik sozlama" emas, alohida, kattaroq ombor-modeli ishi.
 
 ### Chek sozlamalari
 
@@ -80,17 +89,18 @@ orqali ishlatiladi).
 
 Hisob parolini almashtirish; tezkor kirish uchun PIN-kod sozlash.
 
-**Aniq ERP holati:** ⚠️ qisman. Parolni almashtirish odatiy auth
-oqimida bor deb taxmin qilinadi (`apps/api/app/modules/auth/router.py`),
-lekin ❌ **PIN bilan tezkor kirish** (kassir almashinuvida to'liq
-login/parol o'rniga 4-6 xonali kod) umuman yo'q — kodda "pin"/"PIN"
-so'zi bo'yicha hech qanday moslik topilmadi.
+**Aniq ERP holati:** ✅ PIN qismi qurildi (2026-10-14). `users.pin_hash`
+(bcrypt, 4-6 xonali) + `POST /auth/set-pin`, `DELETE /auth/pin`,
+`POST /auth/pin-login` (5/daqiqa rate-limit, 2FA yoqilgan hisoblar
+uchun ataylab bloklangan — PIN 2FA'ni aylanib o'tish yo'li bo'lmasligi
+kerak). Frontend: `/settings/my-pin` (PIN o'rnatish/o'chirish) va
+login ekranida "PIN kod bilan kirish" almashtirgichi. Parolni
+almashtirish — odatiy auth oqimida bor deb taxmin qilinadi, alohida
+tekshirilmadi.
 
 ## Keyingi qadam
 
-Eng amaliy, tez qo'shiladigan ikkita narsa: **manfiy-qoldiq siyosatini
-3-variantli UI-sozlamaga aylantirish** (backend infratuzilmasi
-qisman bor) va **PIN bilan tezkor kirish** (bir nechta kassir bir
-qurilmada almashinganda real tezlik beradi). Fiskal rejim va
-dorixona-ko'rinish rejimi — ancha kattaroq, alohida qaror talab
-qiladigan ishlar.
+Ikkita asosiy band bajarildi: manfiy-qoldiq siyosati va PIN tezkor
+kirish. Qolganlar — fiskal rejim, dorixona-ko'rinish rejimi, muddati
+o'tgan tovar bloki (partiya-tracking talab qiladi) — ancha kattaroq,
+alohida qaror talab qiladigan ishlar, past ustuvorlikda qoldirildi.

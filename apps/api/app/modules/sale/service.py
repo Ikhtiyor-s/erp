@@ -193,6 +193,17 @@ async def create_sale_core(
     if customer_id and remaining > 0:
         await _check_debt_limit(db, org_id, customer_id, remaining)
 
+    # PosPoint-parity: org-level negative-stock policy — docs/pospoint-pos/
+    # operations/settings.md. "allow" lets a sale push stock negative;
+    # anything else (including unset — matches the pre-existing hardcoded
+    # behavior) keeps blocking it, same as before this setting existed.
+    policy_row = await db.execute(
+        text("SELECT value->>'negative_stock_policy' FROM app_settings "
+             "WHERE organization_id = :o AND key = 'warehouse'"),
+        {"o": org_id},
+    )
+    allow_negative_stock = policy_row.scalar() == "allow"
+
     await db.execute(
         text(
             "INSERT INTO sales (id, organization_id, customer_id, warehouse_id, currency_id, "
@@ -248,7 +259,7 @@ async def create_sale_core(
             delta_qty=Decimal(str(-it.quantity)),
             cost=cost_snapshot,
             org_id=org_id,
-            allow_negative=is_bom_parent,
+            allow_negative=is_bom_parent or allow_negative_stock,
             operation_type="sale",
             source_type=source_type,
             source_id=str(sale_id),

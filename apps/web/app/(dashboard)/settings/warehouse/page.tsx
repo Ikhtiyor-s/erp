@@ -20,6 +20,13 @@ export default function Page() {
           { value: "fifo", label: "FIFO" },
           { value: "lifo", label: "LIFO" },
         ] },
+      { key: "negative_stock_policy", label: "Manfiy qoldiqli tovar siyosati", type: "select",
+        help: "Sotuvda qoldiq yetmasa nima bo'lsin",
+        options: [
+          { value: "block_sale", label: "Ko'rsatish, lekin sotishga ruxsat bermaslik (standart)" },
+          { value: "allow", label: "Sotishga ruxsat berish (manfiy qoldiqqa)" },
+          { value: "hide", label: "Qoldiq tugagan mahsulotni POS'da umuman ko'rsatmaslik" },
+        ] },
     ]}
   />;
 }

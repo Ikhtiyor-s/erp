@@ -60,9 +60,9 @@ loyihasida bor va u Aniq ERP bilan birlashtirilmaydi).
 | Ombor — qoldiq/xarid/ko'chirish/hisobdan chiqarish/inventarizatsiya | ✅ deyarli to'liq — Aniq ERP'ning ombor moduli PosPoint'dan ancha boy (Odoo-vision asosida qurilgan) |
 | Moliya — kassa/seyf/bank 3-pog'onali balans + inkassatsiya | ❌ yo'q — Aniq ERP'da umumiy `cashboxes`/`cash_movements` bor, lekin "Seyf" alohida pog'ona emas, smena-yopilishiga bog'langan avtomatik inkassatsiya yo'q |
 | Sozlamalar — fiskal rejim (onlayn-kassa) | ❌ yo'q — hech qanday fiskal registrator/modul integratsiyasi yo'q |
-| Sozlamalar — manfiy qoldiq siyosati (3 variant) | ⚠️ qisman — backend'da ikkilik `allow_negative` bor, lekin UI'da tanlanadigan 3-variantli sozlama yo'q |
+| Sozlamalar — manfiy qoldiq siyosati (3 variant) | ✅ qurildi 2026-10-14, API orqali sinaldi |
 | Sozlamalar — katalog ko'rinish rejimi (dorixona/yengillashtirilgan) | ❌ yo'q |
-| Sozlamalar — PIN bilan tezkor kirish | ❌ yo'q |
+| Sozlamalar — PIN bilan tezkor kirish | ✅ qurildi 2026-10-14 (set-pin/pin-login, 2FA bilan mos kelmaydi — ataylab) |
 | Multivalyuta (so'm+USD, aralash to'lov) | ❌ yo'q — `currency_id` mahsulotda bor, lekin POS ekranida ikki-valyutali narx ko'rsatish/aralash to'lov yo'q |
 | Ulgurji narxlar (ikki narxli rejim) | ✅ qurildi 2026-10-14, API orqali sinaldi |
 | Mahsulot variantlari (o'lcham/rang) | ✅ generik shaklda bor (`products.is_variant` + `parent_id`), lekin PosPoint'dagi kabi aniq "attribut" (o'lcham, rang) tizimi emas — erkin parent-child bog'lanish |

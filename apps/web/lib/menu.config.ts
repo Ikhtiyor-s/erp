@@ -270,6 +270,7 @@ export const menuTree: MenuGroup[] = [
       { i18nKey: "settings_payment_method", label: "Способ оплаты",     href: "/settings/payment-method" },
       { i18nKey: "settings_warehouse",      label: "Склад (настройки)", href: "/settings/warehouse" },
       { i18nKey: "settings_wholesale_prices", label: "Ulgurji narxlar",  href: "/settings/wholesale-prices" },
+      { i18nKey: "settings_my_pin",          label: "Mening PIN kodim", href: "/settings/my-pin" },
     ],
   },
 

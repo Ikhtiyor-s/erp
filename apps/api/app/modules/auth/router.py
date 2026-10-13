@@ -31,6 +31,8 @@ from app.modules.auth.schemas import (
     TwoFASetupOut,
     TwoFAVerifyRequest,
     TwoFADisableRequest,
+    SetPinIn,
+    PinLoginRequest,
 )
 
 
@@ -291,6 +293,94 @@ async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(
                 ok = True
         if not ok:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid 2FA code")
+
+    org_res = await db.execute(
+        text(
+            "SELECT organization_id FROM user_organizations "
+            "WHERE user_id = :u ORDER BY is_default DESC LIMIT 1"
+        ),
+        {"u": str(row.id)},
+    )
+    org_id = org_res.scalar()
+
+    return TokenPair(
+        access_token=create_access_token(str(row.id), {"org_id": str(org_id) if org_id else None}),
+        refresh_token=create_refresh_token(str(row.id)),
+    )
+
+
+# =========================================================
+# PIN tezkor kirish (PosPoint-parity) — docs/pospoint-pos/operations/
+# settings.md. A low-entropy (4-6 digit) alternative to the full
+# phone+password login, meant for quick cashier handoff on a trusted
+# shared device. Deliberately NOT usable when 2FA is enabled on the
+# account — PIN login must never become a way around a 2FA the user
+# explicitly set up.
+# =========================================================
+
+@router.get("/pin-status")
+async def pin_status(
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(
+        text("SELECT pin_hash IS NOT NULL AS has_pin FROM users WHERE id = :u"),
+        {"u": user_id},
+    )
+    row = res.first()
+    return {"has_pin": bool(row and row.has_pin)}
+
+
+@router.post("/set-pin")
+async def set_pin(
+    p: SetPinIn,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    await db.execute(
+        text("UPDATE users SET pin_hash = :h WHERE id = :u"),
+        {"h": hash_password(p.pin), "u": user_id},
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete("/pin")
+async def clear_pin(
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    await db.execute(
+        text("UPDATE users SET pin_hash = NULL WHERE id = :u"),
+        {"u": user_id},
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/pin-login", response_model=TokenPair)
+@limiter.limit("5/minute")
+async def pin_login(request: Request, req: PinLoginRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        phone = normalize_phone(req.phone)
+    except ValueError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong phone or PIN")
+
+    res = await db.execute(
+        text(
+            "SELECT id, pin_hash, twofa_enabled FROM users "
+            "WHERE phone = :p AND is_active = TRUE"
+        ),
+        {"p": phone},
+    )
+    row = res.first()
+    if not row or not row.pin_hash or not verify_password(req.pin, row.pin_hash):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong phone or PIN")
+    if row.twofa_enabled:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "2FA yoqilgan hisoblar uchun PIN bilan kirish mumkin emas — parol bilan kiring",
+        )
 
     org_res = await db.execute(
         text(

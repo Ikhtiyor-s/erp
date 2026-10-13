@@ -54,3 +54,12 @@ class UserOut(BaseModel):
     email: str | None = None
     full_name: str | None = None
     locale: str = "ru"
+
+
+class SetPinIn(BaseModel):
+    pin: str = Field(pattern=r"^\d{4,6}$")
+
+
+class PinLoginRequest(BaseModel):
+    phone: str
+    pin: str

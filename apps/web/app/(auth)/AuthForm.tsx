@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
 import { Moon, Sun } from "lucide-react";
 import { useLocale } from "@/i18n/locale-provider";
-import { login, register, requestRegisterOtp, verifyRegisterOtp } from "@/lib/auth";
+import { login, pinLogin, register, requestRegisterOtp, verifyRegisterOtp } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/api-error";
 import { formatUzPhone, isValidUzPhone, normalizeUzPhoneInput, toApiPhone } from "@/lib/phone";
 import { Card, CardBody } from "@/components/ui/card";
@@ -26,6 +26,10 @@ export function AuthForm({ initialMode }: { initialMode: Mode }) {
   // Login
   const [loginPhone, setLoginPhone] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  // PosPoint-parity PIN tezkor kirish — tezkor kassir almashinuvi uchun,
+  // to'liq parol o'rniga 4-6 xonali kod bilan kirish.
+  const [useLoginPin, setUseLoginPin] = useState(false);
+  const [loginPin, setLoginPin] = useState("");
 
   // Register
   const [step, setStep] = useState<RegisterStep>("details");
@@ -47,7 +51,8 @@ export function AuthForm({ initialMode }: { initialMode: Mode }) {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(toApiPhone(loginPhone), loginPassword);
+      if (useLoginPin) await pinLogin(toApiPhone(loginPhone), loginPin);
+      else await login(toApiPhone(loginPhone), loginPassword);
       toast.success(t("welcome"));
       window.location.href = "/dashboard";
     } catch (err) {
@@ -185,18 +190,38 @@ export function AuthForm({ initialMode }: { initialMode: Mode }) {
                   className="flex-1 min-w-0 border-0 bg-white dark:bg-ink-800 text-ink-900 dark:text-ink-100 px-3 py-2 focus:outline-none"
                 />
               </div>
-              <input
-                type="password"
-                required
-                placeholder={t("password")}
-                autoComplete="current-password"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                className="w-full border border-ink-300 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-ink-100 rounded-md px-3 py-2"
-              />
+              {useLoginPin ? (
+                <input
+                  required
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="PIN kod"
+                  value={loginPin}
+                  onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  className="w-full border border-ink-300 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-ink-100 rounded-md px-3 py-2 text-center text-lg tracking-widest font-mono"
+                />
+              ) : (
+                <input
+                  type="password"
+                  required
+                  placeholder={t("password")}
+                  autoComplete="current-password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="w-full border border-ink-300 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-ink-100 rounded-md px-3 py-2"
+                />
+              )}
               <Button type="submit" fullWidth loading={loading}>
                 {t("login")}
               </Button>
+              <button
+                type="button"
+                onClick={() => setUseLoginPin((v) => !v)}
+                className="w-full text-xs text-ink-500 dark:text-ink-400 hover:underline text-center"
+              >
+                {useLoginPin ? "Parol bilan kirish" : "PIN kod bilan kirish"}
+              </button>
             </form>
           )}
 

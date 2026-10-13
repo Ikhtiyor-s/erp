@@ -98,6 +98,7 @@ export default function PosPage() {
   const [scannerEnabled, setScannerEnabled] = useState(true);
   const [wholesaleEnabled, setWholesaleEnabled] = useState(false);
   const [wholesaleMode, setWholesaleMode] = useState(false);
+  const [negativeStockPolicy, setNegativeStockPolicy] = useState<string | null>(null);
   const [paymentTypes, setPaymentTypes] = useState<PaymentTypeItem[]>([]);
   const [loyaltyBalance, setLoyaltyBalance] = useState<number | null>(null);
   // REGOS-style incremental payment panel state — see RG-7.
@@ -154,8 +155,11 @@ export default function PosPage() {
     const p = new URLSearchParams();
     p.set("limit", "30");
     if (search) p.set("q", search);
+    const data = (await api.get<Product[]>(`/warehouse/products?${p}`)).data;
     setProducts(
-      (await api.get<Product[]>(`/warehouse/products?${p}`)).data
+      negativeStockPolicy === "hide"
+        ? data.filter((pr) => pr.is_service || Number(pr.total_stock || 0) > 0)
+        : data
     );
   }
 
@@ -171,7 +175,7 @@ export default function PosPage() {
 
   useEffect(() => {
     loadProducts(debouncedQ);
-  }, [debouncedQ]);
+  }, [debouncedQ, negativeStockPolicy]);
 
   useEffect(() => {
     api
@@ -201,6 +205,10 @@ export default function PosPage() {
     api
       .get<{ value?: { enabled?: boolean } }>("/settings/key/wholesale_prices")
       .then((r) => setWholesaleEnabled(!!r.data?.value?.enabled))
+      .catch(() => {});
+    api
+      .get<{ value?: { negative_stock_policy?: string } }>("/settings/key/warehouse")
+      .then((r) => setNegativeStockPolicy(r.data?.value?.negative_stock_policy || null))
       .catch(() => {});
   }, []);
 

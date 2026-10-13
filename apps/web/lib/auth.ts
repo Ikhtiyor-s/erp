@@ -32,6 +32,21 @@ export async function login(phone: string, password: string) {
   return data;
 }
 
+export async function pinLogin(phone: string, pin: string) {
+  const { data } = await api.post("/auth/pin-login", { phone, pin });
+  localStorage.setItem("access_token", data.access_token);
+  localStorage.setItem("refresh_token", data.refresh_token);
+  if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
+  await ensureOrgId();
+  if (!data.user) {
+    try {
+      const me = await fetchMe();
+      if (me) localStorage.setItem("user", JSON.stringify(me));
+    } catch {}
+  }
+  return data;
+}
+
 export async function requestRegisterOtp(phone: string) {
   const { data } = await api.post("/auth/register/request-otp", { phone });
   return data as { ok: boolean; message: string; dev_code?: string; dev_note?: string };
