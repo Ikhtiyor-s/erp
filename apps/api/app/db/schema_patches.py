@@ -2327,6 +2327,14 @@ ENUM_PATCHES = [
     "ALTER TYPE inventory_status ADD VALUE IF NOT EXISTS 'paused'",
     "ALTER TYPE inventory_status ADD VALUE IF NOT EXISTS 'pending_confirmation'",
     "ALTER TYPE supply_status ADD VALUE IF NOT EXISTS 'partially_received'",
+    # REGOS-parity "Отложить чек" (park/defer) — docs/regos-pos/operations/
+    # sales-registration/general-information.md. Only the "parked mid-payment"
+    # half of REGOS's two-state model (Отложена оплата) — a sale already
+    # created server-side (ensureSale() has run) gets held, not the
+    # pre-payment "Отложен" editing state, which Aniq ERP's architecture
+    # doesn't persist server-side at all (cart is frontend-only until the
+    # first payment tap — see that doc for the full explanation).
+    "ALTER TYPE sale_status ADD VALUE IF NOT EXISTS 'on_hold'",
 ]
 
 

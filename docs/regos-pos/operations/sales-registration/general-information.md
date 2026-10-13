@@ -36,11 +36,23 @@ qarab). Hech qanday "to'xtatilgan" (parked) holat yo'q.
 `cancelled`/`payment_failed` bor — lekin bu **boshqa, kiosk-specific** holat
 mashinasi, shu yerdagi REGOS modeliga mos emas va uni almashtira olmaydi.
 
-**Keyingi qadam:** yangi ticket kerak — `sales.status`ga `parked_editing` va
-`parked_payment` (yoki shunga mos) qiymatlarini qo'shish, POS ekranida
-"Kutish rejimi" tugmasini (hozir docs/regos-pos bo'yicha stub, ERP kodida
-`pos/page.tsx`dagi "Kutish rejimi"/"Kutayotganlar" tugmalari) ulash. Bu
-ushbu hujjatlar to'plamidagi **eng katta yagona gap**.
+**Holat (2026-10-13): qisman qurildi.** Faqat to'lov-bosqichi yarmi
+(Отложена оплата) — `sales.status`ga `on_hold` qiymati qo'shildi
+(`POST /sale/sales/{id}/hold` + `/resume`), POS ekranidagi "Kutish
+rejimi"/"Kutayotganlar" tugmalari ulandi. Tahrirlash-bosqichi yarmi
+(Отложен) **ataylab qurilmadi** — Aniq ERP'da savat `ensureSale()`
+chaqirilgunga (birinchi to'lov urinishigacha) qadar faqat frontend state,
+serverda umuman yozuv yo'q, shuning uchun "tahrirlanayotgan savatni
+to'xtatib qo'yish" tushunchasi bu arxitekturada ma'nosiz — to'xtatadigan
+server-tomon yozuv hali mavjud emas. Bu REGOS bilan solishtirganda
+doimiy, qasddan qoldirilgan arxitektura farqi, vaqtinchalik gap emas.
+
+Qo'shimcha himoya: smena yopish endi kutish rejimidagi cheklar bo'lsa
+blok qiladi ([`sessions.md`](../sessions.md)), to'lov/to'lov-sторno
+endpointlari kutish rejimidagi sotuvga tegishga urinishni 409 bilan rad
+etadi (status tasodifan ustidan yozilib ketmasligi uchun — bu aniq bug
+sifatida birinchi implementatsiyada topildi va darhol tuzatildi). Jonli
+production'da to'liq sinaldi (to'g'ridan-to'g'ri API orqali).
 
 ## 2. Qator sторnosi (сторнирование) ≠ o'chirish
 

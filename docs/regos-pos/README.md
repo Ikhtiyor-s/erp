@@ -61,9 +61,26 @@ tepasida).
 | Chegirma (butun chek, %/so'm) | ✅ qo'shildi |
 | Savat-qator sторnosi (audit-trail, o'chirish emas) | ❌ hali oddiy o'chirish — lekin savat sotuvgacha faqat frontend-draft, haqiqiy audit-trail shart emas |
 | To'lov qatori sторnosi | ✅ qurildi (2026-10-13) — `POST /pay/{movement_id}/void`, audit-trail bilan, production'da sinaldi |
-| Chekni kutish rejimi (Отложить) | ❌ yo'q — eng katta bo'shliq |
+| Chekni kutish rejimi (Отложить) | ✅ qurildi (2026-10-13) — faqat to'lov-bosqichi yarmi (Отложена оплата); tahrirlash-bosqichi (Отложен) Aniq ERP arxitekturasida mavjud emas, sababi general-information.md'da |
 | Kassaga naqd kiritish/chiqarish (sotuvsiz) | ✅ qurildi (2026-10-13) — backend avvaldan bor edi (`POST /finance/movements`), POS ekraniga ulandi |
 | Sotuvchi kodi (komissiya uchun) | ❌ yo'q |
 | Tarozi nol/tara | ❌ yo'q (faqat uzluksiz o'qish bor) |
 | Kod nomenklaturasi / F3 strukturaviy qidiruv / kategoriya bo'yicha tanlash | ❌ yo'q (oddiy inline qidiruv bor) |
 | Belgilangan tovar (UZ markirovka) oqimi | ❌ yo'q |
+
+## Ma'lum kuzatuv (2026-10-13, hali tasdiqlanmagan)
+
+Brauzer orqali qo'lda sinashda bir necha marta `ensureSale()`ning
+`POST /sale/sales` so'rovi **serverda muvaffaqiyatli bajarildi (201,
+server loglarida tasdiqlangan)**, lekin **klient uni tarmoq xatosi deb
+hisobladi** (`postIdempotent`ning retry mexanizmi ham ikkinchi marta xuddi
+shunday "muvaffaqiyatli-lekin-klient-bilmaydi" holatga tushdi) —
+natijada foydalanuvchiga xato ko'rsatildi, savat esa saqlanib qoldi,
+ammo backend'da egasiz (`status=confirmed`, `paid=0`) sotuv qoldi. Bu shu
+sessiyada ko'rilgan muhitga xos tarmoq beqarorligi bilan bog'liq
+bo'lishi mumkin (Postgres VM vaqtincha yuklangan edi) — ammo
+`tapPayment()`/`ensureSale()`ning o'zi "server muvaffaqiyatli bajardi,
+lekin klient bilmayapti" holatidan qanday tiklanishi (hozir — umuman
+tiklanmaydi, `saleId` hech qachon frontend state'ga tushmaydi) real
+chidamlilik (resilience) savoli sifatida qayd etiladi, kelajakda chuqur
+tekshirish uchun. Kod o'zgartirilmadi — hozircha faqat kuzatuv.

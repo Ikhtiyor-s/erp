@@ -471,6 +471,8 @@ async def pay_sale(
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     if row.status == "cancelled":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Продажа отменена")
+    if row.status == "on_hold":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Sotuv kutish rejimida — avval uni davom ettiring")
 
     # HI-2/HI-3: validate cashbox belongs to caller org before touching anything
     await _verify_cashbox_in_org(db, p.cashbox_id, org_id)
@@ -602,6 +604,8 @@ async def void_payment(
         )
     if sale.status == "cancelled":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Sotuv bekor qilingan")
+    if sale.status == "on_hold":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Sotuv kutish rejimida — avval uni davom ettiring")
 
     mv_res = await db.execute(
         text("SELECT amount, cashbox_id, payment_type_id, customer_id, direction, voided_at "
@@ -669,6 +673,73 @@ async def void_payment(
     return {"paid_amount": float(new_paid), "status": new_status}
 
 
+@router.post("/sales/{sale_id}/hold")
+async def hold_sale(
+    sale_id: UUID, request: Request,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    """REGOS-parity "Отложить чек" (park) — docs/regos-pos/operations/
+    sales-registration/general-information.md. Only the mid-payment half
+    (Отложена оплата): a sale already created server-side (status
+    'confirmed' or 'partial') is parked so the cashier can serve another
+    customer, then resumed later via /resume. Blocked once 'paid' or
+    'cancelled' — nothing to park at that point."""
+    res = await db.execute(
+        text("SELECT status FROM sales WHERE id = :id AND organization_id = :o"),
+        {"id": str(sale_id), "o": org_id},
+    )
+    row = res.first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if row.status not in ("confirmed", "partial"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"'{row.status}' holatidagi sotuvni kutish rejimiga qo'yib bo'lmaydi",
+        )
+    await db.execute(
+        text("UPDATE sales SET status = 'on_hold' WHERE id = :id"),
+        {"id": str(sale_id)},
+    )
+    await db.commit()
+    await log_action(db, org_id, user_id, "hold", "sales", str(sale_id), request=request)
+    await db.commit()
+    return {"status": "on_hold"}
+
+
+@router.post("/sales/{sale_id}/resume")
+async def resume_sale(
+    sale_id: UUID, request: Request,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Resume a parked sale (docs/regos-pos/.../general-information.md) —
+    straight back to the payment screen (Отложена оплата -> Оплата), since
+    Aniq ERP's "hold" only ever happens post-ensureSale()."""
+    res = await db.execute(
+        text("SELECT status, total_amount, paid_amount FROM sales WHERE id = :id AND organization_id = :o"),
+        {"id": str(sale_id), "o": org_id},
+    )
+    row = res.first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if row.status != "on_hold":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Bu sotuv kutish rejimida emas")
+    paid = Decimal(str(row.paid_amount or 0))
+    total = Decimal(str(row.total_amount or 0))
+    new_status = "paid" if paid >= total and total > 0 else ("partial" if paid > 0 else "confirmed")
+    await db.execute(
+        text("UPDATE sales SET status = :st WHERE id = :id"),
+        {"st": new_status, "id": str(sale_id)},
+    )
+    await db.commit()
+    await log_action(db, org_id, user_id, "resume", "sales", str(sale_id), request=request)
+    await db.commit()
+    return {"status": new_status}
+
+
 async def _verify_payment_type_in_org(db, payment_type_id, org_id):
     if payment_type_id is None:
         return
@@ -711,6 +782,8 @@ async def pay_sale_split(
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     if row.status == "cancelled":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Продажа отменена")
+    if row.status == "on_hold":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Sotuv kutish rejimida — avval uni davom ettiring")
 
     # Validate every line BEFORE writing anything — one bad line must roll back
     # (here: not write at all) the whole request, no partial cash_movements.

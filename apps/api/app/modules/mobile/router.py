@@ -473,6 +473,27 @@ async def close_session(
     )
     if not chk.first():
         raise HTTPException(404, "Sessiya topilmadi")
+
+    # REGOS-parity: can't close a shift while any parked ("Отложена оплата")
+    # sale is still pending — docs/regos-pos/operations/sessions.md. `sales`
+    # has no cashbox_id of its own (only cash_movements does, per-payment),
+    # so this is an org-wide check, not scoped to this specific cashbox —
+    # a known approximation, noted in that doc.
+    held = await db.execute(
+        text("SELECT id, doc_number FROM sales WHERE organization_id = :o AND status = 'on_hold' LIMIT 5"),
+        {"o": org_id},
+    )
+    # doc_number is frequently NULL (create_sale_core never sets it — same
+    # pre-existing gap pos/page.tsx's finalize() already falls back around),
+    # so fall back to a short id the same way, instead of showing "None".
+    held_labels = [r.doc_number or str(r.id)[:8] for r in held]
+    if held_labels:
+        raise HTTPException(
+            400,
+            "Kutish rejimidagi cheklar bor, avval ularni yakunlang yoki bekor qiling: "
+            + ", ".join(held_labels),
+        )
+
     totals = await _compute_session_totals(db, sid)
     res = await db.execute(
         text("UPDATE cashbox_sessions SET closed_by = :u, closed_at = NOW(), "

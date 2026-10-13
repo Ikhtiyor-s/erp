@@ -23,15 +23,16 @@ Manba: `docs.regos.uz/ru/regos-pos/operations/sessions`
 | REGOS qoidasi | Aniq ERP |
 |---|---|
 | Ochiq smena bo'lsa — yangisini ochib bo'lmaydi | tekshirilmagan — ehtimol bor (`mobile/router.py` cashbox-session endpointlarida), aniq tasdiqlash kerak |
-| Kutish rejimidagi cheklar bo'lsa yopib bo'lmaydi | ❌ Yo'q — chunki "kutish rejimi" tushunchasining o'zi yo'q (`general-information.md`ga qarang), blok qiladigan narsa yo'q |
+| Kutish rejimidagi cheklar bo'lsa yopib bo'lmaydi | ✅ qurildi (2026-10-13) — `close_session` `on_hold` sotuv bo'lsa 400. **Cheklov**: `sales`da o'z `cashbox_id`'si yo'q, shuning uchun tekshiruv tashkilot bo'yicha, aniq shu kassaga emas |
 | Ochish/yopishda avtomatik chek | ✅ Qisman — `printShiftReport()` (`bt-printer.ts`, RG-1, 2026-10-12) X/Z hisobotni chop etadi, lekin bu "avtomatik" emas — kassir qo'lda "Chop etish" tugmasini bosishi kerak |
 | Smenalar tarixi + qayta chop etish | ✅ Bor — `finance/cashbox-sessions` sahifasi |
 | Terminal solishtirish (Ingenico) | — tegishli emas (terminal integratsiyasi yo'q) |
 
 ## Keyingi qadam
 
-Asosiy gap — "kutish rejimidagi cheklar" tushunchasi yo'qligi sababli,
-smena yopishni blokirovka qilish ham yo'q. Bu alohida ticket emas —
-[`general-information.md`](sales-registration/general-information.md)dagi
-park/defer ticketi qurilgandan keyin, shu yerga ham qo'shimcha shart
-sifatida qo'shiladi.
+Qolgan ikkita kichik gap: (1) "ochiq smena bo'lsa yangisini ochib
+bo'lmaydi" qoidasi hali tasdiqlanmagan (ehtimol allaqachon bor); (2)
+yuqoridagi "tashkilot bo'yicha, kassaga emas" cheklovi — buni to'g'irlash
+uchun `sales`ga o'z `cashbox_id` ustunini qo'shish kerak bo'ladi (hozir
+faqat `cashbox_session_id` bor, va u ham faqat mobile-POS oqimida
+to'ldiriladi, desktop `/sale/sales`da emas).

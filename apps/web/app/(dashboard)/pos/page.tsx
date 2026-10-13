@@ -52,6 +52,14 @@ type CommittedLine = {
 type MethodTap = { kind: "type"; pt: PaymentTypeItem } | { kind: "bonus" };
 type DiscountKind = "percent" | "amount";
 type KeypadTarget = "payment" | "discount";
+type HeldSale = {
+  id: string;
+  uuid_label: string;
+  total_amount: number;
+  paid_amount: number;
+  sale_date: string;
+  customer_name?: string | null;
+};
 
 const fmt = (v: any) =>
   Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
@@ -119,9 +127,15 @@ export default function PosPage() {
   const [discountInput, setDiscountInput] = useState("");
   const [discountValue, setDiscountValue] = useState(0);
   const [keypadTarget, setKeypadTarget] = useState<KeypadTarget>("payment");
-  const [now, setNow] = useState(() => new Date());
+  // Starts null (not `new Date()`) so server-render and the client's first
+  // render before hydration produce the same empty text — a clock value
+  // computed at module/render time differs between server and client by
+  // definition and was causing a React hydration-mismatch crash (#418) that
+  // made buttons below it stop responding to clicks.
+  const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
+    setNow(new Date());
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
@@ -702,6 +716,16 @@ export default function PosPage() {
         cancelWholeSale();
         return;
       }
+      if (e.ctrlKey && (e.key === "g" || e.key === "G")) {
+        e.preventDefault();
+        holdCurrentSale();
+        return;
+      }
+      if (e.ctrlKey && (e.key === "j" || e.key === "J")) {
+        e.preventDefault();
+        openHeldModal();
+        return;
+      }
       if (e.key === "F12") {
         e.preventDefault();
         cancelWholeSale();
@@ -742,6 +766,16 @@ export default function PosPage() {
   const [cashMoveDesc, setCashMoveDesc] = useState("");
   const [cashMoveSubmitting, setCashMoveSubmitting] = useState(false);
 
+  // REGOS "Отложить чек" (park/defer) — docs/regos-pos/operations/
+  // sales-registration/general-information.md. Only the mid-payment half
+  // (Отложена оплата): a sale already created server-side can be held and
+  // resumed later. The pre-payment "editing" half (Отложен) has no Aniq ERP
+  // equivalent — the cart is frontend-only until the first payment tap.
+  const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
+  const [heldModalOpen, setHeldModalOpen] = useState(false);
+  const [holding, setHolding] = useState(false);
+  const [resumingId, setResumingId] = useState<string | null>(null);
+
   async function submitCashMovement() {
     const amt = Number(cashMoveAmount) || 0;
     if (amt <= 0) {
@@ -772,6 +806,73 @@ export default function PosPage() {
       toast.error(getErrorMessage(e, "Kassa harakati amalga oshmadi"));
     } finally {
       setCashMoveSubmitting(false);
+    }
+  }
+
+  async function holdCurrentSale() {
+    if (!saleId || fullyPaid) return;
+    setHolding(true);
+    try {
+      await api.post(`/sale/sales/${saleId}/hold`);
+      toast.success("Chek kutish rejimiga qo'yildi");
+      setCart([]);
+      setCustomerId("");
+      resetPaymentPanel();
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Kutish rejimiga qo'yib bo'lmadi"));
+    } finally {
+      setHolding(false);
+    }
+  }
+
+  async function openHeldModal() {
+    setHeldModalOpen(true);
+    try {
+      const { data } = await api.get<HeldSale[]>("/sale/sales", {
+        params: { status: "on_hold", limit: 50 },
+      });
+      setHeldSales(data);
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Kutayotgan cheklarni yuklab bo'lmadi"));
+    }
+  }
+
+  async function resumeHeldSale(id: string) {
+    if (saleId) {
+      toast.error("Avval joriy chekni yakunlang yoki kutish rejimiga qo'ying");
+      return;
+    }
+    setResumingId(id);
+    try {
+      const resumeResp = await api.post(`/sale/sales/${id}/resume`);
+      const { data: detail } = await api.get(`/sale/sales/${id}`);
+      const items = (detail.items || []) as any[];
+      const reconstructed: Cart[] = items.map((it) => ({
+        product: {
+          id: it.product_id,
+          name: it.product_name || "—",
+          sale_price: String(it.price),
+          is_service: false,
+        },
+        qty: Number(it.quantity),
+      }));
+      setCart(reconstructed);
+      setCustomerId(detail.head?.customer_id || "");
+      setSaleId(id);
+      setSaleTotalFrozen(Number(detail.head?.total_amount) || 0);
+      const paid = Number(detail.head?.paid_amount) || 0;
+      setPaidSoFar(paid);
+      setCommittedLines(
+        paid > 0 ? [{ label: "Oldingi to'lov(lar)", amount: paid }] : []
+      );
+      setAmountInput("");
+      setLastChange(0);
+      setHeldModalOpen(false);
+      toast.success(`Chek davom ettirildi — ${resumeResp.data?.status || ""}`);
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Chekni davom ettirib bo'lmadi"));
+    } finally {
+      setResumingId(null);
     }
   }
 
@@ -853,7 +954,7 @@ export default function PosPage() {
                   {saleId ? `SOTUV (OCHIQ) · №${saleId.slice(0, 8)}` : "YANGI SOTUV"}
                 </div>
                 <div className="text-[11px] text-ink-400 mt-0.5">
-                  CHAKANA NARX · {now.toLocaleDateString("uz-UZ")} {now.toLocaleTimeString("uz-UZ")}
+                  CHAKANA NARX{now ? ` · ${now.toLocaleDateString("uz-UZ")} ${now.toLocaleTimeString("uz-UZ")}` : ""}
                 </div>
               </div>
             </div>
@@ -1213,10 +1314,21 @@ export default function PosPage() {
             <button type="button" className={stubBtn} onClick={() => notBuiltYet("Sotuvchi")}>
               Sotuvchi
             </button>
-            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Chekni kutish rejimi")}>
+            <button
+              type="button"
+              disabled={!saleId || fullyPaid || holding}
+              onClick={holdCurrentSale}
+              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 text-xs font-medium hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40"
+              title="Ctrl+G"
+            >
               Kutish rejimi
             </button>
-            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Kutayotgan cheklar")}>
+            <button
+              type="button"
+              onClick={openHeldModal}
+              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 text-xs font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
+              title="Ctrl+J"
+            >
               Kutayotganlar
             </button>
             <button
@@ -1327,6 +1439,37 @@ export default function PosPage() {
             {cashMoveDirection === "in" ? "Kassaga kiritish" : "Kassadan chiqarish"}
           </Button>
         </div>
+      </Modal>
+
+      <Modal open={heldModalOpen} onClose={() => setHeldModalOpen(false)} title="Kutayotgan cheklar" size="md">
+        {heldSales.length === 0 ? (
+          <div className="text-center text-ink-400 dark:text-ink-600 py-8 text-sm">
+            Kutish rejimidagi chek yo'q
+          </div>
+        ) : (
+          <ul className="divide-y divide-ink-100 dark:divide-ink-800">
+            {heldSales.map((s) => (
+              <li key={s.id} className="flex items-center justify-between py-2">
+                <div>
+                  <div className="font-medium text-sm text-ink-900 dark:text-ink-100">{s.uuid_label}</div>
+                  <div className="text-xs text-ink-400">
+                    {s.customer_name || "Chakana"} · {fmt(s.paid_amount)}/{fmt(s.total_amount)}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  loading={resumingId === s.id}
+                  disabled={!!saleId}
+                  onClick={() => resumeHeldSale(s.id)}
+                >
+                  Davom ettirish
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
       </Modal>
     </div>
   );
