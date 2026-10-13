@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Search, Plus, Minus, Trash2, ScanLine, Scale, Printer, PackageOpen } from "lucide-react";
+import { Search, Plus, Minus, Trash2, ScanLine, Scale, Printer, PackageOpen, Percent, LogOut, RotateCcw } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { newIdempotencyKey, postIdempotent } from "@/lib/idempotency";
@@ -43,12 +44,23 @@ type Cashbox = { id: number; name: string; currency_id?: number };
 type PaymentTypeItem = { id: number; code: string; name: string; is_cash: boolean; is_active: boolean };
 type CommittedLine = { label: string; amount: number; isBonus?: boolean };
 type MethodTap = { kind: "type"; pt: PaymentTypeItem } | { kind: "bonus" };
+type DiscountKind = "percent" | "amount";
+type KeypadTarget = "payment" | "discount";
 
 const fmt = (v: any) =>
   Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 
+// Stub action — the REGOS button exists for visual/muscle-memory parity, but
+// the underlying Aniq ERP feature isn't built yet (see
+// project_erp_regos_pos_workflow.md for the full gap list). Never silently
+// no-op: always say so.
+function notBuiltYet(label: string) {
+  toast(`${label} — hali ERP'da yo'q (REGOS parity bo'yicha reja)`, { icon: "🚧" });
+}
+
 export default function PosPage() {
   const t = useTranslations("ui");
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -56,6 +68,7 @@ export default function PosPage() {
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [cart, setCart] = useState<Cart[]>([]);
   const [customerId, setCustomerId] = useState("");
   const [warehouseId, setWarehouseId] = useState<number | "">("");
@@ -92,6 +105,20 @@ export default function PosPage() {
   }>({});
   const [receiptTemplate, setReceiptTemplate] = useState<string | null>(null);
   const [orgInfo, setOrgInfo] = useState<{ name?: string; address?: string; phone?: string }>({});
+
+  // Whole-document discount (REGOS Ctrl+Shift+O/P) — % or so'm, editable only
+  // before a sale is created. Distributed pro-rata into each line's
+  // sale_items.discount on create (backend already supports the column).
+  const [discountKind, setDiscountKind] = useState<DiscountKind | null>(null);
+  const [discountInput, setDiscountInput] = useState("");
+  const [discountValue, setDiscountValue] = useState(0);
+  const [keypadTarget, setKeypadTarget] = useState<KeypadTarget>("payment");
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   async function loadProducts(search: string) {
     const p = new URLSearchParams();
@@ -344,21 +371,58 @@ export default function PosPage() {
     }
   }
 
-  // REGOS-style numeric keypad — writes straight into the same amountInput
-  // used by tapPayment, so Naqd/Karta behave exactly as before.
-  function appendDigit(d: string) {
-    if (fullyPaid || committing) return;
-    setAmountInput((v) => {
+  // REGOS-style numeric keypad. Writes into amountInput (payment) or
+  // discountInput (whole-doc discount entry), depending on keypadTarget.
+  function keypadDigit(d: string) {
+    const setter = keypadTarget === "discount" ? setDiscountInput : setAmountInput;
+    if (keypadTarget === "payment" && (fullyPaid || committing)) return;
+    setter((v) => {
       if (d === "." && v.includes(".")) return v;
       if (d === "00") return v === "" ? "0" : v + "00";
       return v + d;
     });
   }
-  function clearAmount() {
-    setAmountInput("");
+  function keypadClear() {
+    if (keypadTarget === "discount") setDiscountInput("");
+    else setAmountInput("");
   }
-  function backspaceAmount() {
-    setAmountInput((v) => v.slice(0, -1));
+  function keypadBackspace() {
+    if (keypadTarget === "discount") setDiscountInput((v) => v.slice(0, -1));
+    else setAmountInput((v) => v.slice(0, -1));
+  }
+  function keypadEnter() {
+    if (keypadTarget === "discount") {
+      applyDiscountEntry();
+      return;
+    }
+    if (!fullyPaid && !committing && cart.length > 0 && paymentTypes[0]) {
+      tapPayment({ kind: "type", pt: paymentTypes[0] });
+    }
+  }
+
+  // Whole-document discount — REGOS Ctrl+Shift+O (%) / Ctrl+Shift+P (so'm).
+  // Only editable before ensureSale() runs (cart still "Открыт", not yet
+  // posted) — matches REGOS, where discount belongs to the editing stage.
+  function startDiscountEntry(kind: DiscountKind) {
+    if (saleId) {
+      toast.error("Sotuv allaqachon yaratilgan — chegirma faqat tahrirlash bosqichida");
+      return;
+    }
+    setDiscountKind(kind);
+    setDiscountInput(discountValue > 0 ? String(discountValue) : "");
+    setKeypadTarget("discount");
+  }
+  function applyDiscountEntry() {
+    const v = Math.max(0, Number(discountInput) || 0);
+    setDiscountValue(v);
+    setKeypadTarget("payment");
+    if (v === 0) setDiscountKind(null);
+  }
+  function clearDiscount() {
+    setDiscountKind(null);
+    setDiscountValue(0);
+    setDiscountInput("");
+    setKeypadTarget("payment");
   }
 
   function chgQty(id: string, delta: number) {
@@ -376,17 +440,24 @@ export default function PosPage() {
     setCart((c) => c.filter((x) => x.product.id !== id));
   }
 
-  const total = cart.reduce(
+  const subtotal = cart.reduce(
     (s, c) => s + Number(c.product.sale_price) * c.qty,
     0
   );
+  const discountAmount =
+    discountKind === "percent"
+      ? Math.min(subtotal, subtotal * (discountValue / 100))
+      : discountKind === "amount"
+      ? Math.min(subtotal, discountValue)
+      : 0;
+  const total = Math.max(0, subtotal - discountAmount);
 
-  // Before the sale exists, the cart total is the live figure. Once created,
-  // the backend-confirmed total_amount is authoritative for the rest of this
-  // transaction's incremental payment taps.
+  // Before the sale exists, the cart total (after discount) is the live
+  // figure. Once created, the backend-confirmed total_amount is authoritative
+  // for the rest of this transaction's incremental payment taps.
   const effectiveTotal = saleId ? saleTotalFrozen : total;
   const remainingDue = Math.max(0, effectiveTotal - paidSoFar);
-  const fullyPaid = remainingDue <= 0.01;
+  const fullyPaid = cart.length > 0 && remainingDue <= 0.01;
 
   function resetPaymentPanel() {
     setSaleId(null);
@@ -397,6 +468,19 @@ export default function PosPage() {
     setLastChange(0);
     setLoyaltyEarned(0);
     setLoyaltyRedeemedTotal(0);
+    clearDiscount();
+  }
+
+  // F9 (REGOS "Аннулировать" — cancel whole doc). This session only has a
+  // pre-payment cart to clear; REGOS's real cancel can also void an
+  // in-payment document, which Aniq ERP doesn't model yet (no parked/
+  // in-payment status — see project_erp_regos_pos_workflow.md).
+  function cancelWholeSale() {
+    if (cart.length === 0 && !saleId) return;
+    if (!window.confirm("Butun chek bekor qilinsinmi?")) return;
+    setCart([]);
+    setCustomerId("");
+    resetPaymentPanel();
   }
 
   async function ensureSale(): Promise<{ id: string; total: number } | null> {
@@ -415,16 +499,29 @@ export default function PosPage() {
     if (!createSaleKeyRef.current) createSaleKeyRef.current = newIdempotencyKey();
     try {
       const selectedCashbox = cashboxes.find((c) => c.id === cashboxId);
+      // Whole-doc discount is distributed pro-rata across lines (sale_items.discount
+      // is a per-line absolute amount — see apps/api/app/modules/sale/router.py
+      // SaleItemIn.discount). Rounding remainder is accepted (a few tiyin at most);
+      // not worth exact penny-distribution for this session's scope.
+      const items = cart.map((c) => {
+        const lineSubtotal = Number(c.product.sale_price) * c.qty;
+        const lineDiscount =
+          discountAmount > 0 && subtotal > 0
+            ? Math.round(((discountAmount * lineSubtotal) / subtotal) * 100) / 100
+            : 0;
+        return {
+          product_id: c.product.id,
+          quantity: c.qty,
+          price: Number(c.product.sale_price),
+          discount: lineDiscount,
+        };
+      });
       const data = await postIdempotent(api, "/sale/sales", {
         warehouse_id: warehouseId,
         cashbox_id: cashboxId,
         currency_id: selectedCashbox?.currency_id,
         customer_id: customerId || null,
-        items: cart.map((c) => ({
-          product_id: c.product.id,
-          quantity: c.qty,
-          price: Number(c.product.sale_price),
-        })),
+        items,
       }, createSaleKeyRef.current);
       const totalAmount = Number(data.total_amount ?? total);
       setSaleId(data.id);
@@ -548,6 +645,65 @@ export default function PosPage() {
     }
   }
 
+  // REGOS hotkeys — F3/F5/F8/F9/F12/Delete/Esc (the subset docs.regos.uz
+  // flags as covering most cashier muscle memory). Guarded so typing in a
+  // text field still works normally (Delete/Esc) or isn't hijacked at all
+  // (F-keys are safe globally — browsers don't use them for text editing).
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+
+      if (e.key === "F3") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+      if (e.key === "F5") {
+        e.preventDefault();
+        router.push("/sale/return");
+        return;
+      }
+      if (e.key === "F8") {
+        e.preventDefault();
+        keypadEnter();
+        if (fullyPaid && saleId) finalize();
+        return;
+      }
+      if (e.key === "F9") {
+        e.preventDefault();
+        cancelWholeSale();
+        return;
+      }
+      if (e.key === "F12") {
+        e.preventDefault();
+        cancelWholeSale();
+        return;
+      }
+      if (e.key === "Delete" && !typing && !saleId && cart.length > 0) {
+        e.preventDefault();
+        // Storno-lite: removes the last line. REGOS strikes the line through
+        // and keeps a negative counter-line for audit instead of deleting —
+        // not replicated yet (see project_erp_regos_pos_workflow.md gap #3).
+        removeCart(cart[cart.length - 1].product.id);
+        return;
+      }
+      if (e.key === "Escape") {
+        if (keypadTarget === "discount") {
+          e.preventDefault();
+          setKeypadTarget("payment");
+          setDiscountInput("");
+        }
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saleId, cart, fullyPaid, keypadTarget, amountInput, discountInput]);
+
+  const stubBtn =
+    "h-10 rounded-md border border-ink-200 dark:border-ink-800 text-ink-400 dark:text-ink-600 text-xs font-medium cursor-not-allowed";
+
   return (
     <div className="space-y-3">
       <PageHeader title={t("ui__pos_касса_a8ec6dab")} description={t("ui__быстрая_продажа_8922faf4")} />
@@ -614,22 +770,42 @@ export default function PosPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3">
-        {/* Sale ticket — REGOS-style: totals strip + line-item table + quick-add below */}
+        {/* Sale ticket — REGOS-style: logo/clock strip + totals + line-item table + quick-add */}
         <Card padding="none" className="overflow-hidden border-2 border-ink-200 dark:border-ink-800">
           <div className="flex flex-wrap items-stretch justify-between gap-3 bg-ink-50 dark:bg-ink-900 border-b border-ink-200 dark:border-ink-800 px-4 py-3">
-            <div>
-              <div className="text-xs font-bold text-ink-600 dark:text-ink-300 uppercase tracking-wide">
-                {saleId ? `SOTUV (OCHIQ) · №${saleId.slice(0, 8)}` : "YANGI SOTUV"}
+            <div className="flex items-center gap-4">
+              <div className="font-extrabold text-xl tracking-tight text-danger-600 dark:text-danger-500">
+                ANIQ <span className="text-ink-900 dark:text-ink-100">POS</span>
               </div>
-              <div className="text-[11px] text-ink-400 mt-0.5">CHAKANA NARX</div>
+              <div>
+                <div className="text-xs font-bold text-ink-600 dark:text-ink-300 uppercase tracking-wide">
+                  {saleId ? `SOTUV (OCHIQ) · №${saleId.slice(0, 8)}` : "YANGI SOTUV"}
+                </div>
+                <div className="text-[11px] text-ink-400 mt-0.5">
+                  CHAKANA NARX · {now.toLocaleDateString("uz-UZ")} {now.toLocaleTimeString("uz-UZ")}
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-5 text-right">
               <div>
                 <div className="text-[11px] text-ink-400">Jami</div>
                 <div className="font-mono font-bold text-lg text-ink-900 dark:text-ink-100">
-                  {fmt(effectiveTotal)}
+                  {fmt(subtotal)}
                 </div>
               </div>
+              {discountAmount > 0 && (
+                <div>
+                  <div className="text-[11px] text-ink-400 flex items-center gap-1 justify-end">
+                    Chegirma
+                    <button type="button" onClick={clearDiscount} className="text-danger-500 hover:underline">
+                      ✕
+                    </button>
+                  </div>
+                  <div className="font-mono font-bold text-lg text-warning-600 dark:text-warning-500">
+                    −{fmt(discountAmount)}
+                  </div>
+                </div>
+              )}
               <div>
                 <div className="text-[11px] text-ink-400">To'langan</div>
                 <div className="font-mono font-bold text-lg text-info-600 dark:text-info-500">
@@ -654,6 +830,7 @@ export default function PosPage() {
               <thead className="sticky top-0 bg-ink-100 dark:bg-ink-800 text-ink-500 dark:text-ink-400 text-[11px] uppercase">
                 <tr>
                   <th className="px-2 py-2 text-left w-8">#</th>
+                  <th className="px-2 py-2 text-left w-20">Kod</th>
                   <th className="px-2 py-2 text-left">Nomi</th>
                   <th className="px-2 py-2 text-center w-28">Soni</th>
                   <th className="px-2 py-2 text-right w-24">Narx</th>
@@ -668,11 +845,13 @@ export default function PosPage() {
                     className="border-b border-ink-100 dark:border-ink-800 hover:bg-brand-50/60 dark:hover:bg-brand-900/10"
                   >
                     <td className="px-2 py-2 text-ink-400 font-mono text-xs">{i + 1}</td>
+                    <td className="px-2 py-2 font-mono text-xs text-ink-500 dark:text-ink-400">
+                      {c.product.sku || "—"}
+                    </td>
                     <td className="px-2 py-2">
                       <div className="font-medium text-ink-900 dark:text-ink-100 line-clamp-1">
                         {c.product.name}
                       </div>
-                      <div className="text-[11px] text-ink-400">{c.product.sku || "—"}</div>
                     </td>
                     <td className="px-2 py-2">
                       <div className="flex items-center justify-center gap-1">
@@ -718,7 +897,7 @@ export default function PosPage() {
                 ))}
                 {cart.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center text-ink-400 dark:text-ink-600 py-16">
+                    <td colSpan={7} className="text-center text-ink-400 dark:text-ink-600 py-16">
                       {t("ui__пусто_e5b328b4")}
                     </td>
                   </tr>
@@ -783,6 +962,7 @@ export default function PosPage() {
             <div className="relative mb-2">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
               <input
+                ref={searchInputRef}
                 className={`${input} pl-9`}
                 placeholder={`${t("ui__поиск_товара_название_штрих_ко_8537959b")} (F3)`}
                 value={q}
@@ -816,7 +996,7 @@ export default function PosPage() {
           </div>
         </Card>
 
-        {/* Payment panel — keypad + tender buttons, REGOS-style */}
+        {/* Payment panel — keypad + tender buttons + action grid, REGOS-style */}
         <Card padding="md" className="flex flex-col gap-3 h-fit sticky top-4 border-2 border-ink-200 dark:border-ink-800">
           <Button
             variant="success"
@@ -855,68 +1035,130 @@ export default function PosPage() {
             </div>
           )}
 
-          {!fullyPaid && (
-            <>
-              <div className="border border-ink-300 dark:border-ink-700 rounded-md px-3 py-2 text-right font-mono text-2xl font-bold bg-ink-50 dark:bg-ink-900 text-ink-900 dark:text-ink-100">
-                {amountInput || fmt(remainingDue)}
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {["7", "8", "9", "4", "5", "6", "1", "2", "3", "0", ".", "00"].map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    disabled={committing || cart.length === 0}
-                    onClick={() => appendDigit(k)}
-                    className="h-11 rounded-md border border-ink-300 dark:border-ink-700 bg-white dark:bg-ink-800 text-ink-900 dark:text-ink-100 text-lg font-semibold hover:bg-ink-50 dark:hover:bg-ink-700 disabled:opacity-50"
-                  >
-                    {k}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  disabled={committing || cart.length === 0}
-                  onClick={clearAmount}
-                  className="h-11 rounded-md border border-danger-300 dark:border-danger-700 text-danger-600 dark:text-danger-500 font-semibold hover:bg-danger-50 dark:hover:bg-danger-500/15 disabled:opacity-50"
-                >
-                  C
-                </button>
-                <button
-                  type="button"
-                  disabled={committing || cart.length === 0}
-                  onClick={backspaceAmount}
-                  className="h-11 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-semibold hover:bg-ink-50 dark:hover:bg-ink-700 disabled:opacity-50"
-                >
-                  ⌫
-                </button>
-              </div>
+          <div
+            className={`border rounded-md px-3 py-2 text-right font-mono text-2xl font-bold ${
+              keypadTarget === "discount"
+                ? "border-warning-400 dark:border-warning-600 bg-warning-50 dark:bg-warning-500/10 text-warning-700 dark:text-warning-500"
+                : "border-ink-300 dark:border-ink-700 bg-ink-50 dark:bg-ink-900 text-ink-900 dark:text-ink-100"
+            }`}
+          >
+            {keypadTarget === "discount"
+              ? `Chegirma${discountKind === "percent" ? " %" : " so'm"}: ${discountInput || "0"}`
+              : amountInput || fmt(remainingDue)}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {["7", "8", "9", "4", "5", "6", "1", "2", "3", "0", ".", "00"].map((k) => (
+              <button
+                key={k}
+                type="button"
+                disabled={keypadTarget === "payment" && (committing || cart.length === 0)}
+                onClick={() => keypadDigit(k)}
+                className="h-11 rounded-md border border-ink-300 dark:border-ink-700 bg-white dark:bg-ink-800 text-ink-900 dark:text-ink-100 text-lg font-semibold hover:bg-ink-50 dark:hover:bg-ink-700 disabled:opacity-50"
+              >
+                {k}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={keypadClear}
+              className="h-11 rounded-md border border-danger-300 dark:border-danger-700 text-danger-600 dark:text-danger-500 font-semibold hover:bg-danger-50 dark:hover:bg-danger-500/15"
+            >
+              C
+            </button>
+            <button
+              type="button"
+              onClick={keypadBackspace}
+              className="h-11 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-semibold hover:bg-ink-50 dark:hover:bg-ink-700"
+            >
+              ⌫
+            </button>
+            <button
+              type="button"
+              onClick={keypadEnter}
+              disabled={keypadTarget === "payment" && (fullyPaid || committing || cart.length === 0)}
+              className="h-11 rounded-md border border-brand-400 dark:border-brand-600 text-brand-700 dark:text-brand-400 font-semibold hover:bg-brand-50 dark:hover:bg-brand-900/20 disabled:opacity-50"
+            >
+              Enter
+            </button>
+          </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                {paymentTypes.map((pt) => (
-                  <Button
-                    key={pt.id}
-                    type="button"
-                    variant="outline"
-                    size="lg"
-                    disabled={committing || cart.length === 0}
-                    onClick={() => tapPayment({ kind: "type", pt })}
-                  >
-                    {pt.name}
-                  </Button>
-                ))}
-                {customerId && loyaltyBalance !== null && loyaltyBalance > 0 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="lg"
-                    disabled={committing || cart.length === 0}
-                    onClick={() => tapPayment({ kind: "bonus" })}
-                  >
-                    Bonus
-                  </Button>
-                )}
-              </div>
-            </>
-          )}
+          <div className="grid grid-cols-2 gap-2">
+            {paymentTypes.map((pt) => (
+              <Button
+                key={pt.id}
+                type="button"
+                variant="outline"
+                size="lg"
+                disabled={fullyPaid || committing || cart.length === 0}
+                onClick={() => tapPayment({ kind: "type", pt })}
+              >
+                {pt.name}
+              </Button>
+            ))}
+            {customerId && loyaltyBalance !== null && loyaltyBalance > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                disabled={fullyPaid || committing || cart.length === 0}
+                onClick={() => tapPayment({ kind: "bonus" })}
+              >
+                Bonus
+              </Button>
+            )}
+          </div>
+
+          {/* REGOS action-button grid. Wired where Aniq ERP already has the
+              capability; otherwise visibly present but disabled (never fake
+              a feature that isn't built — see project_erp_regos_pos_workflow.md). */}
+          <div className="border-t border-ink-200 dark:border-ink-800 pt-3 grid grid-cols-3 gap-1.5 text-xs">
+            <button
+              type="button"
+              disabled={!!saleId}
+              onClick={() => startDiscountEntry("percent")}
+              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40 flex items-center justify-center gap-1"
+            >
+              <Percent size={12} /> Chegirma
+            </button>
+            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Sotuvchi")}>
+              Sotuvchi
+            </button>
+            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Chekni kutish rejimi")}>
+              Kutish rejimi
+            </button>
+            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Kutayotgan cheklar")}>
+              Kutayotganlar
+            </button>
+            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Kassa harakati (kiritish/chiqarish)")}>
+              Kassa harakati
+            </button>
+            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Ekranni bloklash")}>
+              Bloklash
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/sale/contract")}
+              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
+            >
+              Cheklar
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/sale/return")}
+              className="h-10 rounded-md border border-danger-300 dark:border-danger-700 text-danger-600 dark:text-danger-500 font-medium hover:bg-danger-50 dark:hover:bg-danger-500/15 flex items-center justify-center gap-1"
+              title="Qaytarish (F5)"
+            >
+              <RotateCcw size={12} /> Qaytarish
+            </button>
+            <button
+              type="button"
+              onClick={cancelWholeSale}
+              className="h-10 rounded-md border border-danger-400 dark:border-danger-600 bg-danger-50 dark:bg-danger-500/15 text-danger-700 dark:text-danger-500 font-semibold hover:bg-danger-100 dark:hover:bg-danger-500/25 flex items-center justify-center gap-1"
+              title="Bekor qilish / chiqish (F9 / F12)"
+            >
+              <LogOut size={12} /> Chiqish
+            </button>
+          </div>
 
           {lastReceipt && (
             <div className="border-t border-ink-200 dark:border-ink-800 pt-3">
