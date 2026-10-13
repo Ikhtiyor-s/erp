@@ -705,7 +705,7 @@ export default function PosPage() {
     "h-10 rounded-md border border-ink-200 dark:border-ink-800 text-ink-400 dark:text-ink-600 text-xs font-medium cursor-not-allowed";
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 max-w-[1700px] mx-auto">
       <PageHeader title={t("ui__pos_касса_a8ec6dab")} description={t("ui__быстрая_продажа_8922faf4")} />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -769,7 +769,7 @@ export default function PosPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-3">
         {/* Sale ticket — REGOS-style: logo/clock strip + totals + line-item table + quick-add */}
         <Card padding="none" className="overflow-hidden border-2 border-ink-200 dark:border-ink-800">
           <div className="flex flex-wrap items-stretch justify-between gap-3 bg-ink-50 dark:bg-ink-900 border-b border-ink-200 dark:border-ink-800 px-4 py-3">
