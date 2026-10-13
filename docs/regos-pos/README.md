@@ -62,7 +62,7 @@ tepasida).
 | Savat-qator sторnosi (audit-trail, o'chirish emas) | ❌ hali oddiy o'chirish — lekin savat sotuvgacha faqat frontend-draft, haqiqiy audit-trail shart emas |
 | To'lov qatori sторnosi | ✅ qurildi (2026-10-13) — `POST /pay/{movement_id}/void`, audit-trail bilan, production'da sinaldi |
 | Chekni kutish rejimi (Отложить) | ❌ yo'q — eng katta bo'shliq |
-| Kassaga naqd kiritish/chiqarish (sotuvsiz) | ❌ backend yo'q |
+| Kassaga naqd kiritish/chiqarish (sotuvsiz) | ✅ qurildi (2026-10-13) — backend avvaldan bor edi (`POST /finance/movements`), POS ekraniga ulandi |
 | Sotuvchi kodi (komissiya uchun) | ❌ yo'q |
 | Tarozi nol/tara | ❌ yo'q (faqat uzluksiz o'qish bor) |
 | Kod nomenklaturasi / F3 strukturaviy qidiruv / kategoriya bo'yicha tanlash | ❌ yo'q (oddiy inline qidiruv bor) |

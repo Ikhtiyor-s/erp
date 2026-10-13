@@ -38,9 +38,12 @@ bog'liq:
 - **Bekor qilingan (sторno) sotuvlar/qaytarishlar soni** — hisoblab
   bo'lmaydi, chunki sторno tushunchasi o'zi yo'q (`general-information.md`).
 - **Naqd kirim/chiqim taqsimoti** (sotuvdan/qaytimdan/boshqa va
-  qaytarishdan/qaytimdan/boshqa) — manba-ma'lumoti
+  qaytarishdan/qaytimdan/boshqa) — manba-ma'lumoti endi bor (2026-10-13:
   [`additional-functions.md`](additional-functions.md)dagi "kassaga naqd
-  kiritish/chiqarish" funksiyasi qurilmagani uchun yo'q yoki noto'liq.
+  kiritish/chiqarish" POS ekraniga ulandi, `cash_movements.description`
+  orqali sababi yoziladi), lekin **X-hisobotning o'zi hali shu yangi
+  ma'lumotni "sotuvdan/boshqa" kabi toifalarga ajratib chiqarmaydi** — bu
+  alohida, kichikroq ish (`printShiftReport()`ni kengaytirish).
 
 ## Keyingi qadam
 

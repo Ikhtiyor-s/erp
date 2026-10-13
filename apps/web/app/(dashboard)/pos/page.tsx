@@ -7,7 +7,7 @@ import { Search, Plus, Minus, Trash2, ScanLine, Scale, Printer, PackageOpen, Per
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { newIdempotencyKey, postIdempotent } from "@/lib/idempotency";
-import { input } from "@/components/ui/modal";
+import { Modal, input } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -731,6 +731,50 @@ export default function PosPage() {
   const stubBtn =
     "h-10 rounded-md border border-ink-200 dark:border-ink-800 text-ink-400 dark:text-ink-600 text-xs font-medium cursor-not-allowed";
 
+  // REGOS "Касса → Внесение/Изъятие" (Ctrl+I/Ctrl+O) — cash in/out independent
+  // of any sale. The generic POST /finance/movements endpoint already covers
+  // this (cash_movements with sale_id=NULL); this is just the POS-screen entry
+  // point REGOS exposes directly on the cashier till. docs/regos-pos/
+  // operations/additional-functions.md.
+  const [cashMoveOpen, setCashMoveOpen] = useState(false);
+  const [cashMoveDirection, setCashMoveDirection] = useState<"in" | "out">("in");
+  const [cashMoveAmount, setCashMoveAmount] = useState("");
+  const [cashMoveDesc, setCashMoveDesc] = useState("");
+  const [cashMoveSubmitting, setCashMoveSubmitting] = useState(false);
+
+  async function submitCashMovement() {
+    const amt = Number(cashMoveAmount) || 0;
+    if (amt <= 0) {
+      toast.error("Summani kiriting");
+      return;
+    }
+    if (!cashboxId) {
+      toast.error(t("ui__выберите_склад_и_кассу_6445f691"));
+      return;
+    }
+    const cb = cashboxes.find((c) => c.id === cashboxId);
+    setCashMoveSubmitting(true);
+    try {
+      await api.post("/finance/movements", {
+        cashbox_id: cashboxId,
+        direction: cashMoveDirection,
+        amount: amt,
+        currency_id: cb?.currency_id,
+        description:
+          cashMoveDesc ||
+          (cashMoveDirection === "in" ? "Kassaga naqd kiritish (POS)" : "Kassadan naqd chiqarish (POS)"),
+      });
+      toast.success(cashMoveDirection === "in" ? "Naqd kiritildi" : "Naqd chiqarildi");
+      setCashMoveOpen(false);
+      setCashMoveAmount("");
+      setCashMoveDesc("");
+    } catch (e) {
+      toast.error(getErrorMessage(e, "Kassa harakati amalga oshmadi"));
+    } finally {
+      setCashMoveSubmitting(false);
+    }
+  }
+
   return (
     <div className="space-y-3 max-w-[1700px] mx-auto">
       <PageHeader title={t("ui__pos_касса_a8ec6dab")} description={t("ui__быстрая_продажа_8922faf4")} />
@@ -1175,7 +1219,11 @@ export default function PosPage() {
             <button type="button" className={stubBtn} onClick={() => notBuiltYet("Kutayotgan cheklar")}>
               Kutayotganlar
             </button>
-            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Kassa harakati (kiritish/chiqarish)")}>
+            <button
+              type="button"
+              onClick={() => setCashMoveOpen(true)}
+              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 text-xs font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
+            >
               Kassa harakati
             </button>
             <button type="button" className={stubBtn} onClick={() => notBuiltYet("Ekranni bloklash")}>
@@ -1223,6 +1271,63 @@ export default function PosPage() {
           )}
         </Card>
       </div>
+
+      <Modal open={cashMoveOpen} onClose={() => setCashMoveOpen(false)} title="Kassa harakati" size="sm">
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setCashMoveDirection("in")}
+              className={`h-10 rounded-md border font-medium text-sm ${
+                cashMoveDirection === "in"
+                  ? "border-success-500 bg-success-50 dark:bg-success-500/15 text-success-700 dark:text-success-500"
+                  : "border-ink-300 dark:border-ink-700 text-ink-600 dark:text-ink-300"
+              }`}
+            >
+              Kiritish
+            </button>
+            <button
+              type="button"
+              onClick={() => setCashMoveDirection("out")}
+              className={`h-10 rounded-md border font-medium text-sm ${
+                cashMoveDirection === "out"
+                  ? "border-danger-500 bg-danger-50 dark:bg-danger-500/15 text-danger-700 dark:text-danger-500"
+                  : "border-ink-300 dark:border-ink-700 text-ink-600 dark:text-ink-300"
+              }`}
+            >
+              Chiqarish
+            </button>
+          </div>
+          <div>
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">Summa</label>
+            <input
+              className={input}
+              type="number"
+              min={0}
+              value={cashMoveAmount}
+              onChange={(e) => setCashMoveAmount(e.target.value)}
+              placeholder="0"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">Sabab (ixtiyoriy)</label>
+            <input
+              className={input}
+              value={cashMoveDesc}
+              onChange={(e) => setCashMoveDesc(e.target.value)}
+              placeholder={cashMoveDirection === "in" ? "Masalan: smena uchun qoldiq" : "Masalan: menejer oldi"}
+            />
+          </div>
+          <Button
+            variant={cashMoveDirection === "in" ? "success" : "danger"}
+            fullWidth
+            loading={cashMoveSubmitting}
+            onClick={submitCashMovement}
+          >
+            {cashMoveDirection === "in" ? "Kassaga kiritish" : "Kassadan chiqarish"}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

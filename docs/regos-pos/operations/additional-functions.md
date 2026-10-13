@@ -34,14 +34,23 @@ smena boshida float) yoki olib qo'yish (masalan menejer pulni olib
 ketganda). **Открыть ден. ящик** (qutini ochish) ham shu yerda, lekin bu
 sotuv vaqtidagi harakat bilan bir xil.
 
-**Aniq ERP holati:** ⚠️ Qisman. Qutini ochish — ✅ bor (`openCashDrawer()`,
-POS-3, 2026-10-12). Sotuvsiz naqd kiritish/chiqarish — ❌ **backend'da
-umuman yo'q** (`apps/api/app/modules/` ichida `cash_in`/`cash_out`/
-"внесени"/"изъят" uchun qidiruv natija bermadi). Bu — kassirning "men
-noldan tashqari sabab bilan qutidan pul oldim/qo'ydim" deb yozib qo'yish
-imkoniyati yo'qligi degani, bu esa [`xreport.md`](xreport.md)dagi "naqd
-kirim/chiqim taqsimoti" maydonlarining manba-ma'lumoti yo'qligiga ham olib
-keladi.
+**Aniq ERP holati:** ✅ **To'liq (2026-10-13da POS ekraniga ulandi).**
+Birinchi tekshiruvda (2026-10-12/13 tadqiqot) bu backend'da "umuman yo'q"
+deb xato xulosa chiqarilgan edi — sabab, `cash_in`/`cash_out` so'zlari
+bo'yicha qidiruv natija bermagan. Aslida qobiliyat **avvaldan, umumiy
+`POST /finance/movements` endpoint sifatida mavjud edi** (`direction: "in"
+| "out" | "transfer"`, `cash_movements`ga yozadi, `cashboxes.balance`ni
+yangilaydi, buxgalteriya provodkasini yaratadi) — shunchaki REGOS'ning
+"Внесение/Изъятие" nomi bilan emas, umumiyroq nom bilan qurilgan edi. Bu
+real gap emas, **qidiruv/tadqiqot xatosi** bo'lgan — endi tuzatilgan.
+
+2026-10-13da qilingan yagona haqiqiy ish: POS ekranining "Kassa harakati"
+tugmasini (avval stub) ushbu mavjud endpointga ulash — kichik modal
+(Kiritish/Chiqarish, summa, sabab), kassir hech qayerga chiqmasdan
+foydalanadi. Jonli production'da sinaldi (kassa balansi to'g'ri
+yangilanishi tasdiqlandi).
+
+Qutini ochish — ✅ bor (`openCashDrawer()`, POS-3, 2026-10-12).
 
 ## Карта покупателя (mijoz kartasi)
 
@@ -87,10 +96,10 @@ integratsiyasi yo'q.
 ## Keyingi qadam (ustuvorlik tartibida, REGOS parity doirasida)
 
 1. ✅ ~~Chegirma (butun hujjat)~~ — qilindi, 2026-10-13
-2. Qator darajasidagi chegirma — kichikroq qo'shimcha, mavjud chegirma
+2. ✅ ~~Kassaga naqd kiritish/chiqarish~~ — backend avvaldan bor edi, POS
+   ekraniga ulandi, 2026-10-13
+3. Qator darajasidagi chegirma — kichikroq qo'shimcha, mavjud chegirma
    UI'sini kengaytirish
-3. Kassaga naqd kiritish/chiqarish — yangi backend endpoint + UI, X-hisobot
-   bilan bog'liq
 4. Sotuvchi kodi — yangi ustun + UI, komissiya hisobotlari uchun kerak
    bo'lsagina ustuvor
 5. Tarozi nol/tara — faqat idishli/quyma tovar sotiladigan mijozlar uchun
