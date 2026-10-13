@@ -8,7 +8,6 @@ import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { newIdempotencyKey, postIdempotent } from "@/lib/idempotency";
 import { Modal, input } from "@/components/ui/modal";
-import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
@@ -878,8 +877,6 @@ export default function PosPage() {
 
   return (
     <div className="space-y-3 max-w-[1700px] mx-auto">
-      <PageHeader title={t("ui__pos_касса_a8ec6dab")} description={t("ui__быстрая_продажа_8922faf4")} />
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
           <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
