@@ -33,6 +33,11 @@ type Sale = {
   warehouse_name?: string;
   created_by_name?: string;
   currency_code?: string;
+  source_type?: "sale" | "sale_kiosk";
+  kiosk_device_name?: string | null;
+  kiosk_order_number?: string | null;
+  kiosk_status?: "awaiting_payment" | "paid" | "cancelled" | "payment_failed" | null;
+  is_stale?: boolean;
 };
 
 type PickProgress = {
@@ -92,6 +97,15 @@ const statusLabel = (s: string) =>
     partial: "Qisman",
     cancelled: "Bekor qilindi",
   }[s] || s);
+
+// SC-4: 'awaiting_payment'/'payment_failed' only ever apply to a kiosk sale
+// (sales.status itself stays 'confirmed' until a real payment webhook lands
+// or staff cancels) -- these two override the generic status badge above,
+// everything else (paid/cancelled) already renders correctly via SALE_STATUS_TONE.
+const KIOSK_STATUS_TONE: Record<string, "warning" | "danger"> = {
+  awaiting_payment: "warning",
+  payment_failed: "danger",
+};
 
 function pickTone(picked: number, total: number): "neutral" | "success" | "primary" | "warning" {
   if (total === 0) return "neutral";
@@ -168,6 +182,7 @@ export default function SaleContractPage() {
     q: "",
     customer_id: "",
     status: "",
+    source_type: "",
     date_from: "",
     date_to: "",
   });
@@ -200,6 +215,7 @@ export default function SaleContractPage() {
       if (filters.q) p.set("q", filters.q);
       if (filters.customer_id) p.set("customer_id", filters.customer_id);
       if (filters.status) p.set("status", filters.status);
+      if (filters.source_type) p.set("source_type", filters.source_type);
       if (filters.date_from) p.set("date_from", filters.date_from);
       if (filters.date_to) p.set("date_to", filters.date_to);
       const salesData = (await api.get<Sale[]>(`/sale/sales?${p}`)).data;
@@ -379,6 +395,27 @@ export default function SaleContractPage() {
       render: (r) => r.created_by_name || "—",
     },
     {
+      key: "source_type" as keyof Sale,
+      header: tSale("source_column"),
+      width: "140px",
+      render: (r) =>
+        r.source_type === "sale_kiosk" ? (
+          <div>
+            <Badge tone="purple">{tSale("source_kiosk")}</Badge>
+            {r.kiosk_device_name && (
+              <div className="text-[11px] text-ink-500 dark:text-ink-400 mt-0.5">{r.kiosk_device_name}</div>
+            )}
+            {r.is_stale && (
+              <div className="text-[11px] text-danger-600 dark:text-danger-400 font-medium mt-0.5">
+                {tSale("stale_hint")}
+              </div>
+            )}
+          </div>
+        ) : (
+          <span className="text-ink-400 dark:text-ink-500 text-xs">{tSale("source_staff")}</span>
+        ),
+    },
+    {
       key: "sale_date",
       header: t("ui__дата_8cdd8bb7"),
       width: "160px",
@@ -427,9 +464,20 @@ export default function SaleContractPage() {
       header: t("ui__статус_7203f7a4"),
       align: "center",
       width: "130px",
-      render: (r) => (
-        <Badge tone={SALE_STATUS_TONE[r.status] || "neutral"}>{statusLabel(r.status)}</Badge>
-      ),
+      render: (r) => {
+        // SC-4: a kiosk sale stuck waiting on payment stays 'confirmed' at
+        // the sales.status level -- show the real kiosk_status instead so
+        // staff aren't misled into thinking it's already settled.
+        const kioskTone = r.kiosk_status ? KIOSK_STATUS_TONE[r.kiosk_status] : undefined;
+        if (kioskTone) {
+          const label =
+            r.kiosk_status === "awaiting_payment"
+              ? tSale("kiosk_status_awaiting_payment")
+              : tSale("kiosk_status_payment_failed");
+          return <Badge tone={kioskTone}>{label}</Badge>;
+        }
+        return <Badge tone={SALE_STATUS_TONE[r.status] || "neutral"}>{statusLabel(r.status)}</Badge>;
+      },
     },
     ...(showPick
       ? [
@@ -479,7 +527,7 @@ export default function SaleContractPage() {
       />
 
       <Card padding="md">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
         <div className="sm:col-span-2 relative">
           <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
             {t("ui__поиск_клиент_телефон_7d318763")}
@@ -523,6 +571,22 @@ export default function SaleContractPage() {
             <option value="paid">{t("ui__оплачено_6d8c0850")}</option>
             <option value="partial">{t("ui__частично_5f397585")}</option>
             <option value="cancelled">{t("ui__отменено_81a04dab")}</option>
+            <option value="awaiting_payment">{tSale("kiosk_status_awaiting_payment")}</option>
+            <option value="payment_failed">{tSale("kiosk_status_payment_failed")}</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-ink-500 dark:text-ink-400 block mb-1">
+            {tSale("source_column")}
+          </label>
+          <select
+            className={input}
+            value={filters.source_type}
+            onChange={(e) => setFilters({ ...filters, source_type: e.target.value })}
+          >
+            <option value="">{t("ui__все_a07b234e")}</option>
+            <option value="sale_kiosk">{tSale("source_kiosk")}</option>
+            <option value="sale">{tSale("source_staff")}</option>
           </select>
         </div>
         <div>
@@ -555,7 +619,7 @@ export default function SaleContractPage() {
             variant="outline"
             size="md"
             onClick={() => {
-              setFilters({ q: "", customer_id: "", status: "", date_from: "", date_to: "" });
+              setFilters({ q: "", customer_id: "", status: "", source_type: "", date_from: "", date_to: "" });
               setTimeout(load, 0);
             }}
           >
