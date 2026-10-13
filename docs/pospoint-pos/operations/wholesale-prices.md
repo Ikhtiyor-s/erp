@@ -19,24 +19,32 @@ Oddiy narxdan tashqari **ulgurji (optom) narx** bilan ishlash rejimi.
 
 ## Aniq ERP holati
 
-❌ **Yo'q.** Kodda "wholesale"/"ulgurji"/"optom" so'zlari bo'yicha
-qidiruv (`apps/api/app/modules/`) hech narsa topmadi. `products`
-jadvalida faqat bitta `sale_price` ustuni bor — ikkinchi (ulgurji) narx
-uchun joy yo'q. POS ekranida rejim-almashtirgich tushunchasi ham yo'q.
+✅ **Qurildi (2026-10-14).** `products.wholesale_price` (NUMERIC, NULL
+bo'lishi mumkin) qo'shildi. Mahsulot formasida ("Ulgurji narx" maydoni,
+`warehouse/products/page.tsx`) kiritiladi. Sozlamalar → Sozlamalar →
+"Ulgurji narxlar" (`/settings/wholesale-prices`, `app_settings` kaliti
+`wholesale_prices`, `{enabled: bool}`) orqali butun tashkilot bo'yicha
+yoqiladi/o'chiriladi (standart — o'chiq). POS hujjat sarlavhasida
+("YANGI SOTUV (CHAKANA NARX)" o'rnida) qizil/yashil almashtirgich tugma
+— faqat sozlama yoqilgan bo'lsa ko'rinadi, bosilganda butun savat
+narxini ulgurji narxga o'tkazadi (mahsulotda ulgurji narx bo'lmasa —
+chakana narxga tushadi), tepada "Tejov" summasi ko'rsatiladi. Har yangi
+sotuvdan keyin (yoki bekor qilinganda) rejim avtomatik chakanaga
+qaytadi. Production'da API orqali sinaldi (mahsulot yaratish/yangilash/
+tozalash, sozlama yozish/o'qish) — brauzer orqali to'liq UI oqimi
+sinab ko'rilmadi (login holati sabab), lekin typecheck toza o'tdi.
 
 Eslatma: Aniq ERP'da mijoz-darajasidagi maxsus narxlar uchun
-`customer/router.py`da `CustomerPriceIn` (mijozga xos narx) bor —
-bu **konseptual jihatdan yaqin**, lekin PosPoint'ning "butun kassa
-rejimini ulgurji-narxga almashtirish" mexanizmidan farq qiladi: u
-mijozga bog'lanmagan, umumiy "optom rejim" tugmasi, har qanday
-xaridorga qo'llanishi mumkin (do'konda ulgurji xaridor kelganda, tizimga
-alohida mijoz sifatida kiritmasdan ham).
+`customer/router.py`da `CustomerPriceIn` (mijozga xos narx) ham bor —
+bu ikkinchi, mustaqil mexanizm, ulgurji-rejim bilan birga ishlashi
+mumkin (bir-birini istisno qilmaydi), lekin POS hozircha ikkisini bir
+vaqtda qo'llash tartibini aniq belgilamagan (agar ikkalasi ham faol
+bo'lsa, qaysi narx ustunligi — keyingi qadam, hozircha kam uchraydigan
+holat).
 
 ## Keyingi qadam
 
-Agar foydalanuvchining do'konlarida chakana+ulgurji aralash savdo bo'lsa
-(PosPoint buni ayniqsa "Qurilish do'koni" profili uchun tavsiya qiladi),
-bu nisbatan kichik-o'rtacha ish bo'ladi: `products`ga ikkinchi narx
-ustuni + POS'da rejim-svitch + savatda tejov-summasi ko'rsatish. Mavjud
-`CustomerPriceIn` (mijozga xos narx) mexanizmi bilan birga ishlatilishi
-ham mumkin — ikkisi bir-birini istisno qilmaydi.
+Asosiy funksionallik tayyor. Qolgan: (1) ikkala narx mexanizmi (ulgurji
+rejim + mijozga xos narx) bir vaqtda faol bo'lganda qaysi narx
+ustunligini aniq belgilash; (2) brauzer orqali to'liq UI-oqimni real
+foydalanuvchi bilan sinash.

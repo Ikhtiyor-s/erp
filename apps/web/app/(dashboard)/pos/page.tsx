@@ -32,6 +32,7 @@ type Product = {
   name: string;
   sku?: string;
   sale_price: string;
+  wholesale_price?: string | null;
   currency_code?: string;
   is_service: boolean;
   total_stock?: string;
@@ -63,6 +64,14 @@ type HeldSale = {
 const fmt = (v: any) =>
   Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 
+// PosPoint-parity ulgurji (wholesale) narx — docs/pospoint-pos/operations/
+// wholesale-prices.md. Falls back to sale_price when the product has no
+// wholesale_price set, even while wholesale mode is on.
+function linePrice(p: Product, wholesaleMode: boolean): number {
+  if (wholesaleMode && p.wholesale_price) return Number(p.wholesale_price);
+  return Number(p.sale_price);
+}
+
 // Stub action — the REGOS button exists for visual/muscle-memory parity, but
 // the underlying Aniq ERP feature isn't built yet (see
 // project_erp_regos_pos_workflow.md for the full gap list). Never silently
@@ -87,6 +96,8 @@ export default function PosPage() {
   const [warehouseId, setWarehouseId] = useState<number | "">("");
   const [cashboxId, setCashboxId] = useState<number | "">("");
   const [scannerEnabled, setScannerEnabled] = useState(true);
+  const [wholesaleEnabled, setWholesaleEnabled] = useState(false);
+  const [wholesaleMode, setWholesaleMode] = useState(false);
   const [paymentTypes, setPaymentTypes] = useState<PaymentTypeItem[]>([]);
   const [loyaltyBalance, setLoyaltyBalance] = useState<number | null>(null);
   // REGOS-style incremental payment panel state — see RG-7.
@@ -186,6 +197,10 @@ export default function PosPage() {
       .then((r) => {
         setPaymentTypes((r.data || []).filter((pt) => pt.is_active));
       })
+      .catch(() => {});
+    api
+      .get<{ value?: { enabled?: boolean } }>("/settings/key/wholesale_prices")
+      .then((r) => setWholesaleEnabled(!!r.data?.value?.enabled))
       .catch(() => {});
   }, []);
 
@@ -465,9 +480,15 @@ export default function PosPage() {
   const lastAddedLine = cart.length > 0 ? cart[cart.length - 1] : null;
 
   const subtotal = cart.reduce(
-    (s, c) => s + Number(c.product.sale_price) * c.qty,
+    (s, c) => s + linePrice(c.product, wholesaleMode) * c.qty,
     0
   );
+  const wholesaleSavings = wholesaleMode
+    ? cart.reduce(
+        (s, c) => s + (Number(c.product.sale_price) - linePrice(c.product, wholesaleMode)) * c.qty,
+        0
+      )
+    : 0;
   const discountAmount =
     discountKind === "percent"
       ? Math.min(subtotal, subtotal * (discountValue / 100))
@@ -492,6 +513,7 @@ export default function PosPage() {
     setLastChange(0);
     setLoyaltyEarned(0);
     setLoyaltyRedeemedTotal(0);
+    setWholesaleMode(false);
     clearDiscount();
   }
 
@@ -528,7 +550,8 @@ export default function PosPage() {
       // SaleItemIn.discount). Rounding remainder is accepted (a few tiyin at most);
       // not worth exact penny-distribution for this session's scope.
       const items = cart.map((c) => {
-        const lineSubtotal = Number(c.product.sale_price) * c.qty;
+        const linePrc = linePrice(c.product, wholesaleMode);
+        const lineSubtotal = linePrc * c.qty;
         const lineDiscount =
           discountAmount > 0 && subtotal > 0
             ? Math.round(((discountAmount * lineSubtotal) / subtotal) * 100) / 100
@@ -536,7 +559,7 @@ export default function PosPage() {
         return {
           product_id: c.product.id,
           quantity: c.qty,
-          price: Number(c.product.sale_price),
+          price: linePrc,
           discount: lineDiscount,
         };
       });
@@ -664,8 +687,8 @@ export default function PosPage() {
         items: cart.map((c) => ({
           name: c.product.name,
           qty: c.qty,
-          price: Number(c.product.sale_price),
-          total: Number(c.product.sale_price) * c.qty,
+          price: linePrice(c.product, wholesaleMode),
+          total: linePrice(c.product, wholesaleMode) * c.qty,
         })),
         total: effectiveTotal,
         paid: effectiveTotal,
@@ -961,7 +984,24 @@ export default function PosPage() {
         <Card padding="none" className="overflow-hidden border-2 border-ink-200 dark:border-ink-800">
           <div className="bg-ink-50 dark:bg-ink-900 border-b border-ink-200 dark:border-ink-800 px-4 py-2">
             <div className="text-xs font-bold text-ink-600 dark:text-ink-300 uppercase tracking-wide">
-              {saleId ? `SOTUV (OCHIQ)  ДОК. №${saleId.slice(0, 8)}` : "YANGI SOTUV"}  (CHAKANA NARX)
+              {saleId ? `SOTUV (OCHIQ)  ДОК. №${saleId.slice(0, 8)}` : "YANGI SOTUV"}{" "}
+              {wholesaleEnabled ? (
+                <button
+                  type="button"
+                  disabled={!!saleId}
+                  onClick={() => setWholesaleMode((v) => !v)}
+                  className={`px-1.5 py-0.5 rounded font-bold normal-case tracking-normal disabled:opacity-50 ${
+                    wholesaleMode
+                      ? "bg-success-600 text-white"
+                      : "bg-danger-600 text-white"
+                  }`}
+                  title="Chakana/ulgurji narx rejimini almashtirish"
+                >
+                  {wholesaleMode ? "ULGURJI NARX" : "CHAKANA NARX"}
+                </button>
+              ) : (
+                "(CHAKANA NARX)"
+              )}
               {now && (
                 <span className="font-normal normal-case text-ink-400 float-right">
                   {now.toLocaleDateString("uz-UZ")} {now.toLocaleTimeString("uz-UZ")}
@@ -981,6 +1021,14 @@ export default function PosPage() {
                     {fmt(subtotal)}
                   </div>
                 </div>
+                {wholesaleSavings > 0 && (
+                  <div>
+                    <div className="text-[11px] text-ink-400">Tejov</div>
+                    <div className="font-mono font-bold text-lg text-success-600 dark:text-success-500">
+                      −{fmt(wholesaleSavings)}
+                    </div>
+                  </div>
+                )}
                 {discountAmount > 0 && (
                   <div>
                     <div className="text-[11px] text-ink-400 flex items-center gap-1 justify-end">
@@ -1132,8 +1180,8 @@ export default function PosPage() {
                   {lastAddedLine.product.name}
                 </span>
                 <span className="font-mono text-ink-500 dark:text-ink-400 text-xs shrink-0 ml-2">
-                  {lastAddedLine.qty} x {fmt(lastAddedLine.product.sale_price)} ={" "}
-                  {fmt(Number(lastAddedLine.product.sale_price) * lastAddedLine.qty)}
+                  {lastAddedLine.qty} x {fmt(linePrice(lastAddedLine.product, wholesaleMode))} ={" "}
+                  {fmt(linePrice(lastAddedLine.product, wholesaleMode) * lastAddedLine.qty)}
                 </span>
               </div>
               <div className="text-[11px] text-ink-400 mt-0.5">
@@ -1195,10 +1243,10 @@ export default function PosPage() {
                         </div>
                       </td>
                       <td className="px-2 py-2 text-right font-mono text-ink-700 dark:text-ink-300">
-                        {fmt(c.product.sale_price)}
+                        {fmt(linePrice(c.product, wholesaleMode))}
                       </td>
                       <td className="px-2 py-2 text-right font-mono font-semibold text-ink-900 dark:text-ink-100">
-                        {fmt(Number(c.product.sale_price) * c.qty)}
+                        {fmt(linePrice(c.product, wholesaleMode) * c.qty)}
                       </td>
                       <td className="px-1">
                         <Button

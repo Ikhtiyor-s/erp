@@ -40,6 +40,7 @@ type Product = {
   name: string;
   sale_price: string;
   purchase_price: string;
+  wholesale_price?: string | null;
   currency_id?: number;
   currency_code?: string;
   unit_id?: number;
@@ -89,6 +90,7 @@ const empty = {
   unit_id: null as number | null,
   purchase_price: 0,
   sale_price: 0,
+  wholesale_price: "",
   currency_id: null as number | null,
   is_service: false,
   is_material: false,
@@ -709,6 +711,7 @@ export default function ProductsPage() {
         ...form,
         purchase_price: Number(form.purchase_price) || 0,
         sale_price: Number(form.sale_price) || 0,
+        wholesale_price: toNum(form.wholesale_price),
         category_id: form.category_id || null,
         unit_id: form.unit_id || null,
         currency_id: form.currency_id || null,
@@ -791,6 +794,7 @@ export default function ProductsPage() {
         unit_id: (d.unit_id as number) || null,
         purchase_price: d.purchase_price as number,
         sale_price: d.sale_price as number,
+        wholesale_price: String(d.wholesale_price ?? ""),
         currency_id: (d.currency_id as number) || null,
         is_service: !!(d.is_service),
         is_material: !!(d.is_material),
@@ -821,6 +825,7 @@ export default function ProductsPage() {
         unit_id: r.unit_id || null,
         purchase_price: r.purchase_price as unknown as number,
         sale_price: r.sale_price as unknown as number,
+        wholesale_price: String(r.wholesale_price ?? ""),
         currency_id: r.currency_id || null,
         is_service: r.is_service,
         product_type: r.product_type || "",
@@ -1518,6 +1523,17 @@ export default function ProductsPage() {
               value={form.sale_price}
               onFocus={(e) => e.target.select()}
               onChange={(e) => setForm({ ...form, sale_price: Number(e.target.value) })}
+            />
+          </Field>
+          <Field label="Ulgurji narx">
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Chakana narxdan foydalaniladi"
+              className={input}
+              value={form.wholesale_price}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setForm({ ...form, wholesale_price: e.target.value })}
             />
           </Field>
           <Field label={t("ui__валюта_cf55d9a9")}>

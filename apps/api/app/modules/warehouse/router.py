@@ -190,6 +190,7 @@ class ProductIn(BaseModel):
     unit_id: int | None = None
     purchase_price: Decimal = Decimal("0")
     sale_price: Decimal = Decimal("0")
+    wholesale_price: Decimal | None = None
     currency_id: int | None = None
     is_service: bool = False
     is_material: bool = False
@@ -280,7 +281,7 @@ async def list_products(
         params["pt"] = product_type
     res = await db.execute(
         text(f"SELECT p.id, p.sku, p.barcode, p.name, p.mxik, "
-             f"p.sale_price, p.purchase_price, p.currency_id, "
+             f"p.sale_price, p.wholesale_price, p.purchase_price, p.currency_id, "
              f"p.unit_id, p.category_id, p.is_service, p.is_produced, p.created_at, "
              f"cur.code AS currency_code, "
              f"un.short_name AS unit_name, "
@@ -305,7 +306,7 @@ async def list_products(
 
 _PRODUCT_FIELDS = """
     name=:n, sku=:sku, barcode=:bc, category_id=:cat, unit_id=:u,
-    purchase_price=:pp, sale_price=:sp, currency_id=:cur,
+    purchase_price=:pp, sale_price=:sp, wholesale_price=:wp, currency_id=:cur,
     is_service=:svc, is_material=:mat, is_semi_product=:semi,
     is_marked=:mk, has_expiration=:exp, is_variant=:var, parent_id=:par,
     image_url=:img, box_qty=:bq, box_barcode=:bbc,
@@ -318,7 +319,8 @@ _PRODUCT_FIELDS = """
 def _product_params(p: ProductIn) -> dict:
     return {
         "n": p.name, "sku": p.sku, "bc": p.barcode, "cat": p.category_id,
-        "u": p.unit_id, "pp": p.purchase_price, "sp": p.sale_price, "cur": p.currency_id,
+        "u": p.unit_id, "pp": p.purchase_price, "sp": p.sale_price,
+        "wp": p.wholesale_price, "cur": p.currency_id,
         "svc": p.is_service, "mat": p.is_material, "semi": p.is_semi_product,
         "mk": p.is_marked, "exp": p.has_expiration, "var": p.is_variant,
         "par": str(p.parent_id) if p.parent_id else None,
@@ -385,11 +387,11 @@ async def create_product(
     params.update({"id": str(pid), "o": org_id})
     await db.execute(
         text(f"INSERT INTO products (id, organization_id, name, sku, barcode, category_id, "
-             f"unit_id, purchase_price, sale_price, currency_id, is_service, is_material, "
+             f"unit_id, purchase_price, sale_price, wholesale_price, currency_id, is_service, is_material, "
              f"is_semi_product, is_marked, has_expiration, is_variant, parent_id, image_url, "
              f"box_qty, box_barcode, dim_length, dim_width, dim_height, dim_weight, description, kind, mxik, "
              f"default_cell_id, product_type, default_supplier_id, is_published_online) "
-             f"VALUES (:id, :o, :n, :sku, :bc, :cat, :u, :pp, :sp, :cur, :svc, :mat, "
+             f"VALUES (:id, :o, :n, :sku, :bc, :cat, :u, :pp, :sp, :wp, :cur, :svc, :mat, "
              f":semi, :mk, :exp, :var, :par, :img, :bq, :bbc, :dl, :dw, :dh, :dwg, :descr, COALESCE(:knd, 'good'), :mxik, "
              f":dcell, :ptype, :dsup, :pub)"),
         params,

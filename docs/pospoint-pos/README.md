@@ -64,7 +64,7 @@ loyihasida bor va u Aniq ERP bilan birlashtirilmaydi).
 | Sozlamalar — katalog ko'rinish rejimi (dorixona/yengillashtirilgan) | ❌ yo'q |
 | Sozlamalar — PIN bilan tezkor kirish | ❌ yo'q |
 | Multivalyuta (so'm+USD, aralash to'lov) | ❌ yo'q — `currency_id` mahsulotda bor, lekin POS ekranida ikki-valyutali narx ko'rsatish/aralash to'lov yo'q |
-| Ulgurji narxlar (ikki narxli rejim) | ❌ yo'q — hech qanday wholesale/optom narx ustuni yoki rejimi topilmadi |
+| Ulgurji narxlar (ikki narxli rejim) | ✅ qurildi 2026-10-14, API orqali sinaldi |
 | Mahsulot variantlari (o'lcham/rang) | ✅ generik shaklda bor (`products.is_variant` + `parent_id`), lekin PosPoint'dagi kabi aniq "attribut" (o'lcham, rang) tizimi emas — erkin parent-child bog'lanish |
 | EDO (Didox) integratsiyasi | ✅ bor (`apps/api/app/modules/integration/didox.py`) — bu yerda Aniq ERP PosPoint'dan **oldinda emas, barobar** |
 | Tavsiya etilgan xaridlar (restock AI) | ✅ bor (`warehouse/recommended-stock`) — Aniq ERP'da ham mavjud |
