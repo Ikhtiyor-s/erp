@@ -1075,6 +1075,75 @@ export default function PosPage() {
             </table>
           </div>
 
+          {/* REGOS action-button grid — positioned under the item table, same
+              as the reference layout (not under the keypad on the right).
+              Wired where Aniq ERP already has the capability; otherwise
+              visibly present but disabled (never fake a feature that isn't
+              built — see project_erp_regos_pos_workflow.md). */}
+          <div className="border-t border-ink-200 dark:border-ink-800 p-3 grid grid-cols-3 gap-1.5 text-xs">
+            <button
+              type="button"
+              disabled={!!saleId}
+              onClick={() => startDiscountEntry("percent")}
+              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40 flex items-center justify-center gap-1"
+            >
+              <Percent size={12} /> Chegirma
+            </button>
+            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Sotuvchi")}>
+              Sotuvchi
+            </button>
+            <button
+              type="button"
+              disabled={!saleId || fullyPaid || holding}
+              onClick={holdCurrentSale}
+              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 text-xs font-medium hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40"
+              title="Ctrl+G"
+            >
+              Kutish rejimi
+            </button>
+            <button
+              type="button"
+              onClick={openHeldModal}
+              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 text-xs font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
+              title="Ctrl+J"
+            >
+              Kutayotganlar
+            </button>
+            <button
+              type="button"
+              onClick={() => setCashMoveOpen(true)}
+              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 text-xs font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
+            >
+              Kassa harakati
+            </button>
+            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Ekranni bloklash")}>
+              Bloklash
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/sale/contract")}
+              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
+            >
+              Cheklar
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/sale/return")}
+              className="h-10 rounded-md border border-danger-300 dark:border-danger-700 text-danger-600 dark:text-danger-500 font-medium hover:bg-danger-50 dark:hover:bg-danger-500/15 flex items-center justify-center gap-1"
+              title="Qaytarish (F5)"
+            >
+              <RotateCcw size={12} /> Qaytarish
+            </button>
+            <button
+              type="button"
+              onClick={cancelWholeSale}
+              className="h-10 rounded-md border border-danger-400 dark:border-danger-600 bg-danger-50 dark:bg-danger-500/15 text-danger-700 dark:text-danger-500 font-semibold hover:bg-danger-100 dark:hover:bg-danger-500/25 flex items-center justify-center gap-1"
+              title="Bekor qilish / chiqish (F9 / F12)"
+            >
+              <LogOut size={12} /> Chiqish
+            </button>
+          </div>
+
           <div className="border-t border-ink-200 dark:border-ink-800 p-3">
             <div className="flex flex-wrap items-center gap-2 mb-2 text-xs">
               <Button
@@ -1294,73 +1363,6 @@ export default function PosPage() {
                 Bonus
               </Button>
             )}
-          </div>
-
-          {/* REGOS action-button grid. Wired where Aniq ERP already has the
-              capability; otherwise visibly present but disabled (never fake
-              a feature that isn't built — see project_erp_regos_pos_workflow.md). */}
-          <div className="border-t border-ink-200 dark:border-ink-800 pt-3 grid grid-cols-3 gap-1.5 text-xs">
-            <button
-              type="button"
-              disabled={!!saleId}
-              onClick={() => startDiscountEntry("percent")}
-              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40 flex items-center justify-center gap-1"
-            >
-              <Percent size={12} /> Chegirma
-            </button>
-            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Sotuvchi")}>
-              Sotuvchi
-            </button>
-            <button
-              type="button"
-              disabled={!saleId || fullyPaid || holding}
-              onClick={holdCurrentSale}
-              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 text-xs font-medium hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40"
-              title="Ctrl+G"
-            >
-              Kutish rejimi
-            </button>
-            <button
-              type="button"
-              onClick={openHeldModal}
-              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 text-xs font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
-              title="Ctrl+J"
-            >
-              Kutayotganlar
-            </button>
-            <button
-              type="button"
-              onClick={() => setCashMoveOpen(true)}
-              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 text-xs font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
-            >
-              Kassa harakati
-            </button>
-            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Ekranni bloklash")}>
-              Bloklash
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/sale/contract")}
-              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
-            >
-              Cheklar
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/sale/return")}
-              className="h-10 rounded-md border border-danger-300 dark:border-danger-700 text-danger-600 dark:text-danger-500 font-medium hover:bg-danger-50 dark:hover:bg-danger-500/15 flex items-center justify-center gap-1"
-              title="Qaytarish (F5)"
-            >
-              <RotateCcw size={12} /> Qaytarish
-            </button>
-            <button
-              type="button"
-              onClick={cancelWholeSale}
-              className="h-10 rounded-md border border-danger-400 dark:border-danger-600 bg-danger-50 dark:bg-danger-500/15 text-danger-700 dark:text-danger-500 font-semibold hover:bg-danger-100 dark:hover:bg-danger-500/25 flex items-center justify-center gap-1"
-              title="Bekor qilish / chiqish (F9 / F12)"
-            >
-              <LogOut size={12} /> Chiqish
-            </button>
           </div>
 
           {lastReceipt && (
