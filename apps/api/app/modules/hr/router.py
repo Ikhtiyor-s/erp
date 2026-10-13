@@ -1,13 +1,14 @@
-from datetime import date
+from datetime import date, time, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_org_id
+from app.modules.rbac.deps import require_permission
 
 
 router = APIRouter(prefix="/hr", tags=["hr"])
@@ -321,3 +322,231 @@ async def delete_kpi(
     )
     await db.commit()
     return {"ok": True}
+
+
+# =========================================================
+# SHIFT SCHEDULE (RG-5) — planned work schedule, NOT cashbox_sessions
+# =========================================================
+
+class ShiftIn(BaseModel):
+    employee_id: UUID
+    work_date: date
+    start_time: time
+    end_time: time
+
+
+@router.get("/shifts")
+async def list_shifts(
+    employee_id: UUID | None = None,
+    date_from: date | None = Query(None, alias="from"),
+    date_to: date | None = Query(None, alias="to"),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    where = "WHERE s.organization_id = :o"
+    params: dict = {"o": org_id}
+    if employee_id:
+        where += " AND s.employee_id = :eid"
+        params["eid"] = str(employee_id)
+    if date_from:
+        where += " AND s.work_date >= :df"
+        params["df"] = date_from
+    if date_to:
+        where += " AND s.work_date <= :dt"
+        params["dt"] = date_to
+    res = await db.execute(
+        text(f"SELECT s.id, s.employee_id, e.full_name AS employee_name, "
+             f"s.work_date, s.start_time, s.end_time "
+             f"FROM employee_shifts s "
+             f"JOIN employees e ON e.id = s.employee_id "
+             f"{where} ORDER BY s.work_date, e.full_name"),
+        params,
+    )
+    return [dict(r._mapping) for r in res]
+
+
+@router.post(
+    "/shifts", status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("hr.shifts.manage"))],
+)
+async def create_shift(
+    p: ShiftIn, db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    if p.end_time <= p.start_time:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Tugash vaqti boshlanish vaqtidan keyin bo'lishi kerak",
+        )
+    emp_check = await db.execute(
+        text("SELECT 1 FROM employees WHERE id = :id AND organization_id = :o"),
+        {"id": str(p.employee_id), "o": org_id},
+    )
+    if not emp_check.first():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Xodim topilmadi")
+
+    # Assigning the same employee+day again overwrites the existing shift
+    # (upsert) rather than erroring — lets the weekly calendar UI just POST
+    # one call per cell it edits.
+    res = await db.execute(
+        text("INSERT INTO employee_shifts (organization_id, employee_id, work_date, start_time, end_time) "
+             "VALUES (:o, :e, :wd, :st, :et) "
+             "ON CONFLICT (employee_id, work_date) DO UPDATE "
+             "SET start_time = EXCLUDED.start_time, end_time = EXCLUDED.end_time "
+             "RETURNING id"),
+        {"o": org_id, "e": str(p.employee_id), "wd": p.work_date, "st": p.start_time, "et": p.end_time},
+    )
+    await db.commit()
+    return {"id": res.scalar()}
+
+
+@router.delete(
+    "/shifts/{sid}",
+    dependencies=[Depends(require_permission("hr.shifts.manage"))],
+)
+async def delete_shift(
+    sid: int, db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    res = await db.execute(
+        text("DELETE FROM employee_shifts WHERE id = :id AND organization_id = :o RETURNING id"),
+        {"id": sid, "o": org_id},
+    )
+    if not res.scalar():
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    await db.commit()
+    return {"ok": True}
+
+
+# =========================================================
+# ATTENDANCE (RG-5) — clock-in/clock-out, NOT cashbox_sessions
+# =========================================================
+
+class ClockInIn(BaseModel):
+    employee_id: UUID
+    shift_id: int | None = None
+    # Deliberately no client timestamp field: Pydantic's default extra="ignore"
+    # silently drops any "timestamp"/"clock_in" the caller tries to inject in
+    # the body — the server clock (NOW(), below) is the only source of truth.
+
+
+class ClockOutIn(BaseModel):
+    employee_id: UUID
+
+
+@router.post("/attendance/clock-in", status_code=status.HTTP_201_CREATED)
+async def clock_in(
+    p: ClockInIn, db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    emp_check = await db.execute(
+        text("SELECT 1 FROM employees WHERE id = :id AND organization_id = :o"),
+        {"id": str(p.employee_id), "o": org_id},
+    )
+    if not emp_check.first():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Xodim topilmadi")
+
+    open_check = await db.execute(
+        text("SELECT id FROM employee_attendance "
+             "WHERE employee_id = :e AND organization_id = :o AND clock_out IS NULL"),
+        {"e": str(p.employee_id), "o": org_id},
+    )
+    if open_check.first():
+        raise HTTPException(status.HTTP_409_CONFLICT, "Bu xodim uchun ochiq clock-in allaqachon mavjud")
+
+    shift_id = p.shift_id
+    if shift_id is not None:
+        shift_check = await db.execute(
+            text("SELECT 1 FROM employee_shifts WHERE id = :id AND organization_id = :o AND employee_id = :e"),
+            {"id": shift_id, "o": org_id, "e": str(p.employee_id)},
+        )
+        if not shift_check.first():
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "shift_id noto'g'ri")
+    else:
+        auto_shift = await db.execute(
+            text("SELECT id FROM employee_shifts "
+                 "WHERE employee_id = :e AND organization_id = :o AND work_date = CURRENT_DATE"),
+            {"e": str(p.employee_id), "o": org_id},
+        )
+        row = auto_shift.first()
+        shift_id = row.id if row else None
+
+    res = await db.execute(
+        text("INSERT INTO employee_attendance (organization_id, employee_id, shift_id, clock_in) "
+             "VALUES (:o, :e, :s, NOW()) RETURNING id, clock_in"),
+        {"o": org_id, "e": str(p.employee_id), "s": shift_id},
+    )
+    row = res.first()
+    await db.commit()
+    return {"id": str(row.id), "clock_in": row.clock_in, "shift_id": shift_id}
+
+
+@router.post("/attendance/clock-out")
+async def clock_out(
+    p: ClockOutIn, db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    res = await db.execute(
+        text("UPDATE employee_attendance SET clock_out = NOW() "
+             "WHERE employee_id = :e AND organization_id = :o AND clock_out IS NULL "
+             "RETURNING id, clock_in, clock_out"),
+        {"e": str(p.employee_id), "o": org_id},
+    )
+    row = res.first()
+    if not row:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ochiq clock-in topilmadi")
+    await db.commit()
+    return {"id": str(row.id), "clock_in": row.clock_in, "clock_out": row.clock_out}
+
+
+@router.get(
+    "/attendance",
+    dependencies=[Depends(require_permission("hr.attendance.view"))],
+)
+async def list_attendance(
+    employee_id: UUID | None = None,
+    date_from: date | None = Query(None, alias="from"),
+    date_to: date | None = Query(None, alias="to"),
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    where = "WHERE a.organization_id = :o"
+    params: dict = {"o": org_id}
+    if employee_id:
+        where += " AND a.employee_id = :eid"
+        params["eid"] = str(employee_id)
+    if date_from:
+        where += " AND a.clock_in >= :df"
+        params["df"] = date_from
+    if date_to:
+        where += " AND a.clock_in < :dt2"
+        params["dt2"] = date_to + timedelta(days=1)
+    res = await db.execute(
+        text(f"""
+            SELECT a.id, a.employee_id, e.full_name AS employee_name,
+                   a.clock_in, a.clock_out, a.shift_id,
+                   s.work_date AS scheduled_date, s.start_time AS scheduled_start, s.end_time AS scheduled_end,
+                   EXTRACT(EPOCH FROM (COALESCE(a.clock_out, NOW()) - a.clock_in)) / 3600.0 AS worked_hours,
+                   CASE WHEN s.start_time IS NOT NULL
+                        THEN GREATEST(0, EXTRACT(EPOCH FROM (a.clock_in::time - s.start_time)) / 60.0)
+                        ELSE NULL END AS late_minutes
+            FROM employee_attendance a
+            JOIN employees e ON e.id = a.employee_id
+            LEFT JOIN employee_shifts s ON s.id = a.shift_id
+            {where}
+            ORDER BY a.clock_in DESC
+            LIMIT 1000
+        """),
+        params,
+    )
+    items = [dict(r._mapping) for r in res]
+    total_hours = sum(float(it["worked_hours"] or 0) for it in items)
+    total_late = sum(float(it["late_minutes"] or 0) for it in items)
+    return {
+        "items": items,
+        "summary": {
+            "days_present": len(items),
+            "total_worked_hours": round(total_hours, 2),
+            "total_late_minutes": round(total_late, 1),
+        },
+    }

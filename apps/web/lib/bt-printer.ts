@@ -4,6 +4,8 @@
  * Tested with Goojprt PT-210, Xprinter XP-P323B, etc.
  */
 
+import { renderShiftReportText, type ShiftReportData } from "./receipt-render";
+
 const ESC = 0x1b;
 const GS = 0x1d;
 const LF = 0x0a;
@@ -65,32 +67,51 @@ export function buildEscPos(): EscPos {
 let cachedDevice: any | null = null;
 let cachedCharacteristic: any | null = null;
 
-export async function btPrint(data: Uint8Array): Promise<void> {
-  if (typeof navigator === "undefined" || !(navigator as any).bluetooth) {
+export function isWebBluetoothSupported(): boolean {
+  return typeof navigator !== "undefined" && "bluetooth" in navigator;
+}
+
+export function isPrinterConnected(): boolean {
+  return !!(cachedCharacteristic && cachedDevice?.gatt?.connected);
+}
+
+async function ensureConnected(): Promise<void> {
+  if (!isWebBluetoothSupported()) {
     throw new Error("Web Bluetooth bu brauzerda qo'llab-quvvatlanmaydi");
   }
+  if (cachedCharacteristic && cachedDevice?.gatt?.connected) return;
 
-  if (!cachedCharacteristic || !cachedDevice?.gatt?.connected) {
-    const nav = navigator as any;
-    cachedDevice = await nav.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: SERVICE_UUIDS,
-    }) as any;
-    const server = await cachedDevice.gatt!.connect();
-    // Find a writable characteristic
-    const services = await server.getPrimaryServices();
-    for (const s of services) {
-      const chars = await s.getCharacteristics();
-      for (const ch of chars) {
-        if (ch.properties.write || ch.properties.writeWithoutResponse) {
-          cachedCharacteristic = ch;
-          break;
-        }
+  const nav = navigator as any;
+  cachedDevice = await nav.bluetooth.requestDevice({
+    filters: [{ services: SERVICE_UUIDS }],
+    optionalServices: SERVICE_UUIDS,
+  }) as any;
+  const server = await cachedDevice.gatt!.connect();
+  // Find a writable characteristic
+  const services = await server.getPrimaryServices();
+  for (const s of services) {
+    const chars = await s.getCharacteristics();
+    for (const ch of chars) {
+      if (ch.properties.write || ch.properties.writeWithoutResponse) {
+        cachedCharacteristic = ch;
+        break;
       }
-      if (cachedCharacteristic) break;
     }
-    if (!cachedCharacteristic) throw new Error("Yozish mumkin bo'lgan xarakteristika topilmadi");
+    if (cachedCharacteristic) break;
   }
+  if (!cachedCharacteristic) throw new Error("Yozish mumkin bo'lgan xarakteristika topilmadi");
+}
+
+/**
+ * Explicitly pair/connect to a Bluetooth printer (requires a user gesture,
+ * e.g. a button click, per Web Bluetooth security policy).
+ */
+export async function connectPrinter(): Promise<void> {
+  await ensureConnected();
+}
+
+export async function btPrint(data: Uint8Array): Promise<void> {
+  await ensureConnected();
 
   // Send in 100-byte chunks (most BLE printers have small MTU)
   const chunk = 100;
@@ -104,6 +125,17 @@ export async function btPrint(data: Uint8Array): Promise<void> {
   }
 }
 
+// ESC p m t1 t2 — pulse on connector 1 (pin 2), 50ms on / 500ms off
+const ESC_POS_DRAWER_OPEN = new Uint8Array([ESC, 0x70, 0x00, 0x19, 0xfa]);
+
+/**
+ * Open the cash drawer wired to the connected receipt printer's DK port,
+ * by sending the ESC/POS pulse command over the same Bluetooth channel.
+ */
+export async function openCashDrawer(): Promise<void> {
+  await btPrint(ESC_POS_DRAWER_OPEN);
+}
+
 export function disconnectPrinter() {
   cachedDevice?.gatt?.disconnect();
   cachedDevice = null;
@@ -111,38 +143,42 @@ export function disconnectPrinter() {
 }
 
 /**
- * Quick helper: print a thermal receipt
+ * Print pre-rendered receipt text (see lib/receipt-render.ts) on a connected
+ * Bluetooth ESC/POS thermal printer.
  */
-export async function printReceipt(receipt: {
-  org_name?: string;
-  doc_number?: string;
-  date?: string;
-  items: { name: string; qty: number; price: number; total: number }[];
-  total: number;
-  paid?: number;
-  payment_method?: string;
-  customer?: string;
-  footer?: string;
-}): Promise<void> {
+export async function printReceipt(text: string): Promise<void> {
   const w = buildEscPos();
-  if (receipt.org_name) {
-    w.align("center").bold(true).size(2, 2).text(receipt.org_name).feed(2);
+  w.align("left").bold(false).size(1, 1);
+  for (const line of text.split("\n")) {
+    w.text(line).feed();
   }
-  w.bold(false).size(1, 1).align("left");
-  if (receipt.doc_number) w.text(`Chek: ${receipt.doc_number}`).feed();
-  if (receipt.date) w.text(receipt.date).feed();
-  if (receipt.customer) w.text(`Mijoz: ${receipt.customer}`).feed();
-  w.text("--------------------------------").feed();
-  for (const it of receipt.items) {
-    w.text(it.name).feed();
-    w.text(`  ${it.qty} x ${it.price.toFixed(0)} = ${it.total.toFixed(0)}`).feed();
-  }
-  w.text("--------------------------------").feed();
-  w.bold(true).size(2, 1).text(`JAMI: ${receipt.total.toFixed(0)}`).feed().size(1, 1).bold(false);
-  if (receipt.paid != null) w.text(`To'landi: ${receipt.paid.toFixed(0)} (${receipt.payment_method || ""})`).feed();
-  if (receipt.footer) w.feed().align("center").text(receipt.footer).feed();
   w.feed(3).cut();
   await btPrint(w.build());
+}
+
+export type ShiftSessionInput = Omit<
+  ShiftReportData,
+  "report_type" | "total_income" | "total_expense" | "sale_count" | "by_payment_type"
+> & { status?: "open" | "closed" | string };
+
+export type ShiftTotalsInput = Pick<
+  ShiftReportData,
+  "total_income" | "total_expense" | "sale_count" | "by_payment_type"
+>;
+
+/**
+ * Print an internal cash-control shift report (X = active snapshot,
+ * Z = final totals on close) — NOT a fiscal/government Z-report.
+ * Reuses the same ESC/POS pipeline as printReceipt.
+ */
+export async function printShiftReport(
+  session: ShiftSessionInput,
+  totals: ShiftTotalsInput
+): Promise<void> {
+  const reportType: "X" | "Z" = session.status === "closed" ? "Z" : "X";
+  const { status: _status, ...sessionFields } = session;
+  const text = renderShiftReportText({ report_type: reportType, ...sessionFields, ...totals });
+  await printReceipt(text);
 }
 
 /**
@@ -150,12 +186,12 @@ export async function printReceipt(receipt: {
  * Common protocol: scale broadcasts weight as text "1.234 kg\r\n"
  */
 export async function readScale(onWeight: (kg: number) => void): Promise<() => void> {
-  if (typeof navigator === "undefined" || !(navigator as any).bluetooth) {
+  if (!isWebBluetoothSupported()) {
     throw new Error("Web Bluetooth qo'llab-quvvatlanmaydi");
   }
   const nav = navigator as any;
   const device = await nav.bluetooth.requestDevice({
-    acceptAllDevices: true,
+    filters: [{ services: SERVICE_UUIDS }],
     optionalServices: SERVICE_UUIDS,
   }) as any;
   const server = await device.gatt!.connect();

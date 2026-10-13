@@ -375,6 +375,49 @@ class SessionCloseIn(BaseModel):
     closed_note: str | None = None
 
 
+async def _compute_session_totals(db: AsyncSession, sid: UUID) -> dict:
+    totals = await db.execute(
+        text("SELECT COALESCE(SUM(CASE WHEN direction = 'in' THEN amount ELSE 0 END), 0) AS inc, "
+             "COALESCE(SUM(CASE WHEN direction = 'out' THEN amount ELSE 0 END), 0) AS exp, "
+             "COALESCE((SELECT COUNT(*) FROM sales WHERE cashbox_session_id = :sid), 0) AS sc "
+             "FROM cash_movements WHERE cashbox_session_id = :sid"),
+        {"sid": str(sid)},
+    )
+    row = totals.first()
+    by_pt = await db.execute(
+        text("SELECT pt.name AS payment_type, cm.direction, SUM(cm.amount) AS total "
+             "FROM cash_movements cm "
+             "LEFT JOIN payment_types pt ON pt.id = cm.payment_type_id "
+             "WHERE cm.cashbox_session_id = :sid "
+             "GROUP BY pt.name, cm.direction ORDER BY pt.name, cm.direction"),
+        {"sid": str(sid)},
+    )
+    return {
+        "total_income": float(row.inc),
+        "total_expense": float(row.exp),
+        "sale_count": row.sc,
+        "by_payment_type": [
+            {"payment_type": r.payment_type, "direction": r.direction, "total": float(r.total)}
+            for r in by_pt
+        ],
+    }
+
+
+@router.get("/cashbox-sessions/{sid}/totals")
+async def session_totals(
+    sid: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    chk = await db.execute(
+        text("SELECT id FROM cashbox_sessions WHERE id = :sid AND organization_id = :o"),
+        {"sid": str(sid), "o": org_id},
+    )
+    if not chk.scalar():
+        raise HTTPException(404, "Sessiya topilmadi")
+    return await _compute_session_totals(db, sid)
+
+
 @router.get("/cashbox-sessions/active")
 async def active_session(
     cashbox_id: int = Query(...),
@@ -422,28 +465,28 @@ async def close_session(
     sid: UUID, payload: SessionCloseIn,
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
+    org_id: str = Depends(get_current_org_id),
 ):
-    totals = await db.execute(
-        text("SELECT COALESCE(SUM(CASE WHEN direction = 'in' THEN amount ELSE 0 END), 0) AS inc, "
-             "COALESCE(SUM(CASE WHEN direction = 'out' THEN amount ELSE 0 END), 0) AS exp, "
-             "COALESCE((SELECT COUNT(*) FROM sales WHERE cashbox_session_id = :sid), 0) AS sc "
-             "FROM cash_movements WHERE cashbox_session_id = :sid"),
-        {"sid": str(sid)},
+    chk = await db.execute(
+        text("SELECT id FROM cashbox_sessions WHERE id = :sid AND organization_id = :o"),
+        {"sid": str(sid), "o": org_id},
     )
-    row = totals.first()
-    inc, exp, sc = row.inc, row.exp, row.sc
+    if not chk.first():
+        raise HTTPException(404, "Sessiya topilmadi")
+    totals = await _compute_session_totals(db, sid)
     res = await db.execute(
         text("UPDATE cashbox_sessions SET closed_by = :u, closed_at = NOW(), "
              "closed_balance = :cb, closed_diff = :cd, closed_note = :cn, "
              "total_income = :inc, total_expense = :exp, sale_count = :sc, status = 'closed' "
-             "WHERE id = :sid AND status = 'open' RETURNING id"),
+             "WHERE id = :sid AND organization_id = :o AND status = 'open' RETURNING id"),
         {"u": user_id, "cb": payload.closed_balance, "cd": payload.closed_diff,
-         "cn": payload.closed_note, "inc": inc, "exp": exp, "sc": sc, "sid": str(sid)},
+         "cn": payload.closed_note, "inc": totals["total_income"], "exp": totals["total_expense"],
+         "sc": totals["sale_count"], "sid": str(sid), "o": org_id},
     )
     if not res.scalar():
         raise HTTPException(400, "Sessiya yopilgan yoki topilmadi")
     await db.commit()
-    return {"ok": True, "total_income": float(inc), "total_expense": float(exp), "sale_count": sc}
+    return {"ok": True, **totals}
 
 
 @router.get("/cashbox-sessions")

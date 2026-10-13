@@ -12,45 +12,19 @@ import logging
 
 from app.core.deps import get_db, get_current_user_id, get_current_org_id
 from app.modules.audit.logger import log_action
+from app.modules.customer import loyalty as loyalty_service
 from app.modules.integration.telegram import notify_sale
+from app.modules.kiosk.service import get_cart_idle_timeout_min
 from app.modules.rbac.deps import get_user_permissions
+from app.modules.sale import service as sale_service
 from app.modules.sale.pdf import render_sale_pdf, render_return_pdf
+from app.modules.sale.service import SaleLineInput
 from app.modules.tools.xlsx import make_sheet, new_workbook, workbook_to_bytes
 from app.modules.warehouse.service import explode_bom, _stock_apply
 from app.modules.accounting.posting import JournalLine, post_journal_entry, get_default_account_id, get_cashbox_account_id
 
 log = logging.getLogger(__name__)
 
-
-
-
-async def _verify_warehouse_in_org(db, warehouse_id, org_id):
-    """HI-1: ensure warehouse belongs to caller org."""
-    from sqlalchemy import text as _text
-    res = await db.execute(
-        _text("SELECT 1 FROM warehouses WHERE id = :w AND organization_id = :o"),
-        {"w": warehouse_id, "o": org_id},
-    )
-    if not res.first():
-        raise HTTPException(422, "warehouse_id does not belong to your organization")
-
-async def _verify_products_in_org(db, product_ids, org_id):
-    """HI-1: ensure ALL product_ids belong to caller org and are not archived (one query)."""
-    from sqlalchemy import text as _text
-    if not product_ids:
-        return
-    res = await db.execute(
-        _text("SELECT id, is_archived FROM products WHERE id = ANY(CAST(:ids AS uuid[])) AND organization_id = :o"),
-        {"ids": [str(x) for x in product_ids], "o": org_id},
-    )
-    rows = list(res)
-    found = {str(r.id) for r in rows}
-    missing = [str(pid) for pid in product_ids if str(pid) not in found]
-    if missing:
-        raise HTTPException(422, f"product_id does not belong to your organization: {missing[0]}")
-    archived = [str(r.id) for r in rows if r.is_archived]
-    if archived:
-        raise HTTPException(422, "Mahsulot arxivda: yangi operatsiyaga qo'shib bo'lmaydi")
 
 async def _verify_cashbox_in_org(db, cashbox_id, org_id):
     """HI-2/HI-3: ensure cashbox belongs to caller org."""
@@ -78,6 +52,12 @@ class SaleItemIn(BaseModel):
     discount: Decimal = Decimal("0")
 
 
+class SalePaymentIn(BaseModel):
+    payment_type_id: int | None = None
+    cashbox_id: int | None = None
+    amount: Decimal = Field(gt=0)
+
+
 class SaleCreate(BaseModel):
     customer_id: UUID | None = None
     warehouse_id: int | None = None
@@ -86,6 +66,7 @@ class SaleCreate(BaseModel):
     rate: Decimal = Decimal("1")
     items: list[SaleItemIn] = Field(min_length=1)
     notes: str | None = None
+    payments: list[SalePaymentIn] | None = None
 
 
 @router.get("/sales")
@@ -94,6 +75,7 @@ async def list_sales(
     offset: int = Query(0, ge=0),
     customer_id: UUID | None = Query(None),
     status_filter: str | None = Query(None, alias="status"),
+    source_type: str | None = Query(None),
     q: str | None = Query(None),
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
@@ -105,9 +87,26 @@ async def list_sales(
     if customer_id:
         where += " AND s.customer_id = :cu"
         params["cu"] = str(customer_id)
-    if status_filter:
+    # SC-4: 'awaiting_payment'/'payment_failed' are not real sales.status
+    # values (a kiosk sale stays 'confirmed' there until a real payment
+    # webhook lands) -- they only exist via the kiosk_orders/payment_transactions
+    # join below, so translate them instead of matching s.status literally.
+    # Every other status value keeps the original, unchanged s.status = :st
+    # behavior (no change for any existing non-kiosk caller of this endpoint).
+    if status_filter in ("awaiting_payment", "payment_failed"):
+        failed_expr = "lpt.pt_status IN ('failed', 'cancelled')"
+        not_failed_expr = "(lpt.pt_status IS NULL OR lpt.pt_status NOT IN ('failed', 'cancelled'))"
+        where += (
+            " AND ko.id IS NOT NULL AND s.status NOT IN ('cancelled', 'paid') AND "
+            + (failed_expr if status_filter == "payment_failed" else not_failed_expr)
+        )
+    elif status_filter:
         where += " AND s.status = :st"
         params["st"] = status_filter
+    if source_type == "sale_kiosk":
+        where += " AND ko.id IS NOT NULL"
+    elif source_type:
+        where += " AND ko.id IS NULL"
     if q:
         where += " AND (s.doc_number ILIKE :q OR c.name ILIKE :q OR c.phone ILIKE :q)"
         params["q"] = f"%{q}%"
@@ -117,6 +116,9 @@ async def list_sales(
     if date_to:
         where += " AND s.sale_date < (CAST(:dt AS date) + INTERVAL '1 day')"
         params["dt"] = date_to
+
+    params["idle_min"] = await get_cart_idle_timeout_min(db, org_id)
+
     res = await db.execute(
         text(
             f"SELECT s.id, s.doc_number, "
@@ -128,14 +130,33 @@ async def list_sales(
             f"o.name AS org_name, "
             f"w.name AS warehouse_name, "
             f"u.full_name AS created_by_name, "
-            f"cur.code AS currency_code "
+            f"cur.code AS currency_code, "
+            f"CASE WHEN ko.id IS NOT NULL THEN 'sale_kiosk' ELSE 'sale' END AS source_type, "
+            f"kd.name AS kiosk_device_name, "
+            f"ko.order_number AS kiosk_order_number, "
+            f"CASE "
+            f"  WHEN ko.id IS NULL THEN NULL "
+            f"  WHEN s.status = 'cancelled' THEN 'cancelled' "
+            f"  WHEN s.status = 'paid' THEN 'paid' "
+            f"  WHEN lpt.pt_status IN ('failed', 'cancelled') THEN 'payment_failed' "
+            f"  ELSE 'awaiting_payment' "
+            f"END AS kiosk_status, "
+            f"(ko.id IS NOT NULL AND s.status NOT IN ('cancelled', 'paid') "
+            f" AND (lpt.pt_status IS NULL OR lpt.pt_status NOT IN ('failed', 'cancelled')) "
+            f" AND ko.created_at < NOW() - (:idle_min * INTERVAL '1 minute')) AS is_stale "
             f"FROM sales s "
             f"LEFT JOIN customers c ON c.id = s.customer_id "
             f"LEFT JOIN organizations o ON o.id = s.organization_id "
             f"LEFT JOIN warehouses w ON w.id = s.warehouse_id "
             f"LEFT JOIN users u ON u.id = s.created_by "
             f"LEFT JOIN currencies cur ON cur.id = s.currency_id "
-            f"{where} ORDER BY s.sale_date DESC LIMIT :lim OFFSET :off"
+            f"LEFT JOIN kiosk_orders ko ON ko.sale_id = s.id "
+            f"LEFT JOIN kiosk_devices kd ON kd.id = ko.device_id "
+            f"LEFT JOIN LATERAL ( "
+            f"  SELECT pt.status AS pt_status FROM payment_transactions pt "
+            f"  WHERE pt.sale_id = s.id ORDER BY pt.created_at DESC LIMIT 1 "
+            f") lpt ON ko.id IS NOT NULL "
+            f"{where} ORDER BY is_stale DESC, s.sale_date DESC LIMIT :lim OFFSET :off"
         ),
         params,
     )
@@ -178,155 +199,35 @@ async def create_sale(
         # Case 4: only warehouse_id provided (legacy / direct)
         resolved_warehouse_id = p.warehouse_id
 
-    # HI-1: verify resolved warehouse + all product_ids belong to caller org
-    await _verify_warehouse_in_org(db, resolved_warehouse_id, org_id)
-    await _verify_products_in_org(db, [it.product_id for it in p.items], org_id)
-
-    sale_id = uuid4()
-    total = sum(i.quantity * i.price - i.discount for i in p.items)
-    total_cost = Decimal("0")
-
-    await db.execute(
-        text(
-            "INSERT INTO sales (id, organization_id, customer_id, warehouse_id, currency_id, "
-            "rate, total_amount, status, notes, created_by) "
-            "VALUES (:id, :o, :cu, :wh, :cur, :r, :t, 'confirmed', :n, :u)"
-        ),
-        {"id": str(sale_id), "o": org_id,
-         "cu": str(p.customer_id) if p.customer_id else None,
-         "wh": resolved_warehouse_id, "cur": p.currency_id, "r": p.rate,
-         "t": total, "n": p.notes, "u": user_id},
+    result = await sale_service.create_sale_core(
+        db,
+        org_id=org_id,
+        customer_id=str(p.customer_id) if p.customer_id else None,
+        warehouse_id=resolved_warehouse_id,
+        currency_id=p.currency_id,
+        rate=p.rate,
+        items=[
+            SaleLineInput(product_id=str(it.product_id), quantity=it.quantity,
+                          price=it.price, discount=it.discount)
+            for it in p.items
+        ],
+        notes=p.notes,
+        user_id=user_id,
+        source_type="sale",
+        payments=[
+            sale_service.PaymentLineInput(
+                amount=pay.amount, payment_type_id=pay.payment_type_id, cashbox_id=pay.cashbox_id,
+            )
+            for pay in p.payments
+        ] if p.payments else None,
     )
-
-    for it in p.items:
-        item_res = await db.execute(
-            text("INSERT INTO sale_items (sale_id, product_id, quantity, price, discount) "
-                 "VALUES (:s, :p, :q, :pr, :d) RETURNING id"),
-            {"s": str(sale_id), "p": str(it.product_id), "q": it.quantity,
-             "pr": it.price, "d": it.discount},
-        )
-        sale_item_id = item_res.scalar()
-
-        # Snapshot avg_cost before stock is deducted (FOR UPDATE locks the balance row).
-        # Falls back to products.avg_cost if no balance row exists yet.
-        cost_row = await db.execute(
-            text("SELECT COALESCE(avg_cost, 0) FROM stock_balances "
-                 "WHERE warehouse_id = :w AND product_id = :p FOR UPDATE"),
-            {"w": resolved_warehouse_id, "p": str(it.product_id)},
-        )
-        cost_snapshot = Decimal(str(cost_row.scalar() or 0))
-        if cost_snapshot == 0:
-            fallback = await db.execute(
-                text("SELECT COALESCE(purchase_price, 0) FROM products WHERE id = :p"),
-                {"p": str(it.product_id)},
-            )
-            cost_snapshot = Decimal(str(fallback.scalar() or 0))
-
-        await db.execute(
-            text("UPDATE sale_items SET unit_cost = :c WHERE id = :sid"),
-            {"c": cost_snapshot, "sid": sale_item_id},
-        )
-        total_cost += Decimal(str(it.quantity)) * cost_snapshot
-
-        # Check BOM before stock deduction: BOM parent products do not hold stock
-        # themselves — their components do. Allow negative balance for BOM parents
-        # since stock is tracked and deducted at the component level during pick.
-        leaves = await explode_bom(db, org_id, str(it.product_id), Decimal(str(it.quantity)))
-        is_bom_parent = bool(leaves)
-
-        await _stock_apply(
-            db,
-            warehouse_id=resolved_warehouse_id,
-            product_id=str(it.product_id),
-            delta_qty=Decimal(str(-it.quantity)),
-            cost=cost_snapshot,
-            org_id=org_id,
-            allow_negative=is_bom_parent,
-            operation_type="sale",
-            source_type="sale",
-            source_id=str(sale_id),
-            user_id=user_id,
-        )
-
-        # Pick workflow bootstrap: create pending pick items.
-        # BOM products → one pick_item per leaf component (parent_product_id = sold product).
-        # Non-BOM products → one pick_item for the product itself (parent_product_id NULL).
-        if leaves:
-            for leaf in leaves:
-                await db.execute(
-                    text(
-                        "INSERT INTO order_pick_items "
-                        "  (organization_id, order_id, item_id, parent_product_id,"
-                        "   product_id, quantity, unit_id, status) "
-                        "VALUES (:o, :oid, :iid, :parent, :cpid, :q, :u, 'pending') "
-                        "ON CONFLICT (organization_id, order_id, item_id, product_id) DO NOTHING"
-                    ),
-                    {
-                        "o": org_id,
-                        "oid": str(sale_id),
-                        "iid": sale_item_id,
-                        "parent": str(it.product_id),
-                        "cpid": leaf["component_id"],
-                        "q": leaf["quantity"],
-                        "u": leaf["unit_id"],
-                    },
-                )
-        else:
-            # Resolve unit_id from product table for individual items
-            unit_res = await db.execute(
-                text("SELECT unit_id FROM products WHERE id = :pid"),
-                {"pid": str(it.product_id)},
-            )
-            unit_row = unit_res.first()
-            unit_id = unit_row.unit_id if unit_row else None
-            await db.execute(
-                text(
-                    "INSERT INTO order_pick_items "
-                    "  (organization_id, order_id, item_id, parent_product_id,"
-                    "   product_id, quantity, unit_id, status) "
-                    "VALUES (:o, :oid, :iid, NULL, :pid, :q, :u, 'pending') "
-                    "ON CONFLICT (organization_id, order_id, item_id, product_id) DO NOTHING"
-                ),
-                {
-                    "o": org_id,
-                    "oid": str(sale_id),
-                    "iid": sale_item_id,
-                    "pid": str(it.product_id),
-                    "q": it.quantity,
-                    "u": unit_id,
-                },
-            )
-
-    # Accounting: Dr Mijozlar qarzi / Cr Sotuvdan tushum (+ Dr COGS / Cr Zaxira).
-    # Best-effort — a bug here must never block the sale itself.
-    try:
-        ar_id = await get_default_account_id(db, org_id, "ar")
-        revenue_id = await get_default_account_id(db, org_id, "revenue")
-        lines = [
-            JournalLine(ar_id, debit=float(total), rate=float(p.rate or 1), currency_id=p.currency_id,
-                        counterparty_type="customer" if p.customer_id else None,
-                        counterparty_id=str(p.customer_id) if p.customer_id else None),
-            JournalLine(revenue_id, credit=float(total), rate=float(p.rate or 1), currency_id=p.currency_id),
-        ]
-        if total_cost > 0:
-            cogs_id = await get_default_account_id(db, org_id, "cogs")
-            inventory_id = await get_default_account_id(db, org_id, "inventory")
-            lines += [
-                JournalLine(cogs_id, debit=float(total_cost)),
-                JournalLine(inventory_id, credit=float(total_cost)),
-            ]
-        await post_journal_entry(
-            db, org_id, lines, source_type="sale", source_id=str(sale_id),
-            description=f"Sotuv #{sale_id}", user_id=user_id,
-        )
-    except Exception:
-        log.exception("Failed to post journal entry for sale %s", sale_id)
-
-    await db.commit()
+    sale_id = result.sale_id
+    total = result.total_amount
 
     await log_action(
         db, org_id, user_id, "create", "sales", str(sale_id),
-        diff={"new": {"total_amount": float(total), "items": len(p.items),
+        diff={"new": {"total_amount": float(total), "paid_amount": float(result.paid_amount),
+                      "items": len(p.items),
                       "warehouse_id": resolved_warehouse_id,
                       "customer_id": str(p.customer_id) if p.customer_id else None}},
         request=request,
@@ -340,7 +241,7 @@ async def create_sale(
                 "id": str(sale_id),
                 "doc_number": None,
                 "total_amount": float(total),
-                "paid_amount": 0,
+                "paid_amount": float(result.paid_amount),
                 "customer_name": None,
                 "warehouse_name": None,
                 "currency_code": "UZS",
@@ -355,7 +256,7 @@ async def create_sale(
     except Exception:
         pass
 
-    return {"id": str(sale_id), "total_amount": total}
+    return {"id": str(sale_id), "total_amount": total, "paid_amount": result.paid_amount}
 
 
 @router.get("/sales/{sale_id}")
@@ -545,10 +446,11 @@ async def sale_pdf(
 # =========================================================
 
 class PayIn(BaseModel):
-    amount: Decimal = Field(gt=0)
+    amount: Decimal = Field(ge=0)
     cashbox_id: int | None = None
     payment_type_id: int | None = None
     notes: str | None = None
+    redeem_points: Decimal = Field(default=Decimal("0"), ge=0)
 
 
 @router.post("/sales/{sale_id}/pay")
@@ -573,7 +475,18 @@ async def pay_sale(
     # HI-2/HI-3: validate cashbox belongs to caller org before touching anything
     await _verify_cashbox_in_org(db, p.cashbox_id, org_id)
 
-    new_paid = Decimal(str(row.paid_amount or 0)) + p.amount
+    # RG-6: validate + apply points-as-discount BEFORE any write (422 if the
+    # customer doesn't have enough balance). 1 point = 1 currency unit, same
+    # unit earn_on_pay credits in.
+    customer_id_str = str(row.customer_id) if row.customer_id else None
+    discount = await loyalty_service.redeem_at_pay(
+        db, org_id, customer_id_str, str(sale_id), p.redeem_points, user_id,
+    )
+    if p.amount <= 0 and discount <= 0:
+        raise HTTPException(422, "amount yoki redeem_points talab qilinadi")
+
+    was_paid = row.status == "paid"
+    new_paid = Decimal(str(row.paid_amount or 0)) + p.amount + discount
     total = Decimal(str(row.total_amount or 0))
     new_status = "paid" if new_paid >= total else "partial"
 
@@ -583,38 +496,55 @@ async def pay_sale(
         text("UPDATE sales SET paid_amount = :pa, status = :st WHERE id = :id"),
         {"pa": new_paid, "st": new_status, "id": str(sale_id)},
     )
-    await db.execute(
-        text("INSERT INTO cash_movements (organization_id, cashbox_id, direction, "
-             "amount, payment_type_id, customer_id, sale_id, description, created_by) "
-             "VALUES (:o, :cb, 'in', :amt, :pt, :cu, :s, :d, :u)"),
-        {"o": org_id, "cb": p.cashbox_id, "amt": p.amount, "pt": p.payment_type_id,
-         "cu": str(row.customer_id) if row.customer_id else None,
-         "s": str(sale_id),
-         "d": f"Оплата продажи: {p.notes or ''}".strip(), "u": user_id},
-    )
-    if p.cashbox_id:
+    if p.amount > 0:
         await db.execute(
-            text("UPDATE cashboxes SET balance = balance + :amt WHERE id = :cb"),
-            {"amt": p.amount, "cb": p.cashbox_id},
+            text("INSERT INTO cash_movements (organization_id, cashbox_id, direction, "
+                 "amount, payment_type_id, customer_id, sale_id, description, created_by) "
+                 "VALUES (:o, :cb, 'in', :amt, :pt, :cu, :s, :d, :u)"),
+            {"o": org_id, "cb": p.cashbox_id, "amt": p.amount, "pt": p.payment_type_id,
+             "cu": customer_id_str,
+             "s": str(sale_id),
+             "d": f"Оплата продажи: {p.notes or ''}".strip(), "u": user_id},
         )
+        if p.cashbox_id:
+            await db.execute(
+                text("UPDATE cashboxes SET balance = balance + :amt WHERE id = :cb"),
+                {"amt": p.amount, "cb": p.cashbox_id},
+            )
 
-    # Accounting: Dr Kassa / Cr Mijozlar qarzi — cash collected against the receivable.
+    # Accounting: Dr Kassa (cash leg) + Dr Boshqa xarajat (ball chegirma leg,
+    # if any) / Cr Mijozlar qarzi. Zero-amount legs are omitted — a journal
+    # line with neither debit nor credit is invalid.
     try:
-        cash_id = await get_cashbox_account_id(db, org_id, p.cashbox_id)
         ar_id = await get_default_account_id(db, org_id, "ar")
+        lines = [
+            JournalLine(ar_id, credit=float(p.amount + discount),
+                        counterparty_type="customer" if row.customer_id else None,
+                        counterparty_id=customer_id_str),
+        ]
+        if p.amount > 0:
+            cash_id = await get_cashbox_account_id(db, org_id, p.cashbox_id)
+            lines.append(JournalLine(cash_id, debit=float(p.amount)))
+        if discount > 0:
+            other_expense_id = await get_default_account_id(db, org_id, "other_expense")
+            lines.append(JournalLine(other_expense_id, debit=float(discount)))
         await post_journal_entry(
-            db, org_id,
-            [
-                JournalLine(cash_id, debit=float(p.amount)),
-                JournalLine(ar_id, credit=float(p.amount),
-                            counterparty_type="customer" if row.customer_id else None,
-                            counterparty_id=str(row.customer_id) if row.customer_id else None),
-            ],
+            db, org_id, lines,
             source_type="sale_payment", source_id=str(sale_id),
-            description=f"Sotuv to'lovi #{sale_id}", user_id=user_id,
+            description=f"Sotuv to'lovi #{sale_id}"
+            + (f" (ball chegirma: {discount})" if discount > 0 else ""),
+            user_id=user_id,
         )
     except Exception:
         log.exception("Failed to post journal entry for sale payment %s", sale_id)
+
+    # RG-6: earn-on-pay — credit loyalty points once, only on the transition
+    # into 'paid' (guards against double-earn if /pay is called again later).
+    earned = Decimal("0")
+    if new_status == "paid" and not was_paid:
+        earned = await loyalty_service.earn_on_pay(
+            db, org_id, customer_id_str, str(sale_id), total, user_id,
+        )
 
     await db.commit()
 
@@ -622,11 +552,136 @@ async def pay_sale(
         db, org_id, user_id, "pay", "sales", str(sale_id),
         diff={"amount": float(p.amount), "new_paid": float(new_paid),
               "new_status": new_status,
-              "cashbox_id": p.cashbox_id, "payment_type_id": p.payment_type_id},
+              "cashbox_id": p.cashbox_id, "payment_type_id": p.payment_type_id,
+              "loyalty_redeemed": float(discount), "loyalty_earned": float(earned)},
         request=request,
     )
     await db.commit()
-    return {"paid_amount": float(new_paid), "status": new_status}
+    return {"paid_amount": float(new_paid), "status": new_status,
+            "loyalty_redeemed": float(discount), "loyalty_earned": float(earned)}
+
+
+async def _verify_payment_type_in_org(db, payment_type_id, org_id):
+    if payment_type_id is None:
+        return
+    res = await db.execute(
+        text("SELECT 1 FROM payment_types WHERE id = :pt AND organization_id = :o"),
+        {"pt": payment_type_id, "o": org_id},
+    )
+    if not res.first():
+        raise HTTPException(422, "payment_type_id does not belong to your organization")
+
+
+class PaySplitLineIn(BaseModel):
+    payment_type_id: int | None = None
+    cashbox_id: int | None = None
+    amount: Decimal = Field(gt=0)
+
+
+class PaySplitIn(BaseModel):
+    payments: list[PaySplitLineIn] = Field(min_length=1)
+
+
+@router.post("/sales/{sale_id}/pay-split")
+async def pay_sale_split(
+    sale_id: UUID, p: PaySplitIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    """RG-2: record several payment lines (e.g. cash + card) for one sale in a
+    single atomic request. Independent of /pay — no single-payment caller is
+    touched by this endpoint."""
+    head = await db.execute(
+        text("SELECT total_amount, paid_amount, customer_id, status "
+             "FROM sales WHERE id = :id AND organization_id = :o"),
+        {"id": str(sale_id), "o": org_id},
+    )
+    row = head.first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if row.status == "cancelled":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Продажа отменена")
+
+    # Validate every line BEFORE writing anything — one bad line must roll back
+    # (here: not write at all) the whole request, no partial cash_movements.
+    for line in p.payments:
+        await _verify_cashbox_in_org(db, line.cashbox_id, org_id)
+        await _verify_payment_type_in_org(db, line.payment_type_id, org_id)
+
+    total = Decimal(str(row.total_amount or 0))
+    paid = Decimal(str(row.paid_amount or 0))
+    remaining = total - paid
+    sum_amount = sum((line.amount for line in p.payments), Decimal("0"))
+    if sum_amount > remaining:
+        raise HTTPException(422, "To'lov summasi qoldiq qarzdan oshmasligi kerak")
+
+    new_paid = paid + sum_amount
+    new_status = "paid" if new_paid >= total else "partial"
+
+    await db.execute(
+        text("UPDATE sales SET paid_amount = :pa, status = :st WHERE id = :id"),
+        {"pa": new_paid, "st": new_status, "id": str(sale_id)},
+    )
+    for line in p.payments:
+        await db.execute(
+            text("INSERT INTO cash_movements (organization_id, cashbox_id, direction, "
+                 "amount, payment_type_id, customer_id, sale_id, description, created_by) "
+                 "VALUES (:o, :cb, 'in', :amt, :pt, :cu, :s, :d, :u)"),
+            {"o": org_id, "cb": line.cashbox_id, "amt": line.amount, "pt": line.payment_type_id,
+             "cu": str(row.customer_id) if row.customer_id else None,
+             "s": str(sale_id),
+             "d": "Aralash to'lov", "u": user_id},
+        )
+        if line.cashbox_id:
+            await db.execute(
+                text("UPDATE cashboxes SET balance = balance + :amt WHERE id = :cb"),
+                {"amt": line.amount, "cb": line.cashbox_id},
+            )
+
+    # Accounting: Dr Kassa / Cr Mijozlar qarzi per line — same pattern as /pay.
+    for line in p.payments:
+        try:
+            cash_id = await get_cashbox_account_id(db, org_id, line.cashbox_id)
+            ar_id = await get_default_account_id(db, org_id, "ar")
+            await post_journal_entry(
+                db, org_id,
+                [
+                    JournalLine(cash_id, debit=float(line.amount)),
+                    JournalLine(ar_id, credit=float(line.amount),
+                                counterparty_type="customer" if row.customer_id else None,
+                                counterparty_id=str(row.customer_id) if row.customer_id else None),
+                ],
+                source_type="sale_payment", source_id=str(sale_id),
+                description=f"Aralash to'lov #{sale_id}", user_id=user_id,
+            )
+        except Exception:
+            log.exception("Failed to post journal entry for split payment on sale %s", sale_id)
+
+    # RG-6: earn-on-pay — same guard as /pay: once, only on the transition
+    # into 'paid'.
+    earned = Decimal("0")
+    if new_status == "paid" and row.status != "paid":
+        earned = await loyalty_service.earn_on_pay(
+            db, org_id, str(row.customer_id) if row.customer_id else None,
+            str(sale_id), total, user_id,
+        )
+
+    await db.commit()
+
+    await log_action(
+        db, org_id, user_id, "pay", "sales", str(sale_id),
+        diff={"amount": float(sum_amount), "new_paid": float(new_paid),
+              "new_status": new_status,
+              "payments": [{"payment_type_id": line.payment_type_id,
+                            "cashbox_id": line.cashbox_id,
+                            "amount": float(line.amount)} for line in p.payments],
+              "loyalty_earned": float(earned)},
+        request=request,
+    )
+    await db.commit()
+    return {"paid_amount": float(new_paid), "status": new_status, "loyalty_earned": float(earned)}
 
 
 @router.post("/sales/{sale_id}/cancel")
@@ -669,15 +724,23 @@ async def cancel_sale(
         text("UPDATE sales SET status = 'cancelled' WHERE id = :id"),
         {"id": str(sale_id)},
     )
+
+    # RG-6 — most important correctness requirement of this ticket: a sale
+    # that earned loyalty points must not leave the customer with "free"
+    # points once cancelled. Claws back exactly what this sale earned via a
+    # signed 'adjust' ledger row (no-op if it never earned points).
+    reversed_points = await loyalty_service.reverse_sale_earn(db, org_id, str(sale_id), user_id)
+
     await db.commit()
 
     await log_action(
         db, org_id, user_id, "cancel", "sales", str(sale_id),
-        diff={"new_status": "cancelled", "stock_returned": True},
+        diff={"new_status": "cancelled", "stock_returned": True,
+              "loyalty_points_reversed": float(reversed_points)},
         request=request,
     )
     await db.commit()
-    return {"ok": True}
+    return {"ok": True, "loyalty_points_reversed": float(reversed_points)}
 
 
 async def _bootstrap_pick_items(

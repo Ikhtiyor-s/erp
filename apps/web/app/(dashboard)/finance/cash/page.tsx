@@ -56,6 +56,7 @@ export default function CashPage() {
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filterCB, setFilterCB] = useState<number | null>(null);
 
   const [cbOpen, setCbOpen] = useState(false);
@@ -81,7 +82,16 @@ export default function CashPage() {
       setWarehouses(r.data || []);
     }).catch(() => {});
     (async () => {
-      setLoading(true); await loadBoxes(); await loadMovements(); setLoading(false);
+      setLoading(true);
+      setError(null);
+      try {
+        await loadBoxes();
+        await loadMovements();
+      } catch (e) {
+        setError(getErrorMessage(e, "Ma'lumotlarni yuklashda xatolik"));
+      } finally {
+        setLoading(false);
+      }
     })();
   }, []);
 
@@ -262,6 +272,12 @@ export default function CashPage() {
       <PageHeader title={t("ui__кассы_2e721ce2")} description={t("ui__кассы_и_операции_afe29bf7")}
         onCreate={() => { setCbForm(emptyCB); setCbEditId(null); setCbOpen(true); }} createLabel={t("ui__добавить_кассу_6e7a1891")} />
 
+      {error && (
+        <div className="rounded-md bg-danger-50 dark:bg-danger-500/15 border border-danger-500/30 px-4 py-3 text-[13px] text-danger-700 dark:text-danger-500">
+          {error}
+        </div>
+      )}
+
       <DataTable columns={boxCols} rows={boxes} loading={loading}
         onEdit={(r) => { setCbForm({ name: r.name, currency_id: r.currency_id, warehouse_id: r.warehouse_id ?? null }); setCbEditId(r.id); setCbOpen(true); }}
         onDelete={(r) => setCbDelTarget(r)} />
@@ -368,7 +384,7 @@ export default function CashPage() {
             <select className={input} value={trForm.from_cashbox_id || ""}
               onChange={(e) => setTrForm({ ...trForm, from_cashbox_id: e.target.value ? Number(e.target.value) : null })}>
               <option value="">{t("ui__касса_51879a03")}</option>
-              {boxes.map((b) => <option key={b.id} value={b.id}>{t("ui__b_name_баланс_fmt_b_balance_7f5a7bba")}</option>)}
+              {boxes.map((b) => <option key={b.id} value={b.id}>{b.name} ({t("ui__баланс_95dcad97")} {fmt(b.balance)})</option>)}
             </select>
           </Field>
           <Field label={t("ui__куда_b60bd4b1")} required>

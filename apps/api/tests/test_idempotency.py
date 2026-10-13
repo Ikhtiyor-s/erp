@@ -17,13 +17,22 @@ Test cases:
   8. Cross-org isolation: same key, different org → separate cache entries.
   9. Expired entry (simulated via direct SQL) → treated as miss.
 """
+import os
 import uuid
+
+import asyncpg
 import pytest
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+_PG_DSN = os.environ.get(
+    "DATABASE_URL_SYNC",
+    "postgresql://erp:erp@erp-postgres:5432/erp",
+)
+
 
 def _fresh_key() -> str:
     return str(uuid.uuid4())
@@ -34,6 +43,71 @@ async def _post_sale(client, ikey: str | None, body: dict) -> object:
     if ikey:
         headers["Idempotency-Key"] = ikey
     return await client.post("/api/v1/sale/sales", json=body, headers=headers)
+
+
+async def _ensure_warehouse(client, name: str) -> int:
+    r = await client.get("/api/v1/warehouse/warehouses")
+    for wh in r.json():
+        if wh["name"] == name:
+            return wh["id"]
+    r = await client.post("/api/v1/warehouse/warehouses", json={"name": name})
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+async def _ensure_product(client, name: str) -> str:
+    r = await client.get("/api/v1/warehouse/products", params={"q": name, "limit": 5})
+    for p in r.json():
+        if p["name"] == name:
+            return str(p["id"])
+    r = await client.post(
+        "/api/v1/warehouse/products",
+        json={"name": name, "purchase_price": "500", "sale_price": "1000"},
+    )
+    assert r.status_code in (200, 201), r.text
+    return str(r.json()["id"])
+
+
+async def _get_currency_id(client) -> int:
+    r = await client.get("/api/v1/reference/currencies")
+    currencies = r.json()
+    assert currencies, "Demo seed must have at least one currency"
+    return currencies[0]["id"]
+
+
+async def _set_stock(client, wh_id: int, product_id: str, qty: str) -> None:
+    r = await client.post("/api/v1/warehouse/inventories", json={
+        "warehouse_id": wh_id,
+        "items": [{"product_id": product_id, "actual_qty": qty}],
+    })
+    assert r.status_code in (200, 201), r.text
+    iid = r.json()["id"]
+    r = await client.post(f"/api/v1/warehouse/inventories/{iid}/finish")
+    assert r.status_code == 200, r.text
+
+
+async def _create_unpaid_sale_for_pay(client, amount: float = 100000) -> str:
+    wh_id = await _ensure_warehouse(client, "IK-PayTestWarehouse")
+    pid = await _ensure_product(client, "IK-PayTestProduct")
+    cur_id = await _get_currency_id(client)
+    await _set_stock(client, wh_id, pid, "1000")
+    r = await client.post("/api/v1/sale/sales", json={
+        "warehouse_id": wh_id,
+        "currency_id": cur_id,
+        "items": [{"product_id": pid, "quantity": 1, "price": amount, "discount": 0}],
+    })
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+async def _cash_movement_count_for_sale(sale_id: str) -> int:
+    conn = await asyncpg.connect(_PG_DSN)
+    try:
+        return await conn.fetchval(
+            "SELECT COUNT(*) FROM cash_movements WHERE sale_id = $1", sale_id
+        )
+    finally:
+        await conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -285,3 +359,90 @@ def test_is_whitelisted_logic():
     assert not _is_whitelisted("GET", "/api/v1/sale/sales")
     assert not _is_whitelisted("POST", "/api/v1/reference/units")
     assert not _is_whitelisted("PUT", "/api/v1/sale/sales/123")
+
+
+# ---------------------------------------------------------------------------
+# POS-6 — POST /sale/sales/{id}/pay (REGOS incremental tap-to-pay) coverage
+# ---------------------------------------------------------------------------
+
+def test_pay_and_pay_split_are_whitelisted():
+    """pay/pay-split must be idempotency-protected (both via the explicit
+    trailing-slash entry and, redundantly, the bare create-sale prefix)."""
+    from app.modules.idempotency.middleware import _is_whitelisted
+    assert _is_whitelisted("POST", "/api/v1/sale/sales/abc-123/pay")
+    assert _is_whitelisted("POST", "/api/v1/sale/sales/abc-123/pay-split")
+
+
+@pytest.mark.asyncio
+async def test_pay_replay_same_key_no_duplicate_payment(client):
+    """Replaying the same Idempotency-Key on POST .../pay must return the
+    cached response and must NOT write a second cash_movements row."""
+    sale_id = await _create_unpaid_sale_for_pay(client, amount=50000)
+    ikey = _fresh_key()
+    body = {"amount": 20000}
+
+    r1 = await client.post(
+        f"/api/v1/sale/sales/{sale_id}/pay", json=body,
+        headers={"Idempotency-Key": ikey},
+    )
+    assert r1.status_code == 200, r1.text
+    assert r1.headers.get("X-Idempotency-Replayed") == "false"
+
+    r2 = await client.post(
+        f"/api/v1/sale/sales/{sale_id}/pay", json=body,
+        headers={"Idempotency-Key": ikey},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.headers.get("X-Idempotency-Replayed") == "true"
+    assert r1.json() == r2.json()
+
+    assert await _cash_movement_count_for_sale(sale_id) == 1
+
+
+@pytest.mark.asyncio
+async def test_pay_different_key_creates_genuine_second_payment(client):
+    """A DIFFERENT Idempotency-Key for a second, distinct payment tap on the
+    same sale must NOT be blocked as a duplicate — it is a real second /pay."""
+    sale_id = await _create_unpaid_sale_for_pay(client, amount=50000)
+    key1, key2 = _fresh_key(), _fresh_key()
+
+    r1 = await client.post(
+        f"/api/v1/sale/sales/{sale_id}/pay", json={"amount": 20000},
+        headers={"Idempotency-Key": key1},
+    )
+    assert r1.status_code == 200, r1.text
+
+    r2 = await client.post(
+        f"/api/v1/sale/sales/{sale_id}/pay", json={"amount": 30000},
+        headers={"Idempotency-Key": key2},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.headers.get("X-Idempotency-Replayed") == "false"
+    assert r2.json()["status"] == "paid"
+    assert float(r2.json()["paid_amount"]) == 50000
+
+    assert await _cash_movement_count_for_sale(sale_id) == 2
+
+
+@pytest.mark.asyncio
+async def test_pay_conflict_same_key_different_body(client):
+    """Same Idempotency-Key, different request body on .../pay -> 409
+    IDEMPOTENCY_CONFLICT, and the conflicting request must write nothing."""
+    sale_id = await _create_unpaid_sale_for_pay(client, amount=50000)
+    ikey = _fresh_key()
+
+    r1 = await client.post(
+        f"/api/v1/sale/sales/{sale_id}/pay", json={"amount": 10000},
+        headers={"Idempotency-Key": ikey},
+    )
+    assert r1.status_code == 200, r1.text
+
+    r2 = await client.post(
+        f"/api/v1/sale/sales/{sale_id}/pay", json={"amount": 25000},
+        headers={"Idempotency-Key": ikey},
+    )
+    assert r2.status_code == 409, r2.text
+    data = r2.json()
+    assert data.get("code") == "IDEMPOTENCY_CONFLICT"
+
+    assert await _cash_movement_count_for_sale(sale_id) == 1

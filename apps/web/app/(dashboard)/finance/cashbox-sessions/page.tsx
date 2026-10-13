@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Play, Square, RefreshCw } from "lucide-react";
+import { Play, Square, RefreshCw, Printer } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
@@ -11,6 +11,14 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import {
+  printShiftReport,
+  connectPrinter,
+  disconnectPrinter,
+  isPrinterConnected,
+  isWebBluetoothSupported,
+  type ShiftTotalsInput,
+} from "@/lib/bt-printer";
 
 type Cashbox = { id: number; name: string };
 type Session = {
@@ -42,6 +50,12 @@ export default function CashboxSessionsPage() {
   const [closeOpen, setCloseOpen] = useState(false);
   const [form, setForm] = useState({ opened_balance: 0, opened_note: "" });
   const [closeForm, setCloseForm] = useState({ closed_balance: 0, closed_diff: 0, closed_note: "" });
+  const [printerConnected, setPrinterConnected] = useState(false);
+  const [printingId, setPrintingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPrinterConnected(isPrinterConnected());
+  }, []);
 
   useEffect(() => {
     api.get<Cashbox[]>("/finance/cashboxes").then((r) => {
@@ -80,6 +94,42 @@ export default function CashboxSessionsPage() {
       refresh();
     } catch (e: any) {
       toast.error(getErrorMessage(e, "Xato"));
+    }
+  }
+
+  async function connectPrinterNow() {
+    if (!isWebBluetoothSupported()) {
+      toast.error("Brauzer Web Bluetooth'ni qo'llamaydi (Android Chrome kerak)");
+      return;
+    }
+    try {
+      await connectPrinter();
+      setPrinterConnected(true);
+      toast.success("Printer ulandi");
+    } catch (e: any) {
+      toast.error(getErrorMessage(e, "Printer ulanmadi"));
+    }
+  }
+
+  function disconnectPrinterNow() {
+    disconnectPrinter();
+    setPrinterConnected(false);
+  }
+
+  async function printSession(s: Session) {
+    if (!isWebBluetoothSupported() || !isPrinterConnected()) {
+      toast.error("Printer ulanmagan. Avval printerni ulang.");
+      return;
+    }
+    setPrintingId(s.id);
+    try {
+      const r = await api.get<ShiftTotalsInput>(`/cashbox-sessions/${s.id}/totals`);
+      await printShiftReport(s, r.data);
+      toast.success(s.status === "closed" ? "Z-hisobot chop etildi" : "X-hisobot chop etildi");
+    } catch (e: any) {
+      toast.error(getErrorMessage(e, "Hisobotni chop etib bo'lmadi. Printerni tekshiring."));
+    } finally {
+      setPrintingId(null);
     }
   }
 
@@ -131,6 +181,23 @@ export default function CashboxSessionsPage() {
         </Badge>
       ),
     },
+    {
+      key: "print",
+      header: "",
+      align: "center",
+      width: "40px",
+      render: (s) => (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); printSession(s); }}
+          disabled={printingId === s.id}
+          title={s.status === "closed" ? "Z-hisobotni chop etish" : "X-hisobotni chop etish"}
+          className="p-1 rounded hover:bg-ink-200/70 dark:hover:bg-ink-800 text-ink-500 dark:text-ink-400 hover:text-ink-900 dark:hover:text-ink-100 transition-colors disabled:opacity-50"
+        >
+          <Printer size={13} />
+        </button>
+      ),
+    },
   ];
 
   return (
@@ -144,6 +211,25 @@ export default function CashboxSessionsPage() {
             onChange={(e) => setBoxId(e.target.value ? Number(e.target.value) : null)}>
             {boxes.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+          {printerConnected ? (
+            <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-info-50 dark:bg-info-500/15 border border-info-500/30 text-info-700 dark:text-info-500">
+              <Printer size={12} />
+              Printer ulangan
+              <button type="button" onClick={disconnectPrinterNow} className="ml-1 hover:underline">
+                uzish
+              </button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              icon={Printer}
+              onClick={connectPrinterNow}
+              title="Chek printerini Bluetooth orqali ulash"
+            >
+              Printerni ulash
+            </Button>
+          )}
           <Button variant="outline" size="sm" icon={RefreshCw} className="ml-auto" onClick={refresh}>
             Yangilash
           </Button>
@@ -162,10 +248,17 @@ export default function CashboxSessionsPage() {
                 Boshlang'ich qoldiq: <span className="font-mono font-semibold">{fmt(active.opened_balance)}</span>
               </div>
             </div>
-            <Button variant="danger" size="sm" icon={Square}
-              onClick={() => { setCloseForm({ ...closeForm, closed_balance: Number(active.opened_balance) }); setCloseOpen(true); }}>
-              Yopish
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" icon={Printer}
+                loading={printingId === active.id}
+                onClick={() => printSession(active)}>
+                X-hisobot
+              </Button>
+              <Button variant="danger" size="sm" icon={Square}
+                onClick={() => { setCloseForm({ ...closeForm, closed_balance: Number(active.opened_balance) }); setCloseOpen(true); }}>
+                Yopish
+              </Button>
+            </div>
           </div>
         </div>
       ) : (
