@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Search, Plus, Minus, Trash2, ScanLine, Scale, Printer, PackageOpen, Percent, LogOut, RotateCcw } from "lucide-react";
+import { Search, Plus, Minus, Trash2, ScanLine, Scale, Printer, PackageOpen, Percent, LogOut, RotateCcw, ChevronUp, ChevronDown, Pencil, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { newIdempotencyKey, postIdempotent } from "@/lib/idempotency";
@@ -459,6 +459,11 @@ export default function PosPage() {
     setCart((c) => c.filter((x) => x.product.id !== id));
   }
 
+  // REGOS shows the currently-selected row's detail above the table; Aniq ERP
+  // has no "selected row" concept, so the last-added line is the closest honest
+  // equivalent (what a cashier just scanned/tapped).
+  const lastAddedLine = cart.length > 0 ? cart[cart.length - 1] : null;
+
   const subtotal = cart.reduce(
     (s, c) => s + Number(c.product.sale_price) * c.qty,
     0
@@ -751,9 +756,6 @@ export default function PosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saleId, cart, fullyPaid, keypadTarget, amountInput, discountInput]);
 
-  const stubBtn =
-    "h-10 rounded-md border border-ink-200 dark:border-ink-800 text-ink-400 dark:text-ink-600 text-xs font-medium cursor-not-allowed";
-
   // REGOS "Касса → Внесение/Изъятие" (Ctrl+I/Ctrl+O) — cash in/out independent
   // of any sale. The generic POST /finance/movements endpoint already covers
   // this (cash_movements with sale_id=NULL); this is just the POS-screen entry
@@ -941,145 +943,213 @@ export default function PosPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-3">
         {/* Sale ticket — REGOS-style: logo/clock strip + totals + line-item table + quick-add */}
         <Card padding="none" className="overflow-hidden border-2 border-ink-200 dark:border-ink-800">
+          <div className="bg-ink-50 dark:bg-ink-900 border-b border-ink-200 dark:border-ink-800 px-4 py-2">
+            <div className="text-xs font-bold text-ink-600 dark:text-ink-300 uppercase tracking-wide">
+              {saleId ? `SOTUV (OCHIQ)  ДОК. №${saleId.slice(0, 8)}` : "YANGI SOTUV"}  (CHAKANA NARX)
+              {now && (
+                <span className="font-normal normal-case text-ink-400 float-right">
+                  {now.toLocaleDateString("uz-UZ")} {now.toLocaleTimeString("uz-UZ")}
+                </span>
+              )}
+            </div>
+          </div>
           <div className="flex flex-wrap items-stretch justify-between gap-3 bg-ink-50 dark:bg-ink-900 border-b border-ink-200 dark:border-ink-800 px-4 py-3">
             <div className="flex items-center gap-4">
               <div className="font-extrabold text-xl tracking-tight text-danger-600 dark:text-danger-500">
                 ANIQ <span className="text-ink-900 dark:text-ink-100">POS</span>
               </div>
-              <div>
-                <div className="text-xs font-bold text-ink-600 dark:text-ink-300 uppercase tracking-wide">
-                  {saleId ? `SOTUV (OCHIQ) · №${saleId.slice(0, 8)}` : "YANGI SOTUV"}
-                </div>
-                <div className="text-[11px] text-ink-400 mt-0.5">
-                  CHAKANA NARX{now ? ` · ${now.toLocaleDateString("uz-UZ")} ${now.toLocaleTimeString("uz-UZ")}` : ""}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-5 text-right">
-              <div>
-                <div className="text-[11px] text-ink-400">Jami</div>
-                <div className="font-mono font-bold text-lg text-ink-900 dark:text-ink-100">
-                  {fmt(subtotal)}
-                </div>
-              </div>
-              {discountAmount > 0 && (
+              <div className="flex items-center gap-5 text-right">
                 <div>
-                  <div className="text-[11px] text-ink-400 flex items-center gap-1 justify-end">
-                    Chegirma
-                    <button type="button" onClick={clearDiscount} className="text-danger-500 hover:underline">
-                      ✕
-                    </button>
-                  </div>
-                  <div className="font-mono font-bold text-lg text-warning-600 dark:text-warning-500">
-                    −{fmt(discountAmount)}
+                  <div className="text-[11px] text-ink-400">Jami</div>
+                  <div className="font-mono font-bold text-lg text-ink-900 dark:text-ink-100">
+                    {fmt(subtotal)}
                   </div>
                 </div>
-              )}
-              <div>
-                <div className="text-[11px] text-ink-400">To'langan</div>
-                <div className="font-mono font-bold text-lg text-info-600 dark:text-info-500">
-                  {fmt(paidSoFar)}
+                {discountAmount > 0 && (
+                  <div>
+                    <div className="text-[11px] text-ink-400 flex items-center gap-1 justify-end">
+                      Chegirma
+                      <button type="button" onClick={clearDiscount} className="text-danger-500 hover:underline">
+                        ✕
+                      </button>
+                    </div>
+                    <div className="font-mono font-bold text-lg text-warning-600 dark:text-warning-500">
+                      −{fmt(discountAmount)}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <div className="text-[11px] text-ink-400">To'langan</div>
+                  <div className="font-mono font-bold text-lg text-info-600 dark:text-info-500">
+                    {fmt(paidSoFar)}
+                  </div>
                 </div>
-              </div>
-              <div className="pl-5 border-l border-ink-300 dark:border-ink-700">
-                <div className="text-[11px] text-ink-400">TO'LOVGA</div>
-                <div
-                  className={`font-mono font-extrabold text-2xl ${
-                    fullyPaid ? "text-success-600 dark:text-success-500" : "text-brand-700 dark:text-brand-400"
-                  }`}
-                >
-                  {fmt(remainingDue)}
+                <div className="pl-5 border-l border-ink-300 dark:border-ink-700">
+                  <div className="text-[11px] text-ink-400">TO'LOVGA</div>
+                  <div
+                    className={`font-mono font-extrabold text-2xl ${
+                      fullyPaid ? "text-success-600 dark:text-success-500" : "text-brand-700 dark:text-brand-400"
+                    }`}
+                  >
+                    {fmt(remainingDue)}
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* REGOS "Карта" mini-panel — customer loyalty snapshot, same top-right
+                slot as the reference. Only discount%/markup% exist in REGOS, not
+                Aniq ERP; shown honestly as just the loyalty balance we actually have. */}
+            {customerId && (
+              <div className="border border-ink-200 dark:border-ink-800 rounded-md px-3 py-1.5 text-xs min-w-[140px]">
+                <div className="font-semibold text-ink-500 dark:text-ink-400 mb-0.5">
+                  {customers.find((c) => c.id === customerId)?.name || "Mijoz"}
+                </div>
+                <div className="flex justify-between text-ink-600 dark:text-ink-300">
+                  <span>Bonus</span>
+                  <span className="font-mono">{fmt(loyaltyBalance ?? 0)}</span>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="overflow-auto max-h-[42vh]">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-ink-100 dark:bg-ink-800 text-ink-500 dark:text-ink-400 text-[11px] uppercase">
-                <tr>
-                  <th className="px-2 py-2 text-left w-8">#</th>
-                  <th className="px-2 py-2 text-left w-20">Kod</th>
-                  <th className="px-2 py-2 text-left">Nomi</th>
-                  <th className="px-2 py-2 text-center w-28">Soni</th>
-                  <th className="px-2 py-2 text-right w-24">Narx</th>
-                  <th className="px-2 py-2 text-right w-28">Summa</th>
-                  <th className="w-8" />
-                </tr>
-              </thead>
-              <tbody>
-                {cart.map((c, i) => (
-                  <tr
-                    key={c.product.id}
-                    className="border-b border-ink-100 dark:border-ink-800 hover:bg-brand-50/60 dark:hover:bg-brand-900/10"
-                  >
-                    <td className="px-2 py-2 text-ink-400 font-mono text-xs">{i + 1}</td>
-                    <td className="px-2 py-2 font-mono text-xs text-ink-500 dark:text-ink-400">
-                      {c.product.sku || "—"}
-                    </td>
-                    <td className="px-2 py-2">
-                      <div className="font-medium text-ink-900 dark:text-ink-100 line-clamp-1">
-                        {c.product.name}
-                      </div>
-                    </td>
-                    <td className="px-2 py-2">
-                      <div className="flex items-center justify-center gap-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="xs"
-                          icon={Minus}
-                          disabled={!!saleId}
-                          onClick={() => chgQty(c.product.id, -1)}
-                        />
-                        <span className="font-mono w-8 text-center text-ink-900 dark:text-ink-100">
-                          {c.qty}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="xs"
-                          icon={Plus}
-                          disabled={!!saleId}
-                          onClick={() => chgQty(c.product.id, +1)}
-                        />
-                      </div>
-                    </td>
-                    <td className="px-2 py-2 text-right font-mono text-ink-700 dark:text-ink-300">
-                      {fmt(c.product.sale_price)}
-                    </td>
-                    <td className="px-2 py-2 text-right font-mono font-semibold text-ink-900 dark:text-ink-100">
-                      {fmt(Number(c.product.sale_price) * c.qty)}
-                    </td>
-                    <td className="px-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        icon={Trash2}
-                        disabled={!!saleId}
-                        onClick={() => removeCart(c.product.id)}
-                        className="text-danger-600 dark:text-danger-500"
-                      />
-                    </td>
-                  </tr>
-                ))}
-                {cart.length === 0 && (
+          {lastAddedLine && (
+            <div className="px-4 py-2 border-b border-ink-100 dark:border-ink-800 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-ink-900 dark:text-ink-100 line-clamp-1">
+                  {lastAddedLine.product.name}
+                </span>
+                <span className="font-mono text-ink-500 dark:text-ink-400 text-xs shrink-0 ml-2">
+                  {lastAddedLine.qty} x {fmt(lastAddedLine.product.sale_price)} ={" "}
+                  {fmt(Number(lastAddedLine.product.sale_price) * lastAddedLine.qty)}
+                </span>
+              </div>
+              <div className="text-[11px] text-ink-400 mt-0.5">
+                Kod: {lastAddedLine.product.sku || "—"}
+              </div>
+            </div>
+          )}
+
+          <div className="flex">
+            <div className="overflow-auto max-h-[42vh] flex-1">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-ink-100 dark:bg-ink-800 text-ink-500 dark:text-ink-400 text-[11px] uppercase">
                   <tr>
-                    <td colSpan={7} className="text-center text-ink-400 dark:text-ink-600 py-16">
-                      {t("ui__пусто_e5b328b4")}
-                    </td>
+                    <th className="px-2 py-2 text-left w-8">#</th>
+                    <th className="px-2 py-2 text-left w-20">Kod</th>
+                    <th className="px-2 py-2 text-left">Nomi</th>
+                    <th className="px-2 py-2 text-center w-28">Soni</th>
+                    <th className="px-2 py-2 text-right w-24">Narx</th>
+                    <th className="px-2 py-2 text-right w-28">Summa</th>
+                    <th className="w-8" />
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {cart.map((c, i) => (
+                    <tr
+                      key={c.product.id}
+                      className="border-b border-ink-100 dark:border-ink-800 hover:bg-brand-50/60 dark:hover:bg-brand-900/10"
+                    >
+                      <td className="px-2 py-2 text-ink-400 font-mono text-xs">{i + 1}</td>
+                      <td className="px-2 py-2 font-mono text-xs text-ink-500 dark:text-ink-400">
+                        {c.product.sku || "—"}
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="font-medium text-ink-900 dark:text-ink-100 line-clamp-1">
+                          {c.product.name}
+                        </div>
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            icon={Minus}
+                            disabled={!!saleId}
+                            onClick={() => chgQty(c.product.id, -1)}
+                          />
+                          <span className="font-mono w-8 text-center text-ink-900 dark:text-ink-100">
+                            {c.qty}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            icon={Plus}
+                            disabled={!!saleId}
+                            onClick={() => chgQty(c.product.id, +1)}
+                          />
+                        </div>
+                      </td>
+                      <td className="px-2 py-2 text-right font-mono text-ink-700 dark:text-ink-300">
+                        {fmt(c.product.sale_price)}
+                      </td>
+                      <td className="px-2 py-2 text-right font-mono font-semibold text-ink-900 dark:text-ink-100">
+                        {fmt(Number(c.product.sale_price) * c.qty)}
+                      </td>
+                      <td className="px-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="xs"
+                          icon={Trash2}
+                          disabled={!!saleId}
+                          onClick={() => removeCart(c.product.id)}
+                          className="text-danger-600 dark:text-danger-500"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  {cart.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="text-center text-ink-400 dark:text-ink-600 py-16">
+                        {t("ui__пусто_e5b328b4")}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* REGOS row-navigation icon column. Only "o'chirish" (last row) has a
+                real Aniq ERP equivalent — the rest (move selection cursor, inline
+                edit) have no concept of a "selected row" in this UI yet, so they're
+                shown REGOS-style but disabled rather than faked. */}
+            <div className="flex flex-col border-l border-ink-200 dark:border-ink-800 w-9 shrink-0">
+              {[
+                { icon: ChevronUp, title: "Yuqoriga (tez orada)" },
+                { icon: ChevronDown, title: "Pastga (tez orada)" },
+                { icon: Pencil, title: "Tahrirlash (tez orada)" },
+                { icon: X, title: "Bekor qilish (tez orada)" },
+              ].map(({ icon: Icon, title }, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  disabled
+                  title={title}
+                  className="flex-1 flex items-center justify-center border-b border-ink-100 dark:border-ink-800 text-ink-300 dark:text-ink-700 cursor-not-allowed"
+                >
+                  <Icon size={14} />
+                </button>
+              ))}
+              <button
+                type="button"
+                disabled={!!saleId || cart.length === 0}
+                title="Oxirgi qatorni o'chirish (Delete)"
+                onClick={() => cart.length > 0 && removeCart(cart[cart.length - 1].product.id)}
+                className="flex-1 flex items-center justify-center text-danger-500 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           </div>
 
-          {/* REGOS action-button grid — positioned under the item table, same
-              as the reference layout (not under the keypad on the right).
-              Wired where Aniq ERP already has the capability; otherwise
-              visibly present but disabled (never fake a feature that isn't
-              built — see project_erp_regos_pos_workflow.md). */}
+          {/* REGOS action-button grid — always visible under the table, same
+              layout slot as the reference (not a hidden menu). Wired where
+              Aniq ERP already has the capability; otherwise visibly present
+              but disabled (never fake a feature that isn't built — see
+              project_erp_regos_pos_workflow.md). */}
           <div className="border-t border-ink-200 dark:border-ink-800 p-3 grid grid-cols-3 gap-1.5 text-xs">
             <button
               type="button"
@@ -1089,14 +1159,19 @@ export default function PosPage() {
             >
               <Percent size={12} /> Chegirma
             </button>
-            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Sotuvchi")}>
+            <button
+              type="button"
+              disabled
+              title="Tez orada"
+              className="h-10 rounded-md border border-ink-200 dark:border-ink-800 text-ink-400 dark:text-ink-600 font-medium cursor-not-allowed"
+            >
               Sotuvchi
             </button>
             <button
               type="button"
               disabled={!saleId || fullyPaid || holding}
               onClick={holdCurrentSale}
-              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 text-xs font-medium hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40"
+              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800 disabled:opacity-40"
               title="Ctrl+G"
             >
               Kutish rejimi
@@ -1104,7 +1179,7 @@ export default function PosPage() {
             <button
               type="button"
               onClick={openHeldModal}
-              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 text-xs font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
+              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
               title="Ctrl+J"
             >
               Kutayotganlar
@@ -1112,11 +1187,16 @@ export default function PosPage() {
             <button
               type="button"
               onClick={() => setCashMoveOpen(true)}
-              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 text-xs font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
+              className="h-10 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-medium hover:bg-ink-50 dark:hover:bg-ink-800"
             >
               Kassa harakati
             </button>
-            <button type="button" className={stubBtn} onClick={() => notBuiltYet("Ekranni bloklash")}>
+            <button
+              type="button"
+              disabled
+              title="Tez orada"
+              className="h-10 rounded-md border border-ink-200 dark:border-ink-800 text-ink-400 dark:text-ink-600 font-medium cursor-not-allowed"
+            >
               Bloklash
             </button>
             <button
