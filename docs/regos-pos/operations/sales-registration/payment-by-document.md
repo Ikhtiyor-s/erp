@@ -57,13 +57,17 @@ Gaplar:
 | REGOS | Aniq ERP |
 |---|---|
 | Qaytim — to'lovlar ro'yxatida manfiy qator | ⚠️ Alohida `lastChange` info-satri sifatida ko'rsatiladi, `committedLines`ga kirmaydi — kosmetik farq, lekin REGOS'ga to'liq mos emas |
-| To'lov qatori sторnosi | ❌ Yo'q — `tapPayment`ning "oxirgi urinishni bekor qilish" ekvivalenti yo'q |
+| To'lov qatori sторnosi | ✅ **Qurildi (2026-10-13).** `POST /sale/sales/{id}/pay/{movement_id}/void` — asl `cash_movements` qatorini o'chirmaydi (`voided_at` belgilanadi), kompensatsion manfiy qator qo'shadi (`void_of_id` orqali bog'langan), kassa balansi va buxgalteriya provodkasi teskari yo'naltiriladi. Faqat naqd/karta turidagi (haqiqiy `cash_movements` qatoriga ega) to'lovlar uchun — bonus-qatorlar hali yo'q (pastga qarang). **Himoya:** sotuv `paid` holatiga yetgan bo'lsa (bonus ball allaqachon hisoblangan bo'lishi mumkin) — bekor qilish 409 bilan rad etiladi, bu holatda faqat butun chekni bekor qilish (hali qurilmagan) ishlaydi. Jonli production'da to'liq sinaldi (qisman to'lov → bekor qilish → qayta bekor qilish bloklandi → to'liq to'langandan keyin bloklandi). |
 | "Аннулировать" (butun hujjatni bekor qilish) to'lov ekranida | ⚠️ `pos/page.tsx`dagi F9/F12 + "Chiqish" tugmasi bor, lekin bu faqat **frontend state**ni tozalaydi — agar `ensureSale()` allaqachon serverda sotuv yaratgan bo'lsa, backend'da haqiqiy "bekor qilingan" holatga o'tkazmaydi (chunki [`general-information.md`](general-information.md)da yozilganidek, bunday holat `sales.status`da yo'q) |
 | "Отложить оплату" (faqat to'lov qatorlari 0 bo'lsa) | ❌ Yo'q — park/defer umuman yo'q |
 | Bitta naqd-bo'lmagan to'lov cheklovi (VCR bilan) | — Aniq ERP'da hali hech qanday terminal (PAX/Ingenico) integratsiyasi yo'q, shuning uchun bu cheklov hozircha tegishli emas |
 | To'lov usullari ro'yxati | ✅ `reference/payment-types`dan dinamik yuklanadi — Click/Payme/UzCard/HUMO kabi real provayderlar emas, balki tashkilot o'zi sozlagan `payment_type_id` qatorlari (ichki, haqiqiy to'lov provayder integratsiyasisiz — bu RG-2 ticketida ham alohida ta'kidlangan) |
 
-**Keyingi qadam:** to'lov qatori sторnosi — [`general-information.md`](general-information.md)dagi
-savat-qator sторnosi bilan birga, bitta umumiy "sторno/audit-trail" ticketi
-sifatida qilingani ma'qul (ikkalasi bir xil naqsh). Park-mid-payment —
-[`general-information.md`](general-information.md)dagi katta gap bilan birga.
+**Keyingi qadam:** bonus (ball) to'lov qatorlari uchun ham sторno — hozir
+`redeem_points` to'lovlari `cash_movements` qatoriga ega emas
+(`loyalty_ledger`da yoziladi), shuning uchun yangi void mexanizmi ularni
+qamramaydi. "Чиqish" tugmasi (ya'ni bonus-qator uchun ✕ tugmasi) hozircha
+ko'rinmaydi — [`additional-functions.md`](../additional-functions.md)dagi
+umumiy loyalty-reversal ishi bilan birga qilingani ma'qul. Park-mid-payment
+— [`general-information.md`](general-information.md)dagi katta gap bilan
+birga qoladi.

@@ -42,7 +42,13 @@ type Customer = { id: string; name: string };
 type Warehouse = { id: number; name: string };
 type Cashbox = { id: number; name: string; currency_id?: number };
 type PaymentTypeItem = { id: number; code: string; name: string; is_cash: boolean; is_active: boolean };
-type CommittedLine = { label: string; amount: number; isBonus?: boolean };
+type CommittedLine = {
+  label: string;
+  amount: number;
+  isBonus?: boolean;
+  movementId?: number | null;
+  voided?: boolean;
+};
 type MethodTap = { kind: "type"; pt: PaymentTypeItem } | { kind: "bonus" };
 type DiscountKind = "percent" | "amount";
 type KeypadTarget = "payment" | "discount";
@@ -584,7 +590,10 @@ export default function PosPage() {
         }, payKey);
         setPaidSoFar(Number(data?.paid_amount) || 0);
         setLoyaltyEarned((v) => v + Number(data?.loyalty_earned || 0));
-        setCommittedLines((lines) => [...lines, { label: pt.name, amount: clamped }]);
+        setCommittedLines((lines) => [
+          ...lines,
+          { label: pt.name, amount: clamped, movementId: data?.movement_id ?? null },
+        ]);
         setLastChange(change);
       }
       setAmountInput("");
@@ -593,6 +602,24 @@ export default function PosPage() {
     } finally {
       setCommitting(false);
       payBusyRef.current = false;
+    }
+  }
+
+  // REGOS-parity payment-line storno — docs/regos-pos/operations/
+  // sales-registration/payment-by-document.md. Only cash-backed lines
+  // (movementId set) can be voided; bonus lines have no cash_movements row
+  // yet. Backend blocks this once the sale has reached 'paid' (loyalty
+  // earn-on-pay guard) — surfaced here via the normal error toast.
+  async function voidPayment(index: number) {
+    const line = committedLines[index];
+    if (!saleId || !line || line.voided || !line.movementId) return;
+    try {
+      const data = await api.post(`/sale/sales/${saleId}/pay/${line.movementId}/void`);
+      setPaidSoFar(Number(data.data?.paid_amount) || 0);
+      setCommittedLines((lines) => lines.map((l, i) => (i === index ? { ...l, voided: true } : l)));
+      toast.success("To'lov bekor qilindi");
+    } catch (e) {
+      toast.error(getErrorMessage(e, "To'lovni bekor qilib bo'lmadi"));
     }
   }
 
@@ -1020,9 +1047,28 @@ export default function PosPage() {
           {committedLines.length > 0 && (
             <ul className="text-xs border border-ink-200 dark:border-ink-800 rounded-md divide-y divide-ink-100 dark:divide-ink-800">
               {committedLines.map((l, i) => (
-                <li key={i} className="flex justify-between px-2 py-1">
-                  <span className="text-ink-600 dark:text-ink-300">{l.label}</span>
-                  <span className="font-mono text-ink-900 dark:text-ink-100">{fmt(l.amount)}</span>
+                <li
+                  key={i}
+                  className={`flex items-center justify-between px-2 py-1 ${l.voided ? "opacity-50" : ""}`}
+                >
+                  <span className={`text-ink-600 dark:text-ink-300 ${l.voided ? "line-through" : ""}`}>
+                    {l.label}
+                  </span>
+                  <span
+                    className={`font-mono text-ink-900 dark:text-ink-100 ${l.voided ? "line-through" : ""}`}
+                  >
+                    {fmt(l.amount)}
+                  </span>
+                  {!l.voided && l.movementId != null && !fullyPaid && (
+                    <button
+                      type="button"
+                      onClick={() => voidPayment(i)}
+                      title="Bekor qilish (сторно)"
+                      className="ml-2 text-danger-500 hover:text-danger-700 dark:hover:text-danger-400"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

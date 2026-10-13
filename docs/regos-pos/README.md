@@ -59,8 +59,8 @@ tepasida).
 | Kassir ekrani umumiy ko'rinishi (jadval + klaviatura + totals) | ✅ REGOS-uslubida qayta qurildi |
 | Hotkeylar (F3/F5/F8/F9/F12/Delete) | ✅ asosiy to'plam qo'shildi |
 | Chegirma (butun chek, %/so'm) | ✅ qo'shildi |
-| Qator sторnosi (audit-trail, o'chirish emas) | ❌ hali oddiy o'chirish |
-| To'lov qatori sторnosi | ❌ yo'q |
+| Savat-qator sторnosi (audit-trail, o'chirish emas) | ❌ hali oddiy o'chirish — lekin savat sotuvgacha faqat frontend-draft, haqiqiy audit-trail shart emas |
+| To'lov qatori sторnosi | ✅ qurildi (2026-10-13) — `POST /pay/{movement_id}/void`, audit-trail bilan, production'da sinaldi |
 | Chekni kutish rejimi (Отложить) | ❌ yo'q — eng katta bo'shliq |
 | Kassaga naqd kiritish/chiqarish (sotuvsiz) | ❌ backend yo'q |
 | Sotuvchi kodi (komissiya uchun) | ❌ yo'q |

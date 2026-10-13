@@ -2312,6 +2312,13 @@ END $$
     """CREATE UNIQUE INDEX IF NOT EXISTS uq_kiosk_orders_sale ON kiosk_orders(sale_id)""",
     """CREATE INDEX IF NOT EXISTS idx_kiosk_orders_org_status ON kiosk_orders(organization_id, status)""",
     """CREATE INDEX IF NOT EXISTS idx_kiosk_orders_device ON kiosk_orders(device_id)""",
+
+    # REGOS-parity payment-line storno (void, not delete) — docs/regos-pos/
+    # operations/sales-registration/payment-by-document.md. voided_at marks
+    # the original row struck-through; void_of_id links the compensating
+    # negative row back to it, both kept for audit (never deleted/UPDATEd away).
+    """ALTER TABLE cash_movements ADD COLUMN IF NOT EXISTS voided_at TIMESTAMPTZ""",
+    """ALTER TABLE cash_movements ADD COLUMN IF NOT EXISTS void_of_id BIGINT REFERENCES cash_movements(id)""",
 ]
 
 # Enum value additions — must run outside a transaction (AUTOCOMMIT).

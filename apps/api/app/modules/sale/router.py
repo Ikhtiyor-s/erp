@@ -496,16 +496,18 @@ async def pay_sale(
         text("UPDATE sales SET paid_amount = :pa, status = :st WHERE id = :id"),
         {"pa": new_paid, "st": new_status, "id": str(sale_id)},
     )
+    movement_id: int | None = None
     if p.amount > 0:
-        await db.execute(
+        mv = await db.execute(
             text("INSERT INTO cash_movements (organization_id, cashbox_id, direction, "
                  "amount, payment_type_id, customer_id, sale_id, description, created_by) "
-                 "VALUES (:o, :cb, 'in', :amt, :pt, :cu, :s, :d, :u)"),
+                 "VALUES (:o, :cb, 'in', :amt, :pt, :cu, :s, :d, :u) RETURNING id"),
             {"o": org_id, "cb": p.cashbox_id, "amt": p.amount, "pt": p.payment_type_id,
              "cu": customer_id_str,
              "s": str(sale_id),
              "d": f"Оплата продажи: {p.notes or ''}".strip(), "u": user_id},
         )
+        movement_id = mv.scalar()
         if p.cashbox_id:
             await db.execute(
                 text("UPDATE cashboxes SET balance = balance + :amt WHERE id = :cb"),
@@ -558,7 +560,113 @@ async def pay_sale(
     )
     await db.commit()
     return {"paid_amount": float(new_paid), "status": new_status,
-            "loyalty_redeemed": float(discount), "loyalty_earned": float(earned)}
+            "loyalty_redeemed": float(discount), "loyalty_earned": float(earned),
+            "movement_id": movement_id}
+
+
+@router.post("/sales/{sale_id}/pay/{movement_id}/void")
+async def void_payment(
+    sale_id: UUID, movement_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    """REGOS-parity payment-line storno — docs/regos-pos/operations/
+    sales-registration/payment-by-document.md. Voids ONE cash-backed payment
+    line (payment_type_id + amount, not a bonus/redeem_points line — those
+    have no cash_movements row yet, see that doc's Aniq ERP status section).
+    Never deletes the original row: marks it voided_at and inserts a
+    compensating negative row linked via void_of_id — same audit-trail
+    pattern REGOS uses, not a plain UPDATE/DELETE.
+
+    Blocked once the sale has reached 'paid' (loyalty earn-on-pay may have
+    already fired and this endpoint does not attempt to reverse that —
+    use whole-sale cancel instead once that exists, see docs/regos-pos/
+    operations/sales-registration/general-information.md).
+    """
+    head = await db.execute(
+        text("SELECT total_amount, paid_amount, status FROM sales "
+             "WHERE id = :id AND organization_id = :o"),
+        {"id": str(sale_id), "o": org_id},
+    )
+    sale = head.first()
+    if not sale:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if sale.status == "paid":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "To'liq to'langan chekdagi to'lovni bekor qilib bo'lmaydi — "
+            "bonus ballar allaqachon hisoblangan bo'lishi mumkin. Butun "
+            "chekni bekor qilish kerak bo'lsa, admin bilan bog'laning.",
+        )
+    if sale.status == "cancelled":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Sotuv bekor qilingan")
+
+    mv_res = await db.execute(
+        text("SELECT amount, cashbox_id, payment_type_id, customer_id, direction, voided_at "
+             "FROM cash_movements WHERE id = :mid AND sale_id = :sid AND organization_id = :o"),
+        {"mid": movement_id, "sid": str(sale_id), "o": org_id},
+    )
+    mv = mv_res.first()
+    if not mv:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "To'lov qatori topilmadi")
+    if mv.direction != "in":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu qatorni bekor qilib bo'lmaydi")
+    if mv.voided_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Bu to'lov allaqachon bekor qilingan")
+
+    new_paid = max(Decimal("0"), Decimal(str(sale.paid_amount or 0)) - mv.amount)
+    total = Decimal(str(sale.total_amount or 0))
+    new_status = "paid" if new_paid >= total and total > 0 else ("partial" if new_paid > 0 else "confirmed")
+
+    await db.execute(
+        text("UPDATE sales SET paid_amount = :pa, status = :st WHERE id = :id"),
+        {"pa": new_paid, "st": new_status, "id": str(sale_id)},
+    )
+    await db.execute(
+        text("UPDATE cash_movements SET voided_at = NOW() WHERE id = :mid"),
+        {"mid": movement_id},
+    )
+    await db.execute(
+        text("INSERT INTO cash_movements (organization_id, cashbox_id, direction, "
+             "amount, payment_type_id, customer_id, sale_id, description, created_by, void_of_id) "
+             "VALUES (:o, :cb, 'out', :amt, :pt, :cu, :s, :d, :u, :voidof)"),
+        {"o": org_id, "cb": mv.cashbox_id, "amt": mv.amount, "pt": mv.payment_type_id,
+         "cu": mv.customer_id, "s": str(sale_id),
+         "d": "To'lov сторно (bekor qilindi)", "u": user_id, "voidof": movement_id},
+    )
+    if mv.cashbox_id:
+        await db.execute(
+            text("UPDATE cashboxes SET balance = balance - :amt WHERE id = :cb"),
+            {"amt": mv.amount, "cb": mv.cashbox_id},
+        )
+
+    try:
+        ar_id = await get_default_account_id(db, org_id, "ar")
+        cash_id = await get_cashbox_account_id(db, org_id, mv.cashbox_id)
+        await post_journal_entry(
+            db, org_id,
+            [JournalLine(ar_id, debit=float(mv.amount),
+                         counterparty_type="customer" if mv.customer_id else None,
+                         counterparty_id=mv.customer_id),
+             JournalLine(cash_id, credit=float(mv.amount))],
+            source_type="sale_payment_void", source_id=str(sale_id),
+            description=f"Sotuv to'lovi сторно #{sale_id} (movement #{movement_id})",
+            user_id=user_id,
+        )
+    except Exception:
+        log.exception("Failed to post reversing journal entry for voided payment %s", movement_id)
+
+    await db.commit()
+    await log_action(
+        db, org_id, user_id, "void_payment", "sales", str(sale_id),
+        diff={"movement_id": movement_id, "amount": float(mv.amount), "new_paid": float(new_paid),
+              "new_status": new_status},
+        request=request,
+    )
+    await db.commit()
+    return {"paid_amount": float(new_paid), "status": new_status}
 
 
 async def _verify_payment_type_in_org(db, payment_type_id, org_id):
