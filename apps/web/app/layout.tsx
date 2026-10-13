@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { QueryProvider } from "@/lib/query-provider";
-import { Toaster } from "sonner";
 import { LocaleProvider } from "@/i18n/locale-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PermissionsProvider } from "@/lib/permissions";
+import { AppToaster } from "@/components/app-toaster";
 
 export const metadata: Metadata = {
   title: "Aniq ERP",
@@ -46,14 +46,7 @@ export default function RootLayout({
             <QueryProvider>
               <PermissionsProvider>
                 {children}
-                <Toaster
-                  richColors
-                  position="top-right"
-                  toastOptions={{
-                    className:
-                      "border border-ink-200 dark:border-ink-800 shadow-md",
-                  }}
-                />
+                <AppToaster />
               </PermissionsProvider>
             </QueryProvider>
           </LocaleProvider>

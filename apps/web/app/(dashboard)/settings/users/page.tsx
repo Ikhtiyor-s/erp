@@ -153,7 +153,7 @@ export default function UsersPage() {
       <div className="bg-info-50 dark:bg-info-500/15 border border-info-500/20 rounded-xl p-4 text-sm text-info-700 dark:text-info-500">
         <strong>Maslahat:</strong> Rollarning ruxsatlarini batafsil sozlash uchun{" "}
         <a href="/settings/roles" className="underline font-medium">
-          Sozlamalar ��� Rollar
+          Sozlamalar → Rollar
         </a>{" "}
         bo'limiga o'ting.
       </div>

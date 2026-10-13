@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { PWARegister } from "@/components/pwa-register";
 import { Toaster } from "sonner";
+import { useTheme } from "next-themes";
 
 const BOTTOM = [
   { href: "/m", label: "Asosiy", icon: Home, exact: true },
@@ -44,6 +45,7 @@ function isActive(path: string, href: string, exact?: boolean) {
 export default function MobileLayout({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
 
@@ -78,7 +80,7 @@ export default function MobileLayout({ children }: { children: React.ReactNode }
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <PWARegister />
-      <Toaster position="top-center" richColors />
+      <Toaster position="top-center" richColors theme={resolvedTheme === "dark" ? "dark" : "light"} />
 
       {/* Drawer */}
       {drawerOpen && (

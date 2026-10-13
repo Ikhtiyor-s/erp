@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { TrendingUp, Wallet, ShoppingCart, AlertCircle, Package } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { useTheme } from "next-themes";
 import { api } from "@/lib/api";
+import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { StatWidget } from "@/components/ui/stat-widget";
@@ -22,16 +24,35 @@ const monthAgo = () => { const d = new Date(); d.setDate(d.getDate() - 30); retu
 
 export default function StatisticsDashboard() {
   const t = useTranslations("ui");
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   const [dash, setDash] = useState<Dash | null>(null);
   const [sales, setSales] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
     Promise.all([
-      api.get<Dash>("/statistics/dashboard").then((r) => setDash(r.data)),
+      api.get<Dash>("/statistics/dashboard").then((r) => {
+        if (active) setDash(r.data);
+      }),
       api.get<Row[]>(`/statistics/sales-summary?date_from=${monthAgo()}&date_to=${today()}`)
-        .then((r) => setSales(r.data)),
-    ]).finally(() => setLoading(false));
+        .then((r) => {
+          if (active) setSales(r.data);
+        }),
+    ])
+      .catch((e) => {
+        if (active) setError(getErrorMessage(e, "Ma'lumotlarni yuklashda xatolik"));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   if (loading) return <div className="text-center py-20 text-ink-400">{t("ui__загрузка_43e40d49")}</div>;
@@ -39,6 +60,12 @@ export default function StatisticsDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader title={t("ui__сводная_панель_c4125b67")} description={t("ui__ключевые_показатели_16cb0348")} />
+
+      {error && (
+        <div className="rounded-md bg-danger-50 dark:bg-danger-500/15 border border-danger-500/30 px-4 py-3 text-[13px] text-danger-700 dark:text-danger-500">
+          {error}
+        </div>
+      )}
 
       {dash && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -98,9 +125,17 @@ export default function StatisticsDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={sales}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={fmt} />
-                <Tooltip formatter={(v: any) => fmt(v)} />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: isDark ? "#94a3b8" : "#64748b" }} />
+                <YAxis tick={{ fontSize: 11, fill: isDark ? "#94a3b8" : "#64748b" }} tickFormatter={fmt} />
+                <Tooltip
+                  formatter={(v: any) => fmt(v)}
+                  contentStyle={{
+                    backgroundColor: isDark ? "#1e293b" : "#ffffff",
+                    border: `1px solid ${isDark ? "#334155" : "#e2e8f0"}`,
+                    borderRadius: 6,
+                  }}
+                  labelStyle={{ color: isDark ? "#f1f5f9" : "#0f172a" }}
+                />
                 <Line type="monotone" dataKey="revenue" stroke="#3454d1" strokeWidth={2} name="Tushum" />
                 <Line type="monotone" dataKey="paid" stroke="#17c666" strokeWidth={2} name="To'landi" />
                 <Line type="monotone" dataKey="debt" stroke="#ea4d4d" strokeWidth={2} name="Qarz" />

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { TrendingUp, ShoppingCart, AlertCircle, Calendar } from "lucide-react";
 import { api } from "@/lib/api";
+import { getErrorMessage } from "@/lib/api-error";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { StatWidget } from "@/components/ui/stat-widget";
@@ -30,12 +31,26 @@ export default function SaleDashboardPage() {
   const t = useTranslations("ui");
   const [data, setData] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
     api
       .get<Dashboard>("/sale/dashboard")
-      .then((r) => setData(r.data))
-      .finally(() => setLoading(false));
+      .then((r) => {
+        if (active) setData(r.data);
+      })
+      .catch((e) => {
+        if (active) setError(getErrorMessage(e, "Ma'lumotlarni yuklashda xatolik"));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   if (loading)
@@ -44,7 +59,12 @@ export default function SaleDashboardPage() {
         {t("ui__загрузка_43e40d49")}
       </div>
     );
-  if (!data) return null;
+  if (error || !data)
+    return (
+      <div className="rounded-md bg-danger-50 dark:bg-danger-500/15 border border-danger-500/30 px-4 py-3 text-[13px] text-danger-700 dark:text-danger-500">
+        {error || "Ma'lumot topilmadi"}
+      </div>
+    );
 
   const maxDaily = Math.max(1, ...data.daily.map((d) => Number(d.revenue)));
 
