@@ -1,0 +1,33 @@
+# Build context for this app = apps/api (this file's own directory) —
+# matches docker-compose.yml's `context: ./apps/api`.
+app = "aniq-erp-api-uz"
+primary_region = "ams"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  API_HOST = "0.0.0.0"
+  API_PORT = "8000"
+  ENV = "production"
+  DEBUG = "false"
+  # DATABASE_URL, SECRET_KEY, SECRETS_FERNET_KEY, CORS_ORIGINS are set via
+  # `fly secrets set`, not here (see tickets or DEPLOYMENT.md).
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

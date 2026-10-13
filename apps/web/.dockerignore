@@ -1,0 +1,11 @@
+node_modules
+.next
+out
+test-results
+playwright-report
+e2e
+.git
+*.log
+npm-debug.log*
+.env*.local
+tsconfig.tsbuildinfo
