@@ -1506,6 +1506,7 @@ export default function ProductsPage() {
               step="0.01"
               className={input}
               value={form.purchase_price}
+              onFocus={(e) => e.target.select()}
               onChange={(e) => setForm({ ...form, purchase_price: Number(e.target.value) })}
             />
           </Field>
@@ -1515,6 +1516,7 @@ export default function ProductsPage() {
               step="0.01"
               className={input}
               value={form.sale_price}
+              onFocus={(e) => e.target.select()}
               onChange={(e) => setForm({ ...form, sale_price: Number(e.target.value) })}
             />
           </Field>
