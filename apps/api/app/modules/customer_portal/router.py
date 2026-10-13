@@ -2,6 +2,7 @@
 import json
 import logging
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
@@ -11,12 +12,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rate_limit import limiter
+from app.modules.audit.logger import log_action
+from app.modules.customer.pricing import resolve_customer_prices_batch
 from app.modules.customer_portal.auth import (
     create_customer_token,
     generate_otp,
     get_current_customer,
     _normalize_phone,
 )
+from app.modules.sale import service as sale_service
+from app.modules.sale.service import SaleLineInput
 
 
 log = logging.getLogger(__name__)
@@ -49,7 +54,7 @@ async def request_otp(request: Request, p: RequestOtpIn = Body(...), db: AsyncSe
 
     # Resolve org
     org_res = await db.execute(
-        text("SELECT id FROM organizations WHERE code = :c"),
+        text("SELECT id FROM organizations WHERE UPPER(code) = :c"),
         {"c": p.org_code.upper()},
     )
     org = org_res.first()
@@ -148,7 +153,7 @@ async def verify_otp(request: Request, p: VerifyOtpIn = Body(...), db: AsyncSess
                             "Invalid phone number format") from ve
 
     org_res = await db.execute(
-        text("SELECT id FROM organizations WHERE code = :c"),
+        text("SELECT id FROM organizations WHERE UPPER(code) = :c"),
         {"c": p.org_code.upper()},
     )
     org = org_res.first()
@@ -354,38 +359,74 @@ class OrderIn(BaseModel):
 @router.post("/me/orders", status_code=status.HTTP_201_CREATED)
 async def create_order(
     p: OrderIn,
+    request: Request,
     customer=Depends(get_current_customer),
     db: AsyncSession = Depends(get_db),
 ):
+    """Real handoff to sale/service.py::create_sale_core() (EC-3) — stock is
+    deducted and accounting is posted atomically; nothing is written if stock
+    is insufficient. customer_portal_orders stays a metadata row pointing at
+    the resulting sale via sale_id."""
     cid = str(customer["id"])
     oid = str(customer["organization_id"])
 
-    # Generate order number
+    warehouse_id = await sale_service.get_online_warehouse_id(db, oid)
+    if warehouse_id is None:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Onlayn savdo hali sozlanmagan — admin bilan bog'laning",
+        )
+
+    currency_res = await db.execute(text("SELECT id FROM currencies WHERE is_base = TRUE LIMIT 1"))
+    currency_id = currency_res.scalar()
+
+    product_ids = [it.product_id for it in p.items]
+    price_res = await db.execute(
+        text("SELECT id, sale_price FROM products WHERE id = ANY(:ids) AND organization_id = :o"),
+        {"ids": product_ids, "o": oid},
+    )
+    base_prices = {
+        str(r.id): Decimal(str(r.sale_price)) if r.sale_price is not None else Decimal("0")
+        for r in price_res
+    }
+    resolved_prices = await resolve_customer_prices_batch(db, oid, cid, base_prices)
+
+    sale_items: list[SaleLineInput] = []
+    for it in p.items:
+        sale_items.append(SaleLineInput(
+            product_id=it.product_id,
+            quantity=Decimal(str(it.quantity)),
+            price=resolved_prices.get(it.product_id, Decimal("0")),
+        ))
+
+    result = await sale_service.create_sale_core(
+        db,
+        org_id=oid,
+        customer_id=cid,
+        warehouse_id=warehouse_id,
+        currency_id=currency_id,
+        rate=Decimal("1"),
+        items=sale_items,
+        notes=p.notes,
+        user_id=None,
+        source_type="sale_b2b_portal",
+    )
+
     num_res = await db.execute(
         text("SELECT COUNT(*) + 1 AS n FROM customer_portal_orders WHERE organization_id = :o"),
         {"o": oid},
     )
     order_no = f"M{num_res.scalar() or 1:05d}"
 
-    # Calculate total based on current product prices
-    total = 0.0
-    for it in p.items:
-        pr = await db.execute(
-            text("SELECT sale_price FROM products WHERE id = :p AND organization_id = :o"),
-            {"p": it.product_id, "o": oid},
-        )
-        row = pr.first()
-        if row:
-            total += float(row.sale_price or 0) * it.quantity
-
     order_res = await db.execute(
         text("""
             INSERT INTO customer_portal_orders
-                (organization_id, customer_id, order_number, status, notes, total_amount)
-            VALUES (:o, :c, :n, 'new', :nt, :t)
+                (organization_id, customer_id, order_number, status, notes, total_amount, sale_id)
+            VALUES (:o, :c, :n, 'new', :nt, :t, :sid)
             RETURNING id
         """),
-        {"o": oid, "c": cid, "n": order_no, "nt": p.notes, "t": total},
+        {"o": oid, "c": cid, "n": order_no, "nt": p.notes,
+         "t": result.total_amount, "sid": result.sale_id},
     )
     order_id = str(order_res.scalar())
 
@@ -397,8 +438,16 @@ async def create_order(
             """),
             {"o": order_id, "p": it.product_id, "q": it.quantity, "n": it.note},
         )
+
+    await log_action(
+        db, oid, None, "create", "customer_portal_orders", order_id,
+        diff={"new": {"sale_id": result.sale_id, "total_amount": float(result.total_amount),
+                      "items": len(p.items)}},
+        request=request,
+    )
     await db.commit()
-    return {"id": order_id, "order_number": order_no, "total": total, "status": "new"}
+    return {"id": order_id, "order_number": order_no,
+            "total": float(result.total_amount), "status": "new"}
 
 
 @router.get("/me/orders")
@@ -436,29 +485,61 @@ async def list_products_for_customer(
     customer=Depends(get_current_customer),
     db: AsyncSession = Depends(get_db),
     q: str | None = None,
+    category_id: int | None = None,
     limit: int = 100,
 ):
-    """Customer-facing product catalog."""
+    """Customer-facing product catalog — category, image, real-time stock.
+
+    Stock is org-wide on-hand (SUM across all warehouses), mirroring the
+    "legacy flat list" subquery in warehouse/router.py::list_products —
+    the customer portal has no warehouse-selection concept yet (EC-3).
+    """
     oid = str(customer["organization_id"])
-    where = "WHERE organization_id = :o AND is_active = TRUE"
+    cid = str(customer["id"])
+    where = "WHERE p.organization_id = :o AND p.is_active = TRUE AND p.is_archived = FALSE"
     params: dict = {"o": oid, "lim": limit}
     if q:
-        where += " AND (name ILIKE :q OR sku ILIKE :q OR barcode ILIKE :q)"
+        where += " AND (p.name ILIKE :q OR p.sku ILIKE :q OR p.barcode ILIKE :q)"
         params["q"] = f"%{q}%"
+    if category_id is not None:
+        where += " AND p.category_id = :cat"
+        params["cat"] = category_id
     res = await db.execute(
         text(f"""
-            SELECT id, sku, name, sale_price
-            FROM products
+            SELECT p.id, p.sku, p.name, p.sale_price, p.image_url,
+                   p.category_id, cat.name AS category_name,
+                   COALESCE((SELECT SUM(quantity) FROM stock_balances WHERE product_id = p.id), 0) AS stock_qty
+            FROM products p
+            LEFT JOIN product_categories cat ON cat.id = p.category_id
             {where}
-            ORDER BY name
+            ORDER BY p.name
             LIMIT :lim
         """),
         params,
     )
-    return [
-        {"id": str(r.id), "sku": r.sku, "name": r.name, "price": float(r.sale_price or 0)}
-        for r in res
-    ]
+    fetched = list(res)
+    base_prices = {
+        str(r.id): Decimal(str(r.sale_price)) if r.sale_price is not None else Decimal("0")
+        for r in fetched
+    }
+    resolved_prices = await resolve_customer_prices_batch(db, oid, cid, base_prices)
+
+    rows = []
+    for r in fetched:
+        stock_qty = float(r.stock_qty or 0)
+        pid = str(r.id)
+        rows.append({
+            "id": pid,
+            "sku": r.sku,
+            "name": r.name,
+            "price": float(resolved_prices.get(pid, base_prices[pid])),
+            "category_id": r.category_id,
+            "category_name": r.category_name,
+            "image_url": r.image_url,
+            "stock_qty": stock_qty,
+            "in_stock": stock_qty > 0,
+        })
+    return rows
 
 
 # =========================================================================

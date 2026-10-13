@@ -11,6 +11,7 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Eye,
+  Star,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
@@ -19,6 +20,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatWidget } from "@/components/ui/stat-widget";
+import { CustomerPriceOverrides } from "@/components/customer/price-overrides";
 
 type Profile = {
   head: {
@@ -31,6 +33,7 @@ type Profile = {
     tin?: string;
     address?: string;
     category_name?: string;
+    category_id?: number | null;
     location_name?: string;
     created_at?: string;
     is_active?: boolean;
@@ -83,6 +86,8 @@ export default function CustomerProfilePage() {
   const [data, setData] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [categoryDiscountPct, setCategoryDiscountPct] = useState<number | null>(null);
+  const [loyaltyBalance, setLoyaltyBalance] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -103,6 +108,43 @@ export default function CustomerProfilePage() {
       active = false;
     };
   }, [id]);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .get<{ balance: number }>(`/customer/customers/${id}/loyalty`)
+      .then((r) => {
+        if (active) setLoyaltyBalance(r.data.balance);
+      })
+      .catch(() => {
+        if (active) setLoyaltyBalance(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    const categoryId = data?.head.category_id;
+    if (!categoryId) {
+      setCategoryDiscountPct(null);
+      return;
+    }
+    let active = true;
+    api
+      .get<{ id: number; discount_pct: number }[]>("/customer/categories")
+      .then((r) => {
+        if (!active) return;
+        const match = r.data.find((c) => c.id === categoryId);
+        setCategoryDiscountPct(match ? Number(match.discount_pct) : null);
+      })
+      .catch(() => {
+        if (active) setCategoryDiscountPct(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [data?.head.category_id]);
 
   if (loading) {
     return (
@@ -212,13 +254,21 @@ export default function CustomerProfilePage() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <StatWidget
           label={t("ui__баланс_95dcad97")}
           value={fmt(data.balance.bal)}
           subValue={`${data.balance.cnt} operatsiya`}
           icon={DollarSign}
           color={balanceVal < 0 ? "danger" : balanceVal > 0 ? "success" : "ink"}
+          mono
+        />
+        <StatWidget
+          label="Bonus ball"
+          value={loyaltyBalance === null ? "—" : fmt(loyaltyBalance)}
+          subValue="Loyalty balans"
+          icon={Star}
+          color={loyaltyBalance && loyaltyBalance > 0 ? "warn" : "ink"}
           mono
         />
         <StatWidget
@@ -250,6 +300,12 @@ export default function CustomerProfilePage() {
           mono
         />
       </div>
+
+      <CustomerPriceOverrides
+        customerId={h.id}
+        categoryName={h.category_name}
+        categoryDiscountPct={categoryDiscountPct}
+      />
 
       <Card padding="none">
         <CardHeader title={t("ui__последние_продажи_30_9ceafeb7")} />

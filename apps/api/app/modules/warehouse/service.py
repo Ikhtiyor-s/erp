@@ -203,7 +203,7 @@ async def get_products_paginated(
     rows_res = await db.execute(
         text(
             f"SELECT p.id, p.name, p.sku, p.product_type, "
-            f"p.category_id, p.unit_id, p.default_cell_id, "
+            f"p.category_id, p.unit_id, p.default_cell_id, p.is_published_online, "
             f"cat.name AS category_name, "
             f"un.short_name AS unit_name, "
             f"COALESCE(sb.quantity, 0) AS on_hand, "

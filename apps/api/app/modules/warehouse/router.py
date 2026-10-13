@@ -217,6 +217,7 @@ class ProductIn(BaseModel):
     tag_ids: list[int] | None = None
     default_cell_id: UUID | None = None
     default_supplier_id: UUID | None = None
+    is_published_online: bool = False
 
 
 @router.get("/products", dependencies=[Depends(require_permission("warehouse.product.view"))])
@@ -311,7 +312,7 @@ _PRODUCT_FIELDS = """
     dim_length=:dl, dim_width=:dw, dim_height=:dh, dim_weight=:dwg,
     description=:descr, kind=COALESCE(:knd, kind), mxik=:mxik,
     default_cell_id=:dcell, product_type=COALESCE(:ptype, product_type),
-    default_supplier_id=:dsup
+    default_supplier_id=:dsup, is_published_online=:pub
 """
 
 def _product_params(p: ProductIn) -> dict:
@@ -327,6 +328,7 @@ def _product_params(p: ProductIn) -> dict:
         "dcell": str(p.default_cell_id) if p.default_cell_id else None,
         "ptype": p.product_type,
         "dsup": str(p.default_supplier_id) if p.default_supplier_id else None,
+        "pub": p.is_published_online,
     }
 
 
@@ -386,10 +388,10 @@ async def create_product(
              f"unit_id, purchase_price, sale_price, currency_id, is_service, is_material, "
              f"is_semi_product, is_marked, has_expiration, is_variant, parent_id, image_url, "
              f"box_qty, box_barcode, dim_length, dim_width, dim_height, dim_weight, description, kind, mxik, "
-             f"default_cell_id, product_type, default_supplier_id) "
+             f"default_cell_id, product_type, default_supplier_id, is_published_online) "
              f"VALUES (:id, :o, :n, :sku, :bc, :cat, :u, :pp, :sp, :cur, :svc, :mat, "
              f":semi, :mk, :exp, :var, :par, :img, :bq, :bbc, :dl, :dw, :dh, :dwg, :descr, COALESCE(:knd, 'good'), :mxik, "
-             f":dcell, :ptype, :dsup)"),
+             f":dcell, :ptype, :dsup, :pub)"),
         params,
     )
     await _sync_product_extras(db, org_id, str(pid), p)

@@ -82,7 +82,7 @@ async def mark_transaction(
         text("""
             UPDATE payment_transactions
             SET status = :s,
-                provider_data = CASE WHEN :d::text IS NOT NULL
+                provider_data = CASE WHEN CAST(:d_check AS text) IS NOT NULL
                                 THEN CAST(:d AS jsonb) ELSE provider_data END,
                 completed_at = CASE WHEN :c THEN NOW() ELSE completed_at END
             WHERE id = :id
@@ -90,6 +90,7 @@ async def mark_transaction(
         {
             "id": tx_id, "s": status,
             "d": json.dumps(provider_data, default=str) if provider_data else None,
+            "d_check": json.dumps(provider_data, default=str) if provider_data else None,
             "c": completed,
         },
     )

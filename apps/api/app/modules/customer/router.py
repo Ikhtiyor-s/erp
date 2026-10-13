@@ -6,11 +6,12 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_org_id, get_current_user_id
+from app.modules.rbac.deps import require_permission
 
 
 router = APIRouter(prefix="/customer", tags=["customer"])
@@ -328,6 +329,175 @@ async def set_customer_balance(
     await db.commit()
     return {"old_balance": float(cur_bal), "new_balance": float(p.new_balance),
             "diff": float(diff)}
+
+
+# =========================================================
+# CUSTOMER-SPECIFIC PRICES (B2B override, EC-2/EC-3)
+# =========================================================
+
+async def _verify_customer_in_org(db: AsyncSession, customer_id: UUID, org_id: str) -> None:
+    res = await db.execute(
+        text("SELECT 1 FROM customers WHERE id = :id AND organization_id = :o"),
+        {"id": str(customer_id), "o": org_id},
+    )
+    if not res.first():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mijoz topilmadi")
+
+
+async def _verify_product_in_org(db: AsyncSession, product_id: UUID, org_id: str) -> None:
+    res = await db.execute(
+        text("SELECT 1 FROM products WHERE id = :p AND organization_id = :o"),
+        {"p": str(product_id), "o": org_id},
+    )
+    if not res.first():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mahsulot topilmadi")
+
+
+class CustomerPriceIn(BaseModel):
+    product_id: UUID
+    price: Decimal = Field(ge=0)
+    notes: str | None = None
+
+
+@router.get("/customers/{cid}/prices")
+async def list_customer_prices(
+    cid: UUID, db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    await _verify_customer_in_org(db, cid, org_id)
+    res = await db.execute(
+        text("SELECT cpp.product_id, p.name AS product_name, cpp.price, cpp.notes, cpp.updated_at "
+             "FROM customer_product_prices cpp "
+             "JOIN products p ON p.id = cpp.product_id "
+             "WHERE cpp.organization_id = :o AND cpp.customer_id = :c "
+             "ORDER BY p.name"),
+        {"o": org_id, "c": str(cid)},
+    )
+    return {"items": [
+        {
+            "product_id": str(r.product_id),
+            "product_name": r.product_name,
+            "price": float(r.price),
+            "notes": r.notes,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        }
+        for r in res
+    ]}
+
+
+@router.post("/customers/{cid}/prices", status_code=status.HTTP_201_CREATED)
+async def upsert_customer_price(
+    cid: UUID, p: CustomerPriceIn,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    await _verify_customer_in_org(db, cid, org_id)
+    await _verify_product_in_org(db, p.product_id, org_id)
+
+    await db.execute(
+        text("INSERT INTO customer_product_prices "
+             "(organization_id, customer_id, product_id, price, notes, created_by) "
+             "VALUES (:o, :c, :p, :pr, :n, :u) "
+             "ON CONFLICT (organization_id, customer_id, product_id) "
+             "DO UPDATE SET price = :pr, notes = :n, updated_at = NOW()"),
+        {"o": org_id, "c": str(cid), "p": str(p.product_id), "pr": p.price,
+         "n": p.notes, "u": user_id},
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete("/customers/{cid}/prices/{product_id}")
+async def delete_customer_price(
+    cid: UUID, product_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    await _verify_customer_in_org(db, cid, org_id)
+    await db.execute(
+        text("DELETE FROM customer_product_prices "
+             "WHERE organization_id = :o AND customer_id = :c AND product_id = :p"),
+        {"o": org_id, "c": str(cid), "p": str(product_id)},
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+# =========================================================
+# LOYALTY POINTS LEDGER (RG-6) — real earn/redeem/adjust balance.
+# customers.loyalty_balance is a denormalized fast-read cache;
+# loyalty_ledger (app.modules.customer.loyalty) is the source of truth.
+# =========================================================
+
+@router.get("/customers/{cid}/loyalty")
+async def get_customer_loyalty(
+    cid: UUID, db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+):
+    await _verify_customer_in_org(db, cid, org_id)
+    bal_res = await db.execute(
+        text("SELECT loyalty_balance FROM customers WHERE id = :c AND organization_id = :o"),
+        {"c": str(cid), "o": org_id},
+    )
+    balance = Decimal(str(bal_res.scalar() or 0))
+
+    hist = await db.execute(
+        text("SELECT id, direction, points, sale_id, notes, created_at "
+             "FROM loyalty_ledger WHERE organization_id = :o AND customer_id = :c "
+             "ORDER BY created_at DESC LIMIT 100"),
+        {"o": org_id, "c": str(cid)},
+    )
+    return {
+        "balance": float(balance),
+        "history": [
+            {
+                "id": r.id,
+                "direction": r.direction,
+                "points": float(r.points),
+                "sale_id": str(r.sale_id) if r.sale_id else None,
+                "notes": r.notes,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in hist
+        ],
+    }
+
+
+class LoyaltyAdjustIn(BaseModel):
+    points: Decimal
+    notes: str | None = None
+
+
+@router.post(
+    "/customers/{cid}/loyalty/adjust",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("customer.loyalty.manage"))],
+)
+async def adjust_customer_loyalty(
+    cid: UUID, p: LoyaltyAdjustIn,
+    db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: str = Depends(get_current_user_id),
+):
+    if p.points == 0:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "points 0 bo'lishi mumkin emas")
+    await _verify_customer_in_org(db, cid, org_id)
+
+    await db.execute(
+        text("INSERT INTO loyalty_ledger "
+             "(organization_id, customer_id, sale_id, direction, points, notes, created_by) "
+             "VALUES (:o, :c, NULL, 'adjust', :p, :n, :u)"),
+        {"o": org_id, "c": str(cid), "p": p.points, "n": p.notes, "u": user_id},
+    )
+    bal_res = await db.execute(
+        text("UPDATE customers SET loyalty_balance = loyalty_balance + :d "
+             "WHERE id = :c AND organization_id = :o RETURNING loyalty_balance"),
+        {"d": p.points, "c": str(cid), "o": org_id},
+    )
+    new_balance = Decimal(str(bal_res.scalar() or 0))
+    await db.commit()
+    return {"ok": True, "new_balance": float(new_balance)}
 
 
 # =========================================================

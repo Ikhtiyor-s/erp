@@ -65,7 +65,7 @@ async def click_webhook(org_code: str, request: Request,
         return {"error": -8, "error_note": "Bad request"}
 
     org_res = await db.execute(
-        text("SELECT id FROM organizations WHERE code = :c"),
+        text("SELECT id FROM organizations WHERE UPPER(code) = :c"),
         {"c": org_code.upper()},
     )
     row = org_res.first()
@@ -90,7 +90,7 @@ async def payme_webhook(org_code: str, request: Request,
     auth = request.headers.get("authorization", "")
 
     org_res = await db.execute(
-        text("SELECT id FROM organizations WHERE code = :c"),
+        text("SELECT id FROM organizations WHERE UPPER(code) = :c"),
         {"c": org_code.upper()},
     )
     row = org_res.first()
@@ -115,7 +115,7 @@ async def multicard_webhook(org_code: str, request: Request,
         body = {}
 
     org_res = await db.execute(
-        text("SELECT id FROM organizations WHERE code = :c"),
+        text("SELECT id FROM organizations WHERE UPPER(code) = :c"),
         {"c": org_code.upper()},
     )
     row = org_res.first()
@@ -186,7 +186,7 @@ async def rahmat_webhook(org_code: str, request: Request,
         body = {}
 
     org_res = await db.execute(
-        text("SELECT id FROM organizations WHERE code = :c"),
+        text("SELECT id FROM organizations WHERE UPPER(code) = :c"),
         {"c": org_code.upper()},
     )
     row = org_res.first()
@@ -212,7 +212,7 @@ async def telegram_webhook(org_code: str, request: Request,
         return {"ok": True}  # always return 200 so Telegram doesn't retry
 
     org_res = await db.execute(
-        text("SELECT id FROM organizations WHERE code = :c"),
+        text("SELECT id FROM organizations WHERE UPPER(code) = :c"),
         {"c": org_code.upper()},
     )
     row = org_res.first()
