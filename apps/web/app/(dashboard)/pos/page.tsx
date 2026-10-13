@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Search, Plus, Minus, Trash2, ShoppingCart, ScanLine, Scale, Printer, PackageOpen } from "lucide-react";
+import { Search, Plus, Minus, Trash2, ScanLine, Scale, Printer, PackageOpen } from "lucide-react";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { newIdempotencyKey, postIdempotent } from "@/lib/idempotency";
@@ -344,6 +344,23 @@ export default function PosPage() {
     }
   }
 
+  // REGOS-style numeric keypad — writes straight into the same amountInput
+  // used by tapPayment, so Naqd/Karta behave exactly as before.
+  function appendDigit(d: string) {
+    if (fullyPaid || committing) return;
+    setAmountInput((v) => {
+      if (d === "." && v.includes(".")) return v;
+      if (d === "00") return v === "" ? "0" : v + "00";
+      return v + d;
+    });
+  }
+  function clearAmount() {
+    setAmountInput("");
+  }
+  function backspaceAmount() {
+    setAmountInput((v) => v.slice(0, -1));
+  }
+
   function chgQty(id: string, delta: number) {
     if (saleId) return;
     setCart((c) =>
@@ -532,7 +549,7 @@ export default function PosPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <PageHeader title={t("ui__pos_касса_a8ec6dab")} description={t("ui__быстрая_продажа_8922faf4")} />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -596,161 +613,69 @@ export default function PosPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card padding="md" className="md:col-span-2">
-          {/* Device toolbar */}
-          <div className="flex flex-wrap items-center gap-2 mb-3 text-xs">
-            <Button
-              type="button"
-              variant={scannerEnabled ? "success" : "outline"}
-              size="xs"
-              icon={ScanLine}
-              onClick={() => setScannerEnabled((v) => !v)}
-              title="HID barcode skaner avtomatik aniqlanadi"
-            >
-              Skaner {scannerEnabled ? "yoqilgan" : "o'chirilgan"}
-            </Button>
-
-            {scaleConnected ? (
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-info-50 dark:bg-info-500/15 border border-info-500/30 text-info-700 dark:text-info-500">
-                <Scale size={12} />
-                Tarozi:{" "}
-                <span className="font-mono font-bold">
-                  {scaleWeight !== null ? `${scaleWeight.toFixed(3)} kg` : "0.000 kg"}
-                </span>
-                <button type="button" onClick={disconnectScaleNow} className="ml-1 hover:underline">
-                  uzish
-                </button>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3">
+        {/* Sale ticket — REGOS-style: totals strip + line-item table + quick-add below */}
+        <Card padding="none" className="overflow-hidden border-2 border-ink-200 dark:border-ink-800">
+          <div className="flex flex-wrap items-stretch justify-between gap-3 bg-ink-50 dark:bg-ink-900 border-b border-ink-200 dark:border-ink-800 px-4 py-3">
+            <div>
+              <div className="text-xs font-bold text-ink-600 dark:text-ink-300 uppercase tracking-wide">
+                {saleId ? `SOTUV (OCHIQ) · №${saleId.slice(0, 8)}` : "YANGI SOTUV"}
               </div>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                icon={Scale}
-                onClick={connectScale}
-                title="Elektron tarozini USB-Serial orqali ulash"
-              >
-                Tarozini ulash
-              </Button>
-            )}
-
-            {printerConnected ? (
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-info-50 dark:bg-info-500/15 border border-info-500/30 text-info-700 dark:text-info-500">
-                <Printer size={12} />
-                Printer ulangan
-                <button type="button" onClick={disconnectPrinterNow} className="ml-1 hover:underline">
-                  uzish
-                </button>
-              </div>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                icon={Printer}
-                onClick={connectPrinterNow}
-                title="Chek printerini Bluetooth orqali ulash"
-              >
-                Printerni ulash
-              </Button>
-            )}
-
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              icon={PackageOpen}
-              onClick={openCashDrawerNow}
-              disabled={!printerConnected}
-              title={
-                printerConnected
-                  ? "Printerga ulangan kassa qutisini ochish"
-                  : "Avval printerni ulang"
-              }
-            >
-              Qutini ochish
-            </Button>
-          </div>
-
-          <div className="relative mb-3">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"
-            />
-            <input
-              className={`${input} pl-9`}
-              placeholder={t("ui__поиск_товара_название_штрих_ко_8537959b")}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[60vh] overflow-auto">
-            {products.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                disabled={!!saleId}
-                onClick={() => addToCart(p)}
-                className="text-left p-3 border border-ink-200 dark:border-ink-800 rounded-md hover:border-brand-400 dark:hover:border-brand-500 hover:bg-brand-50 dark:hover:bg-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <div className="text-xs text-ink-500 dark:text-ink-400">
-                  {p.sku || "—"}
-                </div>
-                <div className="font-medium text-sm text-ink-900 dark:text-ink-100 line-clamp-2">
-                  {p.name}
-                </div>
-                <div className="font-mono font-semibold text-brand-700 dark:text-brand-400 mt-1">
-                  {fmt(p.sale_price)} {p.currency_code || ""}
-                </div>
-                {!p.is_service && (
-                  <div className="text-xs text-ink-500 dark:text-ink-400 mt-1">
-                    Ост: {fmt(p.total_stock)}
-                  </div>
-                )}
-              </button>
-            ))}
-            {products.length === 0 && (
-              <div className="col-span-full text-center text-ink-400 dark:text-ink-600 py-12">
-                {t("ui__товары_не_найдены_42190736")}
-              </div>
-            )}
-          </div>
-        </Card>
-
-        <Card padding="md" className="h-fit sticky top-4">
-          <div className="flex items-center gap-2 mb-3 text-ink-900 dark:text-ink-100">
-            <ShoppingCart size={18} />
-            <h3 className="font-semibold">Корзина ({cart.length})</h3>
-          </div>
-          {cart.length === 0 ? (
-            <div className="text-center text-ink-400 dark:text-ink-600 py-12">
-              {t("ui__пусто_e5b328b4")}
+              <div className="text-[11px] text-ink-400 mt-0.5">CHAKANA NARX</div>
             </div>
-          ) : (
-            <>
-              <ul className="space-y-2 max-h-[40vh] overflow-auto">
-                {cart.map((c) => (
-                  <li
+            <div className="flex items-center gap-5 text-right">
+              <div>
+                <div className="text-[11px] text-ink-400">Jami</div>
+                <div className="font-mono font-bold text-lg text-ink-900 dark:text-ink-100">
+                  {fmt(effectiveTotal)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-ink-400">To'langan</div>
+                <div className="font-mono font-bold text-lg text-info-600 dark:text-info-500">
+                  {fmt(paidSoFar)}
+                </div>
+              </div>
+              <div className="pl-5 border-l border-ink-300 dark:border-ink-700">
+                <div className="text-[11px] text-ink-400">TO'LOVGA</div>
+                <div
+                  className={`font-mono font-extrabold text-2xl ${
+                    fullyPaid ? "text-success-600 dark:text-success-500" : "text-brand-700 dark:text-brand-400"
+                  }`}
+                >
+                  {fmt(remainingDue)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-auto max-h-[42vh]">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-ink-100 dark:bg-ink-800 text-ink-500 dark:text-ink-400 text-[11px] uppercase">
+                <tr>
+                  <th className="px-2 py-2 text-left w-8">#</th>
+                  <th className="px-2 py-2 text-left">Nomi</th>
+                  <th className="px-2 py-2 text-center w-28">Soni</th>
+                  <th className="px-2 py-2 text-right w-24">Narx</th>
+                  <th className="px-2 py-2 text-right w-28">Summa</th>
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {cart.map((c, i) => (
+                  <tr
                     key={c.product.id}
-                    className="border border-ink-200 dark:border-ink-800 rounded-md p-2"
+                    className="border-b border-ink-100 dark:border-ink-800 hover:bg-brand-50/60 dark:hover:bg-brand-900/10"
                   >
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="text-sm font-medium text-ink-900 dark:text-ink-100 flex-1 line-clamp-2">
+                    <td className="px-2 py-2 text-ink-400 font-mono text-xs">{i + 1}</td>
+                    <td className="px-2 py-2">
+                      <div className="font-medium text-ink-900 dark:text-ink-100 line-clamp-1">
                         {c.product.name}
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        icon={Trash2}
-                        disabled={!!saleId}
-                        onClick={() => removeCart(c.product.id)}
-                        className="text-danger-600 dark:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/15"
-                      />
-                    </div>
-                    <div className="flex justify-between items-center mt-2">
-                      <div className="flex items-center gap-1">
+                      <div className="text-[11px] text-ink-400">{c.product.sku || "—"}</div>
+                    </td>
+                    <td className="px-2 py-2">
+                      <div className="flex items-center justify-center gap-1">
                         <Button
                           type="button"
                           variant="outline"
@@ -759,7 +684,7 @@ export default function PosPage() {
                           disabled={!!saleId}
                           onClick={() => chgQty(c.product.id, -1)}
                         />
-                        <span className="font-mono px-2 text-sm text-ink-900 dark:text-ink-100">
+                        <span className="font-mono w-8 text-center text-ink-900 dark:text-ink-100">
                           {c.qty}
                         </span>
                         <Button
@@ -771,111 +696,230 @@ export default function PosPage() {
                           onClick={() => chgQty(c.product.id, +1)}
                         />
                       </div>
-                      <span className="font-mono font-semibold text-sm text-ink-900 dark:text-ink-100">
-                        {fmt(Number(c.product.sale_price) * c.qty)}
-                      </span>
-                    </div>
-                  </li>
+                    </td>
+                    <td className="px-2 py-2 text-right font-mono text-ink-700 dark:text-ink-300">
+                      {fmt(c.product.sale_price)}
+                    </td>
+                    <td className="px-2 py-2 text-right font-mono font-semibold text-ink-900 dark:text-ink-100">
+                      {fmt(Number(c.product.sale_price) * c.qty)}
+                    </td>
+                    <td className="px-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        icon={Trash2}
+                        disabled={!!saleId}
+                        onClick={() => removeCart(c.product.id)}
+                        className="text-danger-600 dark:text-danger-500"
+                      />
+                    </td>
+                  </tr>
                 ))}
-              </ul>
-              <div className="border-t border-ink-200 dark:border-ink-800 pt-3 mt-3 space-y-2">
-                <div className="flex justify-between text-lg font-bold text-ink-900 dark:text-ink-100">
-                  <span>{t("ui__итого_edcf3920")}</span>
-                  <span className="font-mono">{fmt(effectiveTotal)}</span>
-                </div>
-
-                {loyaltyBalance !== null && loyaltyBalance > 0 && (
-                  <div className="flex justify-between text-xs text-ink-500 dark:text-ink-400">
-                    <span>Mijoz ball balansi</span>
-                    <span className="font-mono">{fmt(loyaltyBalance)}</span>
-                  </div>
+                {cart.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="text-center text-ink-400 dark:text-ink-600 py-16">
+                      {t("ui__пусто_e5b328b4")}
+                    </td>
+                  </tr>
                 )}
+              </tbody>
+            </table>
+          </div>
 
-                {committedLines.length > 0 && (
-                  <ul className="text-xs border border-ink-200 dark:border-ink-800 rounded-md divide-y divide-ink-100 dark:divide-ink-800">
-                    {committedLines.map((l, i) => (
-                      <li key={i} className="flex justify-between px-2 py-1">
-                        <span className="text-ink-600 dark:text-ink-300">{l.label}</span>
-                        <span className="font-mono text-ink-900 dark:text-ink-100">{fmt(l.amount)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-ink-500 dark:text-ink-400">To'lanishi kerak</span>
-                  <span
-                    className={`font-mono font-semibold ${
-                      fullyPaid ? "text-success-600 dark:text-success-500" : "text-ink-900 dark:text-ink-100"
-                    }`}
-                  >
-                    {fmt(remainingDue)}
+          <div className="border-t border-ink-200 dark:border-ink-800 p-3">
+            <div className="flex flex-wrap items-center gap-2 mb-2 text-xs">
+              <Button
+                type="button"
+                variant={scannerEnabled ? "success" : "outline"}
+                size="xs"
+                icon={ScanLine}
+                onClick={() => setScannerEnabled((v) => !v)}
+                title="HID barcode skaner avtomatik aniqlanadi"
+              >
+                Skaner {scannerEnabled ? "yoqilgan" : "o'chirilgan"}
+              </Button>
+              {scaleConnected ? (
+                <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-info-50 dark:bg-info-500/15 border border-info-500/30 text-info-700 dark:text-info-500">
+                  <Scale size={12} />
+                  <span className="font-mono font-bold">
+                    {scaleWeight !== null ? `${scaleWeight.toFixed(3)} kg` : "0.000 kg"}
                   </span>
+                  <button type="button" onClick={disconnectScaleNow} className="ml-1 hover:underline">
+                    uzish
+                  </button>
                 </div>
-
-                {lastChange > 0 && (
-                  <div className="flex justify-between text-sm text-info-700 dark:text-info-500">
-                    <span>Qaytim (naqd)</span>
-                    <span className="font-mono">{fmt(lastChange)}</span>
-                  </div>
-                )}
-
-                {!fullyPaid && (
-                  <div className="space-y-2">
-                    <input
-                      className={input}
-                      type="number"
-                      min={0}
-                      aria-label="To'lov summasi"
-                      placeholder={`Summa (bo'sh = to'liq ${fmt(remainingDue)})`}
-                      value={amountInput}
-                      disabled={committing || cart.length === 0}
-                      onChange={(e) => setAmountInput(e.target.value)}
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                      {paymentTypes.map((pt) => (
-                        <Button
-                          key={pt.id}
-                          type="button"
-                          variant="outline"
-                          size="md"
-                          disabled={committing || cart.length === 0}
-                          onClick={() => tapPayment({ kind: "type", pt })}
-                        >
-                          {pt.name}
-                        </Button>
-                      ))}
-                      {customerId && loyaltyBalance !== null && loyaltyBalance > 0 && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="md"
-                          disabled={committing || cart.length === 0}
-                          onClick={() => tapPayment({ kind: "bonus" })}
-                        >
-                          Bonus
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <Button
-                  variant="success"
-                  size="lg"
-                  fullWidth
-                  loading={finalizing}
-                  disabled={!saleId || !fullyPaid}
-                  onClick={finalize}
-                >
-                  Tasdiqlash
+              ) : (
+                <Button type="button" variant="outline" size="xs" icon={Scale} onClick={connectScale}>
+                  Tarozini ulash
                 </Button>
+              )}
+              {printerConnected ? (
+                <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-info-50 dark:bg-info-500/15 border border-info-500/30 text-info-700 dark:text-info-500">
+                  <Printer size={12} />
+                  Printer
+                  <button type="button" onClick={disconnectPrinterNow} className="ml-1 hover:underline">
+                    uzish
+                  </button>
+                </div>
+              ) : (
+                <Button type="button" variant="outline" size="xs" icon={Printer} onClick={connectPrinterNow}>
+                  Printerni ulash
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                icon={PackageOpen}
+                onClick={openCashDrawerNow}
+                disabled={!printerConnected}
+                title={printerConnected ? "Kassa qutisini ochish" : "Avval printerni ulang"}
+              >
+                Qutini ochish
+              </Button>
+            </div>
+
+            <div className="relative mb-2">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+              <input
+                className={`${input} pl-9`}
+                placeholder={`${t("ui__поиск_товара_название_штрих_ко_8537959b")} (F3)`}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-[22vh] overflow-auto">
+              {products.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={!!saleId}
+                  onClick={() => addToCart(p)}
+                  className="text-left p-2 border border-ink-200 dark:border-ink-800 rounded-md hover:border-brand-400 dark:hover:border-brand-500 hover:bg-brand-50 dark:hover:bg-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-[11px] text-ink-500 dark:text-ink-400">{p.sku || "—"}</div>
+                  <div className="font-medium text-xs text-ink-900 dark:text-ink-100 line-clamp-2">
+                    {p.name}
+                  </div>
+                  <div className="font-mono font-semibold text-xs text-brand-700 dark:text-brand-400 mt-1">
+                    {fmt(p.sale_price)} {p.currency_code || ""}
+                  </div>
+                </button>
+              ))}
+              {products.length === 0 && (
+                <div className="col-span-full text-center text-ink-400 dark:text-ink-600 py-6 text-sm">
+                  {t("ui__товары_не_найдены_42190736")}
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        {/* Payment panel — keypad + tender buttons, REGOS-style */}
+        <Card padding="md" className="flex flex-col gap-3 h-fit sticky top-4 border-2 border-ink-200 dark:border-ink-800">
+          <Button
+            variant="success"
+            size="lg"
+            fullWidth
+            className="h-14 text-base"
+            loading={finalizing}
+            disabled={!saleId || !fullyPaid}
+            onClick={finalize}
+          >
+            To'lov (F8)
+          </Button>
+
+          {loyaltyBalance !== null && loyaltyBalance > 0 && (
+            <div className="flex justify-between text-xs text-ink-500 dark:text-ink-400 px-1">
+              <span>Mijoz ball balansi</span>
+              <span className="font-mono">{fmt(loyaltyBalance)}</span>
+            </div>
+          )}
+
+          {committedLines.length > 0 && (
+            <ul className="text-xs border border-ink-200 dark:border-ink-800 rounded-md divide-y divide-ink-100 dark:divide-ink-800">
+              {committedLines.map((l, i) => (
+                <li key={i} className="flex justify-between px-2 py-1">
+                  <span className="text-ink-600 dark:text-ink-300">{l.label}</span>
+                  <span className="font-mono text-ink-900 dark:text-ink-100">{fmt(l.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {lastChange > 0 && (
+            <div className="flex justify-between text-sm text-info-700 dark:text-info-500 px-1">
+              <span>Qaytim (naqd)</span>
+              <span className="font-mono">{fmt(lastChange)}</span>
+            </div>
+          )}
+
+          {!fullyPaid && (
+            <>
+              <div className="border border-ink-300 dark:border-ink-700 rounded-md px-3 py-2 text-right font-mono text-2xl font-bold bg-ink-50 dark:bg-ink-900 text-ink-900 dark:text-ink-100">
+                {amountInput || fmt(remainingDue)}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {["7", "8", "9", "4", "5", "6", "1", "2", "3", "0", ".", "00"].map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    disabled={committing || cart.length === 0}
+                    onClick={() => appendDigit(k)}
+                    className="h-11 rounded-md border border-ink-300 dark:border-ink-700 bg-white dark:bg-ink-800 text-ink-900 dark:text-ink-100 text-lg font-semibold hover:bg-ink-50 dark:hover:bg-ink-700 disabled:opacity-50"
+                  >
+                    {k}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={committing || cart.length === 0}
+                  onClick={clearAmount}
+                  className="h-11 rounded-md border border-danger-300 dark:border-danger-700 text-danger-600 dark:text-danger-500 font-semibold hover:bg-danger-50 dark:hover:bg-danger-500/15 disabled:opacity-50"
+                >
+                  C
+                </button>
+                <button
+                  type="button"
+                  disabled={committing || cart.length === 0}
+                  onClick={backspaceAmount}
+                  className="h-11 rounded-md border border-ink-300 dark:border-ink-700 text-ink-700 dark:text-ink-300 font-semibold hover:bg-ink-50 dark:hover:bg-ink-700 disabled:opacity-50"
+                >
+                  ⌫
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {paymentTypes.map((pt) => (
+                  <Button
+                    key={pt.id}
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    disabled={committing || cart.length === 0}
+                    onClick={() => tapPayment({ kind: "type", pt })}
+                  >
+                    {pt.name}
+                  </Button>
+                ))}
+                {customerId && loyaltyBalance !== null && loyaltyBalance > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    disabled={committing || cart.length === 0}
+                    onClick={() => tapPayment({ kind: "bonus" })}
+                  >
+                    Bonus
+                  </Button>
+                )}
               </div>
             </>
           )}
 
           {lastReceipt && (
-            <div className="border-t border-ink-200 dark:border-ink-800 pt-3 mt-3">
+            <div className="border-t border-ink-200 dark:border-ink-800 pt-3">
               <Button
                 type="button"
                 variant="outline"

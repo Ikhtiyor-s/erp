@@ -23,29 +23,13 @@
     background-color: #0f172a; /* ink-900 */
   }
 
-  /* Light mode: make all text fully black for max contrast */
+  /* Light mode: default text fully black for max contrast. Elements
+     inherit this naturally; no tag-selector block needed (and none should
+     be added — a blanket `color: inherit` on button/span/a/div etc. would
+     outrank single-class utilities like `.text-white` by specificity and
+     blank out every colored badge/button). */
   html:not(.dark) body {
     color: #000;
-  }
-  html:not(.dark) h1,
-  html:not(.dark) h2,
-  html:not(.dark) h3,
-  html:not(.dark) h4,
-  html:not(.dark) h5,
-  html:not(.dark) h6,
-  html:not(.dark) p,
-  html:not(.dark) span,
-  html:not(.dark) td,
-  html:not(.dark) th,
-  html:not(.dark) li,
-  html:not(.dark) a,
-  html:not(.dark) label,
-  html:not(.dark) button,
-  html:not(.dark) input,
-  html:not(.dark) select,
-  html:not(.dark) textarea,
-  html:not(.dark) div {
-    color: inherit;
   }
   /* Override standard greys with black in light mode */
   html:not(.dark) .text-ink-900,
