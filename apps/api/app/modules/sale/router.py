@@ -16,6 +16,7 @@ from app.modules.customer import loyalty as loyalty_service
 from app.modules.integration.telegram import notify_sale
 from app.modules.kiosk.service import get_cart_idle_timeout_min
 from app.modules.rbac.deps import get_user_permissions
+from app.modules.finance.service import get_active_session_id
 from app.modules.sale import service as sale_service
 from app.modules.sale.pdf import render_sale_pdf, render_return_pdf
 from app.modules.sale.service import SaleLineInput
@@ -500,14 +501,16 @@ async def pay_sale(
     )
     movement_id: int | None = None
     if p.amount > 0:
+        session_id = await get_active_session_id(db, p.cashbox_id)
         mv = await db.execute(
             text("INSERT INTO cash_movements (organization_id, cashbox_id, direction, "
-                 "amount, payment_type_id, customer_id, sale_id, description, created_by) "
-                 "VALUES (:o, :cb, 'in', :amt, :pt, :cu, :s, :d, :u) RETURNING id"),
+                 "amount, payment_type_id, customer_id, sale_id, description, created_by, "
+                 "cashbox_session_id) "
+                 "VALUES (:o, :cb, 'in', :amt, :pt, :cu, :s, :d, :u, :sess) RETURNING id"),
             {"o": org_id, "cb": p.cashbox_id, "amt": p.amount, "pt": p.payment_type_id,
              "cu": customer_id_str,
              "s": str(sale_id),
-             "d": f"Оплата продажи: {p.notes or ''}".strip(), "u": user_id},
+             "d": f"Оплата продажи: {p.notes or ''}".strip(), "u": user_id, "sess": session_id},
         )
         movement_id = mv.scalar()
         if p.cashbox_id:
@@ -806,14 +809,16 @@ async def pay_sale_split(
         {"pa": new_paid, "st": new_status, "id": str(sale_id)},
     )
     for line in p.payments:
+        session_id = await get_active_session_id(db, line.cashbox_id)
         await db.execute(
             text("INSERT INTO cash_movements (organization_id, cashbox_id, direction, "
-                 "amount, payment_type_id, customer_id, sale_id, description, created_by) "
-                 "VALUES (:o, :cb, 'in', :amt, :pt, :cu, :s, :d, :u)"),
+                 "amount, payment_type_id, customer_id, sale_id, description, created_by, "
+                 "cashbox_session_id) "
+                 "VALUES (:o, :cb, 'in', :amt, :pt, :cu, :s, :d, :u, :sess)"),
             {"o": org_id, "cb": line.cashbox_id, "amt": line.amount, "pt": line.payment_type_id,
              "cu": str(row.customer_id) if row.customer_id else None,
              "s": str(sale_id),
-             "d": "Aralash to'lov", "u": user_id},
+             "d": "Aralash to'lov", "u": user_id, "sess": session_id},
         )
         if line.cashbox_id:
             await db.execute(

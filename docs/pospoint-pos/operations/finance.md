@@ -18,14 +18,14 @@ Uchta alohida hisob ko'rsatiladi:
 Tizim inkassatsiya qilish mumkin bo'lgan summani avtomatik hisoblaydi
 (smenadagi barcha naqd fiskal sotuvlar asosida).
 
-**Aniq ERP holati:** ⚠️ qisman. Aniq ERP'da `cashboxes` (kassalar) va
-bank-hisoblar umumiy "hisob" (account) tushunchasi sifatida bor
-(`finance/balances`, `finance/cash`, `finance/currency` sahifalari),
-`cash_movements`/`cash_transfer` orqali ular orasida pul ko'chirilishi
-mumkin. ❌ Lekin PosPoint'dagi kabi **nomlangan "Seyf" pog'onasi** va
-**inkassatsiya summasini avtomatik hisoblash** (smenadagi naqd-fiskal
-sotuv asosida) aniq shaklda yo'q — bu umumiy arxitektura ustiga
-qurilishi mumkin bo'lgan, lekin hali qurilmagan konkret ish oqimi.
+**Aniq ERP holati:** ✅ qurildi (2026-10-14). `cashboxes.kind` ustuni
+(`register`/`safe`/`bank`, standart — `register`) qo'shildi, `finance/cash`
+sahifasida kassa yaratish/tahrirlashda tanlanadi, jadvalda turi-belgisi
+ko'rsatiladi. Mavjud `/finance/transfer` (allaqachon bor edi) orqali
+istalgan ikki kassa orasida (jumladan Seyf → Bank) qo'lda o'tkazish
+qilinadi — bu PosPoint'ning alohida "Inkassatsiya" tugmasiga funksional
+teng. Production'da API orqali sinaldi (Seyf kassasi yaratildi, balans
+to'g'ri yangilandi).
 
 ### Smena yopilishi va inkassatsiya operatsiyasi
 
@@ -34,11 +34,26 @@ hisobiga o'tadi) + qolgan naqd qoldiq ko'rsatiladi (kassadan
 yechiladi, seyfga kirim qilinadi). Smenadan tashqari ham alohida
 "Inkassatsiya" tugmasi bilan qilish mumkin (Seyf → Bank).
 
-**Aniq ERP holati:** ⚠️ qisman. Smena yopish endpointi bor
-(`POST /cashbox-sessions/{sid}/close`, `apps/api/app/modules/mobile/router.py`),
-lekin bu PosPoint'dagi **inkassatsiya-avtomatik-hisoblash +
-Seyf-pog'onasiga o'tkazish** qadamini o'z ichiga olmaydi — smena yopish
-va pul-ko'chirish Aniq ERP'da bog'liq emas, alohida amallar.
+**Aniq ERP holati:** ✅ qurildi (2026-10-14). `POST /cashbox-sessions/{sid}/close`
+endi smenadagi naqd-fiskal (payment_type.is_cash=TRUE) kirimlar
+summasini hisoblab, org'da aktiv `kind='safe'` kassa bo'lsa, shu
+smenani yopayotgan kassadan avtomatik o'sha summani Seyfga o'tkazadi
+(javobda `inkassatsiya: {amount, to_cashbox_id}`, Seyf yo'q bo'lsa —
+`null`, eski xatti-harakat saqlanadi). Mobil kassir ekranida
+(`app/m/cashbox/page.tsx`) "Oxirgi yopilgan smena" blokida ko'rsatiladi.
+
+**Shu yerda aniqlangan va tuzatilgan haqiqiy bug (2026-10-14):**
+`cash_movements.cashbox_session_id` ustuni mavjud edi, lekin uni
+to'ldiradigan hech qanday chaqiruvchi yo'q edi — na POS to'lov
+(`sale/router.py::pay_sale`/`pay_sale_split`), na umumiy "Kassa
+harakati" (`finance/router.py::create_movement`). Natijada
+`_compute_session_totals()` (va shu orqali X/Z-hisobot, smena
+kirim/chiqim summasi) **har doim 0 qaytarar edi** — bu avto-inkassatsiya
+ishi boshlanganda tasodifan topildi. Tuzatildi: yangi
+`finance/service.py::get_active_session_id()` yordamchisi uchala
+yozuv nuqtasida ham joriy ochiq smenani topib, `cashbox_session_id`ni
+to'g'ri belgilaydi. Production'da sinaldi: kirim yozuvi → smena
+yopilganda to'g'ri summa bilan ko'rindi.
 
 ### Kassa daromadlari va xarajatlari
 
@@ -63,10 +78,6 @@ imkoniyati mavjud sahifalarda bor.
 
 ## Keyingi qadam
 
-Eng aniq, amaliy gap — **smena yopilishini inkassatsiya bilan
-bog'lash**: hozir Aniq ERP'da bular ikkita mustaqil amal, PosPoint'da
-esa smena yopilishi bitta ekranda naqd-qoldiqni hisoblab, seyfga
-o'tkazadi. Bu o'rta kattalikdagi ish — mavjud `cash_movements`/
-`cashbox-sessions` arxitekturasini kengaytirish, yangi tizim yaratish
-emas. "Seyf" alohida hisob-turi sifatida qo'shilishi kerak bo'ladi
-(yoki mavjud hisob-turlaridan biriga rol sifatida belgilanishi mumkin).
+Asosiy gap bajarildi. Qolgan, past ustuvorlikdagi narsa: "Kassa
+daromadlari va xarajatlari"da toifa (category) tanlashni aniq
+tasdiqlash/qo'shish (PosPoint'da bor, Aniq ERP'da tekshirilmagan).

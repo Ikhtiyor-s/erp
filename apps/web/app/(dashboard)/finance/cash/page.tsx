@@ -24,6 +24,7 @@ type Cashbox = {
   responsible_name?: string;
   warehouse_id?: number | null;
   warehouse_name?: string | null;
+  kind?: "register" | "safe" | "bank";
 };
 type Warehouse = { id: number; name: string };
 type Currency = { id: number; code: string };
@@ -42,7 +43,8 @@ type Movement = {
   payment_type_name?: string;
 };
 
-const emptyCB = { name: "", currency_id: null as number | null, warehouse_id: null as number | null };
+const emptyCB = { name: "", currency_id: null as number | null, warehouse_id: null as number | null, kind: "register" as "register" | "safe" | "bank" };
+const KIND_LABELS: Record<string, string> = { register: "Kassa", safe: "Seyf", bank: "Bank" };
 const emptyMV = { cashbox_id: null as number | null, direction: "in" as "in" | "out", amount: 0, description: "" };
 const emptyTR = { from_cashbox_id: null as number | null, to_cashbox_id: null as number | null, amount: 0, description: "" };
 
@@ -149,6 +151,16 @@ export default function CashPage() {
 
   const boxCols: Column<Cashbox>[] = [
     { key: "name", header: t("ui__касса_c85fd621") },
+    {
+      key: "kind" as keyof Cashbox,
+      header: "Turi",
+      width: "90px",
+      render: (r) => (
+        <Badge tone={r.kind === "safe" ? "warning" : r.kind === "bank" ? "info" : "neutral"}>
+          {KIND_LABELS[r.kind || "register"]}
+        </Badge>
+      ),
+    },
     {
       key: "currency_id",
       header: t("ui__валюта_cf55d9a9"),
@@ -279,7 +291,7 @@ export default function CashPage() {
       )}
 
       <DataTable columns={boxCols} rows={boxes} loading={loading}
-        onEdit={(r) => { setCbForm({ name: r.name, currency_id: r.currency_id, warehouse_id: r.warehouse_id ?? null }); setCbEditId(r.id); setCbOpen(true); }}
+        onEdit={(r) => { setCbForm({ name: r.name, currency_id: r.currency_id, warehouse_id: r.warehouse_id ?? null, kind: r.kind || "register" }); setCbEditId(r.id); setCbOpen(true); }}
         onDelete={(r) => setCbDelTarget(r)} />
 
       <div className="flex items-center justify-between mt-8">
@@ -314,6 +326,14 @@ export default function CashPage() {
               onChange={(e) => setCbForm({ ...cbForm, currency_id: e.target.value ? Number(e.target.value) : null })}>
               <option value="">{t("ui__выбрать_fbbc1d13")}</option>
               {currencies.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}
+            </select>
+          </Field>
+          <Field label="Turi">
+            <select className={input} value={cbForm.kind || "register"}
+              onChange={(e) => setCbForm({ ...cbForm, kind: e.target.value })}>
+              <option value="register">Kassa</option>
+              <option value="safe">Seyf</option>
+              <option value="bank">Bank</option>
             </select>
           </Field>
           <Field label={tCB("warehouse_label")} required={!cbEditId}>

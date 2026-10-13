@@ -468,10 +468,11 @@ async def close_session(
     org_id: str = Depends(get_current_org_id),
 ):
     chk = await db.execute(
-        text("SELECT id FROM cashbox_sessions WHERE id = :sid AND organization_id = :o"),
+        text("SELECT id, cashbox_id FROM cashbox_sessions WHERE id = :sid AND organization_id = :o"),
         {"sid": str(sid), "o": org_id},
     )
-    if not chk.first():
+    session_row = chk.first()
+    if not session_row:
         raise HTTPException(404, "Sessiya topilmadi")
 
     # REGOS-parity: can't close a shift while any parked ("Отложена оплата")
@@ -506,8 +507,56 @@ async def close_session(
     )
     if not res.scalar():
         raise HTTPException(400, "Sessiya yopilgan yoki topilmadi")
+
+    # PosPoint-parity: avto-inkassatsiya — docs/pospoint-pos/operations/
+    # finance.md. Smenadagi naqd-fiskal (is_cash=TRUE) sotuvlar summasini
+    # hisoblab, org'da aktiv "Seyf" (kind='safe') kassa bo'lsa, shu smenani
+    # yopayotgan kassadan seyfga avtomatik o'tkazadi. Seyf yo'q bo'lsa —
+    # hech narsa qilmaydi (eski xatti-harakat saqlanadi).
+    inkassatsiya = None
+    cash_res = await db.execute(
+        text("SELECT COALESCE(SUM(cm.amount), 0) FROM cash_movements cm "
+             "JOIN payment_types pt ON pt.id = cm.payment_type_id "
+             "WHERE cm.cashbox_session_id = :sid AND cm.direction = 'in' AND pt.is_cash = TRUE"),
+        {"sid": str(sid)},
+    )
+    cash_amount = Decimal(str(cash_res.scalar() or 0))
+    if cash_amount > 0:
+        safe_res = await db.execute(
+            text("SELECT id, currency_id FROM cashboxes "
+                 "WHERE organization_id = :o AND kind = 'safe' AND is_active = TRUE "
+                 "ORDER BY id LIMIT 1"),
+            {"o": org_id},
+        )
+        safe_row = safe_res.first()
+        if safe_row and safe_row.id != session_row.cashbox_id:
+            desc = f"Avto-inkassatsiya: smena {sid}"
+            await db.execute(
+                text("INSERT INTO cash_movements (organization_id, cashbox_id, direction, amount, "
+                     "currency_id, description, created_by) "
+                     "VALUES (:o, :cb, 'out', :amt, :cur, :d, :u)"),
+                {"o": org_id, "cb": session_row.cashbox_id, "amt": cash_amount,
+                 "cur": safe_row.currency_id, "d": desc, "u": user_id},
+            )
+            await db.execute(
+                text("INSERT INTO cash_movements (organization_id, cashbox_id, direction, amount, "
+                     "currency_id, description, created_by) "
+                     "VALUES (:o, :cb, 'in', :amt, :cur, :d, :u)"),
+                {"o": org_id, "cb": safe_row.id, "amt": cash_amount,
+                 "cur": safe_row.currency_id, "d": desc, "u": user_id},
+            )
+            await db.execute(
+                text("UPDATE cashboxes SET balance = balance - :a WHERE id = :id"),
+                {"a": cash_amount, "id": session_row.cashbox_id},
+            )
+            await db.execute(
+                text("UPDATE cashboxes SET balance = balance + :a WHERE id = :id"),
+                {"a": cash_amount, "id": safe_row.id},
+            )
+            inkassatsiya = {"amount": float(cash_amount), "to_cashbox_id": safe_row.id}
+
     await db.commit()
-    return {"ok": True, **totals}
+    return {"ok": True, **totals, "inkassatsiya": inkassatsiya}
 
 
 @router.get("/cashbox-sessions")

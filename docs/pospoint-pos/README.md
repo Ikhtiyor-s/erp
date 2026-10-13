@@ -58,7 +58,7 @@ loyihasida bor va u Aniq ERP bilan birlashtirilmaydi).
 | Mijozlar — qarz limiti + POS enforcement | ✅ qurildi 2026-10-14, production'da API orqali sinaldi |
 | Mijozlar — tug'ilgan kun maydoni/filtri | ⚠️ qisman — maydon bor, filtr va avtomatik SMS job yo'q |
 | Ombor — qoldiq/xarid/ko'chirish/hisobdan chiqarish/inventarizatsiya | ✅ deyarli to'liq — Aniq ERP'ning ombor moduli PosPoint'dan ancha boy (Odoo-vision asosida qurilgan) |
-| Moliya — kassa/seyf/bank 3-pog'onali balans + inkassatsiya | ❌ yo'q — Aniq ERP'da umumiy `cashboxes`/`cash_movements` bor, lekin "Seyf" alohida pog'ona emas, smena-yopilishiga bog'langan avtomatik inkassatsiya yo'q |
+| Moliya — kassa/seyf/bank 3-pog'onali balans + inkassatsiya | ✅ qurildi 2026-10-14, production'da sinaldi (yo'lda `cashbox_session_id` hech qachon to'ldirilmagan haqiqiy bug ham topildi va tuzatildi) |
 | Sozlamalar — fiskal rejim (onlayn-kassa) | ❌ yo'q — hech qanday fiskal registrator/modul integratsiyasi yo'q |
 | Sozlamalar — manfiy qoldiq siyosati (3 variant) | ✅ qurildi 2026-10-14, API orqali sinaldi |
 | Sozlamalar — katalog ko'rinish rejimi (dorixona/yengillashtirilgan) | ❌ yo'q |

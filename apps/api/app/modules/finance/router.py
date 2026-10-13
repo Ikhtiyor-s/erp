@@ -20,6 +20,7 @@ from app.modules.finance.schemas import (
     CashboxSetBalance, EntitySetBalance, ExtraCostCreate,
 )
 from app.modules.finance.export_1c import build_export, ExportType
+from app.modules.finance.service import get_active_session_id
 from app.modules.integration.payments.click import create_bill_payment_link, BILL_SERVICES
 from app.modules.integration.payments.base import get_payment_settings
 from app.modules.integration.sms import eskiz as eskiz_sms
@@ -90,7 +91,7 @@ async def list_cashboxes(
     res = await db.execute(
         text(
             "SELECT cb.id, cb.name, cb.currency_id, cb.balance, cb.is_active, "
-            "cb.responsible_id, cb.warehouse_id, "
+            "cb.responsible_id, cb.warehouse_id, cb.kind, "
             "cur.code AS currency_code, "
             "e.full_name AS responsible_name, "
             "w.name AS warehouse_name "
@@ -120,11 +121,11 @@ async def create_cashbox(
         if not wh_check.first():
             raise HTTPException(422, "warehouse_id does not belong to your organization")
     res = await db.execute(
-        text("INSERT INTO cashboxes (organization_id, name, currency_id, responsible_id, warehouse_id) "
-             "VALUES (:o, :n, :c, :r, :w) RETURNING id, balance, is_active"),
+        text("INSERT INTO cashboxes (organization_id, name, currency_id, responsible_id, warehouse_id, kind) "
+             "VALUES (:o, :n, :c, :r, :w, :k) RETURNING id, balance, is_active"),
         {"o": org_id, "n": payload.name, "c": payload.currency_id,
          "r": str(payload.responsible_id) if payload.responsible_id else None,
-         "w": payload.warehouse_id},
+         "w": payload.warehouse_id, "k": payload.kind},
     )
     row = res.first()
     try:
@@ -134,7 +135,7 @@ async def create_cashbox(
     await db.commit()
     return CashboxOut(id=row.id, name=payload.name, currency_id=payload.currency_id,
                       balance=row.balance, is_active=row.is_active,
-                      warehouse_id=payload.warehouse_id)
+                      warehouse_id=payload.warehouse_id, kind=payload.kind)
 
 
 @router.put("/cashboxes/{cid}")
@@ -151,11 +152,11 @@ async def update_cashbox(
         if not wh_check.first():
             raise HTTPException(422, "warehouse_id does not belong to your organization")
     res = await db.execute(
-        text("UPDATE cashboxes SET name=:n, currency_id=:c, responsible_id=:r, warehouse_id=:w "
+        text("UPDATE cashboxes SET name=:n, currency_id=:c, responsible_id=:r, warehouse_id=:w, kind=:k "
              "WHERE id = :id AND organization_id = :o RETURNING id"),
         {"id": cid, "o": org_id, "n": payload.name, "c": payload.currency_id,
          "r": str(payload.responsible_id) if payload.responsible_id else None,
-         "w": payload.warehouse_id},
+         "w": payload.warehouse_id, "k": payload.kind},
     )
     if not res.scalar():
         raise HTTPException(status.HTTP_404_NOT_FOUND)
@@ -274,12 +275,13 @@ async def create_movement(
     )
     if not cb_check.first():
         raise HTTPException(422, "cashbox_id does not belong to your organization")
+    session_id = await get_active_session_id(db, payload.cashbox_id)
     res = await db.execute(
         text("INSERT INTO cash_movements ("
              "organization_id, cashbox_id, direction, amount, currency_id, rate, "
              "payment_type_id, customer_id, supplier_id, employee_id, sale_id, "
-             "description, created_by) "
-             "VALUES (:o, :cb, :dir, :amt, :cur, :rate, :pt, :cu, :su, :em, :sa, :d, :u) "
+             "description, created_by, cashbox_session_id) "
+             "VALUES (:o, :cb, :dir, :amt, :cur, :rate, :pt, :cu, :su, :em, :sa, :d, :u, :sess) "
              "RETURNING id, movement_date"),
         {"o": org_id, "cb": payload.cashbox_id, "dir": payload.direction,
          "amt": payload.amount, "cur": payload.currency_id, "rate": payload.rate,
@@ -288,7 +290,7 @@ async def create_movement(
          "su": str(payload.supplier_id) if payload.supplier_id else None,
          "em": str(payload.employee_id) if payload.employee_id else None,
          "sa": str(payload.sale_id) if payload.sale_id else None,
-         "d": payload.description, "u": user_id},
+         "d": payload.description, "u": user_id, "sess": session_id},
     )
     row = res.first()
 

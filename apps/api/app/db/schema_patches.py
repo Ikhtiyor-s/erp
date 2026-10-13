@@ -2335,6 +2335,12 @@ END $$
     # settings.md. NULL means the user has not set a PIN (pin-login stays
     # unavailable for them — no behavior change from before this column).
     """ALTER TABLE users ADD COLUMN IF NOT EXISTS pin_hash VARCHAR(255)""",
+
+    # PosPoint-parity: Kassa/Seyf/Bank 3-pog'onali hisob + smena
+    # yopilishida avto-inkassatsiya — docs/pospoint-pos/operations/
+    # finance.md. 'register' (default) = existing till behavior, no
+    # change for orgs that never create a 'safe' cashbox.
+    """ALTER TABLE cashboxes ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'register'""",
 ]
 
 # Enum value additions — must run outside a transaction (AUTOCOMMIT).

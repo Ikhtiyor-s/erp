@@ -165,6 +165,12 @@ export default function MobileCashbox() {
             <div className="flex justify-between"><span>Kirim:</span><span className="font-mono text-emerald-700">{fmt(lastClosed.totals?.total_income)}</span></div>
             <div className="flex justify-between"><span>Chiqim:</span><span className="font-mono text-rose-700">{fmt(lastClosed.totals?.total_expense)}</span></div>
             <div className="flex justify-between"><span>Yakuniy qoldiq:</span><span className="font-mono">{fmt(lastClosed.session?.closed_balance)}</span></div>
+            {lastClosed.totals?.inkassatsiya && (
+              <div className="flex justify-between text-amber-700 dark:text-amber-500">
+                <span>Avto-inkassatsiya (Seyfga):</span>
+                <span className="font-mono">{fmt(lastClosed.totals.inkassatsiya.amount)}</span>
+              </div>
+            )}
           </div>
           <button onClick={printLastClosed} disabled={printing}
             className="w-full py-2.5 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg font-medium flex items-center justify-center gap-2">
