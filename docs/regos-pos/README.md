@@ -51,7 +51,6 @@ tepasida).
 - [`operations/cash-journal.md`](operations/cash-journal.md) — kassa jurnali
 - [`operations/hot-keys.md`](operations/hot-keys.md) — tezkor tugmalar to'liq ro'yxati
 - [`operations/additional-functions.md`](operations/additional-functions.md) — chegirma, sotuvchi, kassa harakati, mijoz kartasi, buyurtma, tarozi
-- [`merchant-admin.md`](merchant-admin.md) — ⚠️ boshqa ilova sirti: kassir ekrani emas, REGOS'ning savdogar/egasi uchun mobil ilovasi (APK statik tahlili, 2026-10-14)
 
 ## Umumiy holat (2026-10-13)
 
@@ -86,11 +85,8 @@ tiklanmaydi, `saleId` hech qachon frontend state'ga tushmaydi) real
 chidamlilik (resilience) savoli sifatida qayd etiladi, kelajakda chuqur
 tekshirish uchun. Kod o'zgartirilmadi — hozircha faqat kuzatuv.
 
-## Alohida ilova sirti: merchant-admin mobil ilova (2026-10-14)
-
-Yuqoridagi hamma narsa REGOS'ning **kassir ekrani**ga tegishli. REGOS'da
-yana **alohida mobil ilova** bor — `online.regos.app`, savdogar/egasi
-masofadan sotuv/hisobotlarni kuzatishi uchun (push-bildirishnoma, chat,
-"bitim"/CRM, vazifa boshqaruvi). Bu ilova APK darajasida statik tahlil
-qilindi (rasmiy docs.regos.uz hujjati emas — ishonchlilik darajasi
-pastroq, hujjatning o'zida aniq belgilangan). To'liq: [`merchant-admin.md`](merchant-admin.md).
+> **Eslatma (2026-10-14):** REGOS'ning savdogar/egasi uchun mobil ilovasi
+> (`online.regos.app` APK tahlili) va veb back-office (`regos-online`) bo'yicha
+> tadqiqot bu papkadan Biznes POS repo'siga (`D:\Docker\projects\pos\docs\
+> regos-admin-research\`) ko'chirildi — bu Aniq ERP'ning emas, Biznes POS'ning
+> o'z merchant-mobile admin ilovasi uchun mo'ljallangan, erp bilan aralashmasin.
