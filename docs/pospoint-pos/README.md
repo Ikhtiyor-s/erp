@@ -63,7 +63,7 @@ loyihasida bor va u Aniq ERP bilan birlashtirilmaydi).
 | Sozlamalar — manfiy qoldiq siyosati (3 variant) | ✅ qurildi 2026-10-14, API orqali sinaldi |
 | Sozlamalar — katalog ko'rinish rejimi (dorixona/yengillashtirilgan) | ❌ yo'q |
 | Sozlamalar — PIN bilan tezkor kirish | ✅ qurildi 2026-10-14 (set-pin/pin-login, 2FA bilan mos kelmaydi — ataylab) |
-| Multivalyuta (so'm+USD, aralash to'lov) | ❌ yo'q — `currency_id` mahsulotda bor, lekin POS ekranida ikki-valyutali narx ko'rsatish/aralash to'lov yo'q |
+| Multivalyuta (so'm+USD) | ⚠️ ataylab faqat-ko'rsatish darajasida qurildi 2026-10-14 (foydalanuvchi tanlovi) — aralash to'lov yo'q |
 | Ulgurji narxlar (ikki narxli rejim) | ✅ qurildi 2026-10-14, API orqali sinaldi |
 | Mahsulot variantlari (o'lcham/rang) | ✅ generik shaklda bor (`products.is_variant` + `parent_id`), lekin PosPoint'dagi kabi aniq "attribut" (o'lcham, rang) tizimi emas — erkin parent-child bog'lanish |
 | EDO (Didox) integratsiyasi | ✅ bor (`apps/api/app/modules/integration/didox.py`) — bu yerda Aniq ERP PosPoint'dan **oldinda emas, barobar** |
@@ -86,21 +86,20 @@ loyihasida bor va u Aniq ERP bilan birlashtirilmaydi).
 - Markirovka kodi tekshirish — ikkalasida ham tilga olingan, Aniq ERP'da ❌ yo'q (REGOS hujjatida ham gap sifatida qayd etilgan).
 - Tarozi bilan ishlash — ikkalasida ham bor, Aniq ERP'da ⚠️ qisman (REGOS hujjatida batafsil yozilgan: nol/tara yo'q).
 
-## Keyingi qadam (faqat xarita — ticket emas)
+## Holat (2026-10-14) — barcha 5 band yakunlandi
 
-Eng ko'zga tashlanadigan, REGOS hujjatlarida bo'lmagan yangi gap'lar
-ustuvorlik tartibida (lekin bu ro'yxat hali tasdiqlanmagan — foydalanuvchi
-qaysi birini xohlashini ayting):
+Yuqoridagi "Keyingi qadam" ro'yxati (2026-10-13) foydalanuvchining
+"reja tuzib ketma ket bajar" ko'rsatmasi bo'yicha to'liq bajarildi,
+har biri alohida commit+push, production'da API orqali sinaldi:
 
-1. Ulgurji narxlar (ikki narxli rejim) — agar mijozlarda optom savdo
-   bo'lsa, bu alohida ticket talab qiladi (`products` jadvaliga ikkinchi
-   narx ustuni + POS'da rejim-almashtirgich).
-2. Multivalyuta (so'm+USD) — katta ish, alohida arxitektura qarori talab
-   qiladi (hisob-kitob, hisobotlar ikki valyutada).
-3. Moliya: Seyf pog'onasi + smena-yopilishida avtomatik inkassatsiya
-   hisob-kitobi — mavjud `cash_movements` arxitekturasini kengaytirish
-   bilan nisbatan kichik ish.
-4. Sozlamalar: manfiy qoldiq siyosatini UI-sozlanadigan 3-variantli
-   qilish (hozir kod darajasida ikkilik).
-5. PIN bilan tezkor kirish — kassir almashinuvini tezlashtiradi, lekin
-   xavfsizlik ta'sirini alohida ko'rib chiqish kerak.
+1. ✅ Mijoz qarz limiti + tug'ilgan kun.
+2. ✅ Ulgurji narxlar (ikki narxli rejim, POS'da almashtirgich).
+3. ✅ Sozlamalar: manfiy qoldiq siyosati (3 variant) + PIN tezkor kirish.
+4. ✅ Moliya: Kassa/Seyf/Bank 3-pog'onali balans + smena-yopilishida
+   avtomatik inkassatsiya (yo'lda `cashbox_session_id` hech qachon
+   to'ldirilmagan haqiqiy bug ham topildi va tuzatildi).
+5. ⚠️ Multivalyuta — foydalanuvchi ataylab **faqat-ko'rsatish**
+   darajasini tanladi (to'liq aralash-to'lov emas, pul hisob-kitobi
+   xato-xavfi yuqori deb baholandi). Qolgan chuqurroq daraja —
+   [`operations/multicurrency.md`](operations/multicurrency.md)dagi
+   "Keyingi qadam"da.

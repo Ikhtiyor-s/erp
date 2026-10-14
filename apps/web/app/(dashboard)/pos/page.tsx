@@ -99,6 +99,12 @@ export default function PosPage() {
   const [wholesaleEnabled, setWholesaleEnabled] = useState(false);
   const [wholesaleMode, setWholesaleMode] = useState(false);
   const [negativeStockPolicy, setNegativeStockPolicy] = useState<string | null>(null);
+  // PosPoint-parity multivalyuta — docs/pospoint-pos/operations/
+  // multicurrency.md. Display-only (user's explicit choice): shows a
+  // secondary currency-equivalent next to so'm amounts, payment stays
+  // single-currency. null = disabled or no rate available.
+  const [extraCurrencyCode, setExtraCurrencyCode] = useState<string | null>(null);
+  const [extraCurrencyRate, setExtraCurrencyRate] = useState<number | null>(null);
   const [paymentTypes, setPaymentTypes] = useState<PaymentTypeItem[]>([]);
   const [loyaltyBalance, setLoyaltyBalance] = useState<number | null>(null);
   // REGOS-style incremental payment panel state — see RG-7.
@@ -210,7 +216,27 @@ export default function PosPage() {
       .get<{ value?: { negative_stock_policy?: string } }>("/settings/key/warehouse")
       .then((r) => setNegativeStockPolicy(r.data?.value?.negative_stock_policy || null))
       .catch(() => {});
+    api
+      .get<{ value?: { enabled?: boolean; currency_code?: string } }>("/settings/key/multicurrency")
+      .then(async (r) => {
+        const cfg = r.data?.value;
+        if (!cfg?.enabled || !cfg.currency_code) return;
+        const rates = (await api.get<{ code: string; rate: number | null }[]>(
+          "/reference/currencies/rates/latest"
+        )).data;
+        const match = rates.find((x) => x.code === cfg.currency_code);
+        if (match?.rate) {
+          setExtraCurrencyCode(cfg.currency_code);
+          setExtraCurrencyRate(Number(match.rate));
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  function fmtExtra(somAmount: number): string | null {
+    if (!extraCurrencyRate) return null;
+    return `≈ ${(somAmount / extraCurrencyRate).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ${extraCurrencyCode}`;
+  }
 
   // RG-6 fold-in: loyalty balance is only relevant once a customer is attached
   // to the sale via the existing customer select below — no new selection
@@ -1010,6 +1036,11 @@ export default function PosPage() {
               ) : (
                 "(CHAKANA NARX)"
               )}
+              {extraCurrencyRate && (
+                <span className="font-normal normal-case text-ink-400 float-right mr-3">
+                  1 {extraCurrencyCode} = {fmt(extraCurrencyRate)} so'm
+                </span>
+              )}
               {now && (
                 <span className="font-normal normal-case text-ink-400 float-right">
                   {now.toLocaleDateString("uz-UZ")} {now.toLocaleTimeString("uz-UZ")}
@@ -1065,6 +1096,9 @@ export default function PosPage() {
                   >
                     {fmt(remainingDue)}
                   </div>
+                  {fmtExtra(remainingDue) && (
+                    <div className="text-[11px] text-ink-400 font-mono">{fmtExtra(remainingDue)}</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1192,8 +1226,13 @@ export default function PosPage() {
                   {fmt(linePrice(lastAddedLine.product, wholesaleMode) * lastAddedLine.qty)}
                 </span>
               </div>
-              <div className="text-[11px] text-ink-400 mt-0.5">
-                Kod: {lastAddedLine.product.sku || "—"}
+              <div className="text-[11px] text-ink-400 mt-0.5 flex items-center justify-between">
+                <span>Kod: {lastAddedLine.product.sku || "—"}</span>
+                {fmtExtra(linePrice(lastAddedLine.product, wholesaleMode) * lastAddedLine.qty) && (
+                  <span className="font-mono">
+                    {fmtExtra(linePrice(lastAddedLine.product, wholesaleMode) * lastAddedLine.qty)}
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -1255,6 +1294,11 @@ export default function PosPage() {
                       </td>
                       <td className="px-2 py-2 text-right font-mono font-semibold text-ink-900 dark:text-ink-100">
                         {fmt(linePrice(c.product, wholesaleMode) * c.qty)}
+                        {fmtExtra(linePrice(c.product, wholesaleMode) * c.qty) && (
+                          <div className="text-[10px] font-normal text-ink-400">
+                            {fmtExtra(linePrice(c.product, wholesaleMode) * c.qty)}
+                          </div>
+                        )}
                       </td>
                       <td className="px-1">
                         <Button

@@ -23,33 +23,42 @@ Ikki valyutada ishlash: so'm (asosiy) + AQSH dollari (qo'shimcha).
 
 ## Aniq ERP holati
 
-⚠️ **Faqat ma'lumot darajasida bor, operatsion darajada yo'q.**
+⚠️ **Ataylab cheklangan: faqat ko'rsatish (2026-10-14, foydalanuvchi
+tanlovi).** To'liq PosPoint-parity (narx-modelini ikki-valyutali qilish,
+aralash-to'lov hisob-kitobi) yuqori xato-xavfiga ega (pul hisob-kitobi)
+deb baholandi — foydalanuvchi "faqat ko'rsatish (soddaroq, xavfsizroq)"
+variantini tanladi.
 
-- `products.currency_id` ustuni bor — mahsulotga bitta valyuta
-  biriktirish mumkin (`warehouse/products/page.tsx`dagi "Valyuta"
-  maydoni).
-- `finance/currency` sahifasi bor — valyuta kurslarini boshqarish
-  uchun spravochnik.
-- ❌ POS ekranida (`pos/page.tsx`) narxni **ikki valyutada bir vaqtda**
-  ko'rsatish yo'q — har bir mahsulot faqat o'zining `currency_id`si
-  bilan bog'langan bitta narxda ko'rinadi.
-- ❌ To'lov oynasida **aralash to'lov (ikki valyutada bir chekka)**
-  imkoniyati yo'q — `pos/page.tsx`dagi to'lov-turlari ro'yxati bitta
-  umumiy summa va bitta tanlangan to'lov-usuli bilan ishlaydi.
-- ❌ Operatsiya-turi bo'yicha (faqat sotish / faqat xarid / ikkalasi)
-  multivalyuta qamrovini sozlash imkoniyati yo'q — bunday rejim
-  tushunchasi umuman yo'q.
-- ❌ Analitika/hisobotlarda ikki-valyutali ko'rsatish (SO'M↔USD
-  switch) topilmadi.
+Qurilgani:
+- `/settings/multicurrency` — org darajasida yoqish/o'chirish +
+  qo'shimcha valyuta kodi (masalan "USD"). Backend o'zgarishi kerak
+  emas edi — mavjud umumiy `/settings/key/*` va allaqachon to'liq
+  qurilgan `/reference/currencies/rates/latest` (CBU import bilan
+  birga) orqali ishlaydi.
+- POS'da (`pos/page.tsx`): yoqilgan bo'lsa, sarlavha satrida joriy kurs
+  ("1 USD = 12 650 so'm"), TO'LOVGA summasi, savatdagi har bir qator va
+  oxirgi qo'shilgan mahsulot tagida qo'shimcha valyutadagi taxminiy
+  ekvivalent (`≈ $X.XX`) ko'rsatiladi. Agar tanlangan valyutaning kursi
+  hali kiritilmagan bo'lsa — hech narsa ko'rsatilmaydi (xato emas,
+  shunchaki yashirin).
+
+❌ Hali yo'q (ataylab, foydalanuvchi tanloviga ko'ra): aralash to'lov
+(bir qismi so'mda, bir qismi USD'da bitta chekda), mahsulot-darajasida
+ikkinchi narx, operatsiya-turi bo'yicha qamrov sozlamasi, hisobotlarda
+ikki-valyutali ko'rsatish. To'lov va hisob-kitob hamon to'liq bitta
+(baza) valyutada — bu borada xatti-harakat o'zgarmadi.
+
+Production'da API orqali sinaldi: sozlama o'qish/yozish ishlaydi;
+`/reference/currencies/rates/latest` to'g'ri javob beradi (hozircha
+production'da hech qaysi valyuta uchun kurs kiritilmagan — bu kurslar
+faqat superadmin tomonidan kiritiladi/CBU'dan import qilinadi, POS
+kodi buni to'g'ri "kurs yo'q" holati sifatida aniqlab, ko'rsatmay
+qoladi — xato bermaydi).
 
 ## Keyingi qadam
 
-Bu **butunlay yangi funksiya klassi** — na REGOS, na hozirgi Aniq ERP
-arxitekturasida bunday chuqurlikda yo'q. Agar foydalanuvchining
-mijozlarida chet-el valyutasida (odatda USD) savdo haqiqatan kerak
-bo'lsa (masalan qurilish materiallari sohasida, PosPoint buni "Qurilish
-do'koni" uchun tavsiya qiladi), bu alohida arxitektura qarori va
-ko'proq ishni talab qiladi: narx-modelini ikki-valyutali qilish, POS
-UI'da parallel narx ko'rsatish, aralash-to'lov hisob-kitobi, hisobotlarni
-ikki valyutada chiqarish. Past-o'rtacha ustuvorlik — faqat aniq
-biznes-ehtiyoj tasdiqlansa boshlanishi kerak.
+Agar kelajakda to'liq aralash-to'lov va ikki-valyutali narx-model
+kerak bo'lsa — bu alohida, kattaroq qaror bo'lib qoladi (narx-modelini
+qayta qurish, to'lov hisob-kitobini qattiq test qilish talab etiladi).
+Hozirgi "faqat ko'rsatish" qatlami shu kattaroq ishga to'sqinlik
+qilmaydi — ustiga qurilishi mumkin.
