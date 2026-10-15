@@ -31,6 +31,33 @@ router = APIRouter(tags=["mobile"])
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Polymorphic entity_type -> owning table, used to verify an entity_id belongs
+# to the caller's organization before tagging/custom-field writes (entity_tags
+# and custom_field_values carry no organization_id column of their own).
+ENTITY_ORG_TABLES: dict[str, str] = {
+    "product": "products",
+    "customer": "customers",
+    "supplier": "suppliers",
+    "employee": "employees",
+    "sale": "sales",
+}
+
+
+async def _assert_entity_in_org(db: AsyncSession, entity_type: str, entity_id: str, org_id: str) -> None:
+    table = ENTITY_ORG_TABLES.get(entity_type)
+    if not table:
+        raise HTTPException(400, "Noma'lum entity_type")
+    try:
+        UUID(entity_id)
+    except ValueError:
+        raise HTTPException(400, "Noto'g'ri entity_id")
+    res = await db.execute(
+        text(f"SELECT 1 FROM {table} WHERE id = CAST(:i AS uuid) AND organization_id = :o"),
+        {"i": entity_id, "o": org_id},
+    )
+    if not res.scalar():
+        raise HTTPException(404, "Obyekt topilmadi")
+
 
 # =========================================================
 # TAGS
@@ -95,12 +122,14 @@ async def delete_tag(
 async def get_entity_tags(
     entity_type: str, entity_id: str,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
+    await _assert_entity_in_org(db, entity_type, entity_id, org_id)
     res = await db.execute(
         text("SELECT t.id, t.name, t.color FROM tags t "
              "JOIN entity_tags et ON et.tag_id = t.id "
-             "WHERE et.entity_type = :et AND et.entity_id = :ei"),
-        {"et": entity_type, "ei": entity_id},
+             "WHERE et.entity_type = :et AND et.entity_id = :ei AND t.organization_id = :o"),
+        {"et": entity_type, "ei": entity_id, "o": org_id},
     )
     return [dict(r._mapping) for r in res]
 
@@ -113,7 +142,9 @@ class EntityTagsSet(BaseModel):
 async def set_entity_tags(
     entity_type: str, entity_id: str, payload: EntityTagsSet,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
+    await _assert_entity_in_org(db, entity_type, entity_id, org_id)
     await db.execute(
         text("DELETE FROM entity_tags WHERE entity_type=:et AND entity_id=:ei"),
         {"et": entity_type, "ei": entity_id},
@@ -121,8 +152,10 @@ async def set_entity_tags(
     for tid in payload.tag_ids:
         await db.execute(
             text("INSERT INTO entity_tags (tag_id, entity_type, entity_id) "
-                 "VALUES (:t, :et, :ei) ON CONFLICT DO NOTHING"),
-            {"t": tid, "et": entity_type, "ei": entity_id},
+                 "SELECT :t, :et, :ei WHERE EXISTS "
+                 "(SELECT 1 FROM tags WHERE id = :t AND organization_id = :o) "
+                 "ON CONFLICT DO NOTHING"),
+            {"t": tid, "et": entity_type, "ei": entity_id, "o": org_id},
         )
     await db.commit()
     return {"ok": True}
@@ -219,8 +252,16 @@ async def get_cfv(
 async def set_cfv(
     entity_type: str, entity_id: str, payload: CustomFieldValuesIn,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
+    await _assert_entity_in_org(db, entity_type, entity_id, org_id)
     for fid, val in payload.values.items():
+        owns = await db.execute(
+            text("SELECT 1 FROM custom_fields WHERE id = :f AND organization_id = :o AND entity_type = :et"),
+            {"f": fid, "o": org_id, "et": entity_type},
+        )
+        if not owns.scalar():
+            continue
         if val is None or val == "":
             await db.execute(
                 text("DELETE FROM custom_field_values WHERE field_id=:f AND entity_type=:et AND entity_id=:ei"),
@@ -339,19 +380,26 @@ class PayInstallmentIn(BaseModel):
 async def pay_installment(
     pid: UUID, payload: PayInstallmentIn,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
+    chk = await db.execute(
+        text("SELECT id FROM installment_plans WHERE id = :pid AND organization_id = :o"),
+        {"pid": str(pid), "o": org_id},
+    )
+    if not chk.scalar():
+        raise HTTPException(404, "Reja topilmadi")
     await db.execute(
         text("UPDATE installment_schedules SET paid_amount = paid_amount + :a, "
              "paid_at = NOW(), "
              "status = CASE WHEN paid_amount + :a >= amount THEN 'paid' ELSE 'partial' END "
-             "WHERE id = :sid"),
-        {"a": payload.amount, "sid": payload.schedule_id},
+             "WHERE id = :sid AND plan_id = :pid"),
+        {"a": payload.amount, "sid": payload.schedule_id, "pid": str(pid)},
     )
     await db.execute(
         text("UPDATE installment_plans SET paid_amount = paid_amount + :a, "
              "status = CASE WHEN paid_amount + :a >= total_amount THEN 'completed' ELSE status END "
-             "WHERE id = :pid"),
-        {"a": payload.amount, "pid": str(pid)},
+             "WHERE id = :pid AND organization_id = :o"),
+        {"a": payload.amount, "pid": str(pid), "o": org_id},
     )
     await db.commit()
     return {"ok": True}
@@ -442,6 +490,12 @@ async def open_session(
     org_id: str = Depends(get_current_org_id),
     user_id: str = Depends(get_current_user_id),
 ):
+    cb = await db.execute(
+        text("SELECT id FROM cashboxes WHERE id = :c AND organization_id = :o"),
+        {"c": s.cashbox_id, "o": org_id},
+    )
+    if not cb.scalar():
+        raise HTTPException(404, "Kassa topilmadi")
     chk = await db.execute(
         text("SELECT id FROM cashbox_sessions WHERE cashbox_id = :c AND status = 'open'"),
         {"c": s.cashbox_id},
@@ -679,11 +733,22 @@ async def ticket_detail(
     return data
 
 
+async def _assert_ticket_in_org(db: AsyncSession, tid: UUID, org_id: str) -> None:
+    chk = await db.execute(
+        text("SELECT id FROM open_tickets WHERE id = :t AND organization_id = :o"),
+        {"t": str(tid), "o": org_id},
+    )
+    if not chk.scalar():
+        raise HTTPException(404, "Chek topilmadi")
+
+
 @router.post("/open-tickets/{tid}/items")
 async def add_ticket_item(
     tid: UUID, item: TicketItemIn,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
+    await _assert_ticket_in_org(db, tid, org_id)
     await db.execute(
         text("INSERT INTO open_ticket_items (ticket_id, product_id, quantity, price, discount, notes) "
              "VALUES (:t, :p, :q, :pr, :d, :n)"),
@@ -704,7 +769,9 @@ async def add_ticket_item(
 async def remove_ticket_item(
     tid: UUID, iid: int,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
+    await _assert_ticket_in_org(db, tid, org_id)
     await db.execute(
         text("DELETE FROM open_ticket_items WHERE id = :i AND ticket_id = :t"),
         {"i": iid, "t": str(tid)},
@@ -723,11 +790,15 @@ async def remove_ticket_item(
 async def close_ticket(
     tid: UUID,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
-    await db.execute(
-        text("UPDATE open_tickets SET status = 'closed', closed_at = NOW() WHERE id = :t"),
-        {"t": str(tid)},
+    res = await db.execute(
+        text("UPDATE open_tickets SET status = 'closed', closed_at = NOW() "
+             "WHERE id = :t AND organization_id = :o RETURNING id"),
+        {"t": str(tid), "o": org_id},
     )
+    if not res.scalar():
+        raise HTTPException(404, "Chek topilmadi")
     await db.commit()
     return {"ok": True}
 
@@ -882,18 +953,23 @@ class VisitCheckOutIn(BaseModel):
 async def visit_check_out(
     vid: UUID, payload: VisitCheckOutIn,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
-    await db.execute(
+    res = await db.execute(
         text("UPDATE visits SET check_out_at = NOW(), check_out_lat = :lat, check_out_lng = :lng, "
-             "comment = :c, sale_id = :s, status = 'completed' WHERE id = :i"),
+             "comment = :c, sale_id = :s, status = 'completed' "
+             "WHERE id = :i AND organization_id = :o RETURNING planned_visit_id"),
         {"lat": payload.lat, "lng": payload.lng, "c": payload.comment,
-         "s": str(payload.sale_id) if payload.sale_id else None, "i": str(vid)},
+         "s": str(payload.sale_id) if payload.sale_id else None, "i": str(vid), "o": org_id},
     )
-    await db.execute(
-        text("UPDATE planned_visits SET status = 'completed' "
-             "WHERE id = (SELECT planned_visit_id FROM visits WHERE id = :i)"),
-        {"i": str(vid)},
-    )
+    row = res.first()
+    if not row:
+        raise HTTPException(404, "Tashrif topilmadi")
+    if row.planned_visit_id:
+        await db.execute(
+            text("UPDATE planned_visits SET status = 'completed' WHERE id = :i"),
+            {"i": str(row.planned_visit_id)},
+        )
     await db.commit()
     return {"ok": True}
 
@@ -940,7 +1016,14 @@ class VisitPhotoIn(BaseModel):
 async def add_visit_photo(
     vid: UUID, p: VisitPhotoIn,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
+    chk = await db.execute(
+        text("SELECT id FROM visits WHERE id = :v AND organization_id = :o"),
+        {"v": str(vid), "o": org_id},
+    )
+    if not chk.scalar():
+        raise HTTPException(404, "Tashrif topilmadi")
     await db.execute(
         text("INSERT INTO visit_photos (visit_id, photo_url, photo_type, notes) "
              "VALUES (:v, :u, :t, :n)"),
@@ -1042,10 +1125,17 @@ async def get_courier_track(
     emp_id: UUID,
     hours: int = Query(8, le=48),
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
+    chk = await db.execute(
+        text("SELECT id FROM employees WHERE id = :e AND organization_id = :o"),
+        {"e": str(emp_id), "o": org_id},
+    )
+    if not chk.scalar():
+        raise HTTPException(404, "Xodim topilmadi")
     res = await db.execute(
         text("SELECT lat, lng, captured_at, accuracy_m, speed_kmh FROM courier_locations "
-             "WHERE employee_id = :e AND captured_at > NOW() - INTERVAL ':h hours' "
+             "WHERE employee_id = :e AND captured_at > NOW() - (:h * INTERVAL '1 hour') "
              "ORDER BY captured_at"),
         {"e": str(emp_id), "h": hours},
     )
@@ -1128,15 +1218,18 @@ class DeliveryStatusIn(BaseModel):
 async def update_delivery_status(
     did: UUID, payload: DeliveryStatusIn,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
     delivered = ", delivered_at = NOW()" if payload.status == "delivered" else ""
-    await db.execute(
+    res = await db.execute(
         text(f"UPDATE delivery_orders SET status = :s, "
              f"courier_id = COALESCE(:cr, courier_id) {delivered} "
-             f"WHERE id = :i"),
+             f"WHERE id = :i AND organization_id = :o RETURNING id"),
         {"s": payload.status, "cr": str(payload.courier_id) if payload.courier_id else None,
-         "i": str(did)},
+         "i": str(did), "o": org_id},
     )
+    if not res.scalar():
+        raise HTTPException(404, "Yetkazib berish topilmadi")
     await db.commit()
     return {"ok": True}
 
@@ -1181,6 +1274,19 @@ async def unregister_push_token(
     )
     await db.commit()
     return {"ok": True}
+
+
+@router.get("/push/devices")
+async def list_push_devices(
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
+    res = await db.execute(
+        text("SELECT id, platform, device_label, last_used_at, created_at "
+             "FROM push_tokens WHERE user_id = :u ORDER BY last_used_at DESC"),
+        {"u": user_id},
+    )
+    return [dict(r._mapping) for r in res]
 
 
 # =========================================================
@@ -1284,11 +1390,22 @@ async def create_pos_page(
     return {"id": res.scalar()}
 
 
+async def _assert_pos_page_in_org(db: AsyncSession, pid: int, org_id: str) -> None:
+    chk = await db.execute(
+        text("SELECT id FROM pos_pages WHERE id = :p AND organization_id = :o"),
+        {"p": pid, "o": org_id},
+    )
+    if not chk.scalar():
+        raise HTTPException(404, "Sahifa topilmadi")
+
+
 @router.get("/pos-pages/{pid}/items")
 async def get_page_items(
     pid: int,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
+    await _assert_pos_page_in_org(db, pid, org_id)
     res = await db.execute(
         text("SELECT ppi.*, p.name, p.sku, p.sale_price, p.image_url FROM pos_page_items ppi "
              "JOIN products p ON p.id = ppi.product_id "
@@ -1306,7 +1423,9 @@ class PosPageItemsIn(BaseModel):
 async def set_page_items(
     pid: int, payload: PosPageItemsIn,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
+    await _assert_pos_page_in_org(db, pid, org_id)
     await db.execute(text("DELETE FROM pos_page_items WHERE page_id = :p"), {"p": pid})
     for i, prod_id in enumerate(payload.product_ids):
         await db.execute(
@@ -1450,11 +1569,12 @@ async def ocr_extract(
 async def list_attachments(
     entity_type: str, entity_id: str,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
     res = await db.execute(
         text("SELECT * FROM file_attachments WHERE entity_type = :et AND entity_id = :ei "
-             "ORDER BY created_at DESC"),
-        {"et": entity_type, "ei": entity_id},
+             "AND organization_id = :o ORDER BY created_at DESC"),
+        {"et": entity_type, "ei": entity_id, "o": org_id},
     )
     return [dict(r._mapping) for r in res]
 
@@ -1488,7 +1608,13 @@ async def add_attachment(
 async def delete_attachment(
     aid: int,
     db: AsyncSession = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
-    await db.execute(text("DELETE FROM file_attachments WHERE id = :i"), {"i": aid})
+    res = await db.execute(
+        text("DELETE FROM file_attachments WHERE id = :i AND organization_id = :o RETURNING id"),
+        {"i": aid, "o": org_id},
+    )
+    if not res.scalar():
+        raise HTTPException(404, "Fayl topilmadi")
     await db.commit()
     return {"ok": True}
