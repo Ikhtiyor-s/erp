@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # If empty, a dev-only key is derived from SECRET_KEY (NOT for production).
     SECRETS_FERNET_KEY: str = ""
 
+    BARCODE_KATALOG_BASE_URL: str = ""
+    BARCODE_KATALOG_API_KEY: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import text
@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_user_id, get_current_org_id
 from app.modules.rbac.deps import require_permission, get_user_permissions
 from app.modules.accounting.posting import JournalLine, post_journal_entry, get_default_account_id
+from app.modules.warehouse import barcode_katalog_client
 
 log = logging.getLogger(__name__)
 from app.modules.warehouse.service import (
@@ -378,7 +379,9 @@ async def _sync_product_extras(db: AsyncSession, org_id: str, pid: str, p: Produ
 
 @router.post("/products", status_code=status.HTTP_201_CREATED)
 async def create_product(
-    p: ProductIn, db: AsyncSession = Depends(get_db),
+    p: ProductIn,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
     org_id: str = Depends(get_current_org_id),
 ):
     await _validate_cell_org(db, org_id, p.default_cell_id)
@@ -398,6 +401,10 @@ async def create_product(
     )
     await _sync_product_extras(db, org_id, str(pid), p)
     await db.commit()
+    if p.barcode:
+        background_tasks.add_task(
+            barcode_katalog_client.contribute, p.barcode, p.name, org_id
+        )
     return {"id": str(pid)}
 
 
@@ -3582,9 +3589,28 @@ async def barcode_lookup(
         {"bc": q, "o": org_id},
     )
     row = res.first()
-    if not row:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Mahsulot topilmadi")
-    return dict(row._mapping)
+    if row:
+        result = dict(row._mapping)
+        result["source"] = "local"
+        return result
+
+    shared = await barcode_katalog_client.lookup(q)
+    if shared:
+        return {
+            "id": None,
+            "name": shared.get("name"),
+            "sku": None,
+            "barcode": shared.get("barcode") or q,
+            "sale_price": None,
+            "purchase_price": None,
+            "unit_id": None,
+            "unit_name": None,
+            "source": "shared_catalog",
+            "brand": shared.get("brand"),
+            "mxik": shared.get("mxik_code"),
+        }
+
+    raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Mahsulot topilmadi")
 
 
 # =========================================================
