@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/statistics_service.dart';
 import '../../utils/dio_error.dart';
+import '../../widgets/zebra_tile.dart';
 
 DateTimeRange _defaultRange() {
   final now = DateTime.now();
@@ -140,25 +141,36 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            for (final row in _rows)
-              Card(
-                child: ListTile(
-                  title: Text(_fmtDay(row.day)),
-                  subtitle: Text('${row.salesCount} ta savdo · to\'langan ${formatMoney(row.paid)} so\'m'),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text('${formatMoney(row.revenue)} so\'m'),
-                      if (row.debt > 0)
-                        Text(
-                          'qarz: ${formatMoney(row.debt)}',
-                          style: const TextStyle(color: Colors.red, fontSize: 11),
+            Card(
+              clipBehavior: Clip.antiAlias,
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  for (var i = 0; i < _rows.length; i++)
+                    ZebraTile(
+                      index: i,
+                      child: ListTile(
+                        title: Text(_fmtDay(_rows[i].day)),
+                        subtitle: Text(
+                          '${_rows[i].salesCount} ta savdo · to\'langan ${formatMoney(_rows[i].paid)} so\'m',
                         ),
-                    ],
-                  ),
-                ),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text('${formatMoney(_rows[i].revenue)} so\'m'),
+                            if (_rows[i].debt > 0)
+                              Text(
+                                'qarz: ${formatMoney(_rows[i].debt)}',
+                                style: const TextStyle(color: Colors.red, fontSize: 11),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
+            ),
           ],
         ],
       ),

@@ -186,7 +186,7 @@ class _CategoryEditScreenState extends State<CategoryEditScreen> {
           ),
           const SizedBox(height: 16),
           if (canEdit)
-            ElevatedButton(
+            FilledButton(
               onPressed: _saving ? null : _save,
               child: _saving
                   ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))

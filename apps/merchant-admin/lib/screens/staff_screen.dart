@@ -5,6 +5,7 @@ import '../services/staff_service.dart';
 import '../services/till_shift_service.dart';
 import '../utils/dio_error.dart';
 import '../widgets/permission_gate.dart';
+import '../widgets/zebra_tile.dart';
 
 const _kRunStatusLabels = {
   'draft': 'Qoralama',
@@ -150,33 +151,36 @@ class _EmployeesTabState extends State<_EmployeesTab> {
         itemBuilder: (context, i) {
           final e = employees[i];
           final busy = _busyEmployeeId == e.id;
-          return ListTile(
-            leading: const CircleAvatar(child: Icon(Icons.person_outline)),
-            title: Text(e.fullName),
-            subtitle: Text([
-              if (e.positionName != null) e.positionName!,
-              if (e.phone != null) e.phone!,
-            ].join(' · ')),
-            trailing: PermissionGate(
-              code: 'hr.create',
-              child: busy
-                  ? const SizedBox(
-                      width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          tooltip: 'Kelish',
-                          icon: const Icon(Icons.login),
-                          onPressed: () => _clockIn(e),
-                        ),
-                        IconButton(
-                          tooltip: 'Ketish',
-                          icon: const Icon(Icons.logout),
-                          onPressed: () => _clockOut(e),
-                        ),
-                      ],
-                    ),
+          return ZebraTile(
+            index: i,
+            child: ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.person_outline)),
+              title: Text(e.fullName),
+              subtitle: Text([
+                if (e.positionName != null) e.positionName!,
+                if (e.phone != null) e.phone!,
+              ].join(' · ')),
+              trailing: PermissionGate(
+                code: 'hr.create',
+                child: busy
+                    ? const SizedBox(
+                        width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Kelish',
+                            icon: const Icon(Icons.login),
+                            onPressed: () => _clockIn(e),
+                          ),
+                          IconButton(
+                            tooltip: 'Ketish',
+                            icon: const Icon(Icons.logout),
+                            onPressed: () => _clockOut(e),
+                          ),
+                        ],
+                      ),
+              ),
             ),
           );
         },
@@ -298,16 +302,19 @@ class _PayrollTabState extends State<_PayrollTab> {
           final periodLabel = period == null
               ? '-'
               : '${period.year}-${period.month.toString().padLeft(2, '0')}';
-          return ListTile(
-            title: Text(periodLabel),
-            subtitle: Text('${_kRunStatusLabels[r.status] ?? r.status} · ${r.employeeCount} xodim'),
-            trailing: Text(r.totalNet.toString()),
-            onTap: () async {
-              await Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => _PayrollRunDetailScreen(runId: r.id),
-              ));
-              _load();
-            },
+          return ZebraTile(
+            index: i,
+            child: ListTile(
+              title: Text(periodLabel),
+              subtitle: Text('${_kRunStatusLabels[r.status] ?? r.status} · ${r.employeeCount} xodim'),
+              trailing: Text(r.totalNet.toString()),
+              onTap: () async {
+                await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => _PayrollRunDetailScreen(runId: r.id),
+                ));
+                _load();
+              },
+            ),
           );
         },
       ),

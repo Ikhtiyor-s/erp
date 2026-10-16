@@ -6,6 +6,7 @@ import '../services/permissions_service.dart';
 import '../services/settings_service.dart';
 import '../state/auth_state.dart';
 import '../utils/dio_error.dart';
+import '../widgets/zebra_tile.dart';
 
 /// Push preference + registered-devices view, plus profile summary.
 /// DESIGN-merchant-admin.md §7: registration-only, no sender exists — the
@@ -150,13 +151,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     return Column(
       children: [
-        for (final d in devices)
-          ListTile(
-            leading: const Icon(Icons.phone_android_outlined),
-            title: Text(d.deviceLabel ?? d.platform ?? "Noma'lum qurilma"),
-            subtitle: d.lastUsedAt != null
-                ? Text('Oxirgi faollik: ${d.lastUsedAt!.toLocal().toString().substring(0, 16)}')
-                : null,
+        for (var i = 0; i < devices.length; i++)
+          ZebraTile(
+            index: i,
+            child: ListTile(
+              leading: const Icon(Icons.phone_android_outlined),
+              title: Text(devices[i].deviceLabel ?? devices[i].platform ?? "Noma'lum qurilma"),
+              subtitle: devices[i].lastUsedAt != null
+                  ? Text(
+                      'Oxirgi faollik: ${devices[i].lastUsedAt!.toLocal().toString().substring(0, 16)}')
+                  : null,
+            ),
           ),
       ],
     );

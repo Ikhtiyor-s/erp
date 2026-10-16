@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../services/orders_service.dart';
 import '../utils/dio_error.dart';
+import '../widgets/app_search_field.dart';
 import '../widgets/permission_gate.dart';
+import '../widgets/zebra_tile.dart';
 
 const _kStatusLabels = <String, String>{
   'confirmed': 'Tasdiqlangan',
@@ -96,14 +98,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
+                  child: AppSearchField(
                     controller: _searchController,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      hintText: 'Hujjat raqami, mijoz...',
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                    ),
+                    hintText: 'Hujjat raqami, mijoz...',
                     onSubmitted: (_) => _load(),
                   ),
                 ),
@@ -158,22 +155,25 @@ class _OrdersScreenState extends State<OrdersScreen> {
         itemCount: sales.length,
         itemBuilder: (context, i) {
           final s = sales[i];
-          return ListTile(
-            leading: CircleAvatar(
-              child: Text(
-                s.sourceType == 'sale_kiosk' ? 'K' : 'S',
-                style: const TextStyle(fontSize: 14),
+          return ZebraTile(
+            index: i,
+            child: ListTile(
+              leading: CircleAvatar(
+                child: Text(
+                  s.sourceType == 'sale_kiosk' ? 'K' : 'S',
+                  style: const TextStyle(fontSize: 14),
+                ),
               ),
+              title: Text(s.docNumber?.isNotEmpty == true ? s.docNumber! : s.uuidLabel),
+              subtitle: Text(
+                [
+                  if (s.customerName != null) s.customerName!,
+                  _statusLabel(s.displayStatus),
+                ].join(' · '),
+              ),
+              trailing: Text(_money(s.totalAmount, s.currencyCode)),
+              onTap: () => context.push('/orders/${s.id}'),
             ),
-            title: Text(s.docNumber?.isNotEmpty == true ? s.docNumber! : s.uuidLabel),
-            subtitle: Text(
-              [
-                if (s.customerName != null) s.customerName!,
-                _statusLabel(s.displayStatus),
-              ].join(' · '),
-            ),
-            trailing: Text(_money(s.totalAmount, s.currencyCode)),
-            onTap: () => context.push('/orders/${s.id}'),
           );
         },
       ),

@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/menu_service.dart';
 import '../../utils/dio_error.dart';
+import '../../widgets/app_search_field.dart';
 import '../../widgets/permission_gate.dart';
+import '../../widgets/zebra_tile.dart';
 
 class ProductListScreen extends StatefulWidget {
   const ProductListScreen({super.key});
@@ -188,15 +190,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: TextField(
+            child: AppSearchField(
               controller: _searchCtl,
+              hintText: 'Mahsulot nomi yoki SKU bo\'yicha qidirish',
               onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                hintText: 'Mahsulot nomi yoki SKU bo\'yicha qidirish',
-                prefixIcon: const Icon(Icons.search),
-                isDense: true,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
             ),
           ),
           if (_warehouses.length > 1 || _categories.isNotEmpty)
@@ -285,17 +282,20 @@ class _ProductListScreenState extends State<ProductListScreen> {
             );
           }
           final p = _products[index];
-          return ListTile(
-            leading: const CircleAvatar(
-              backgroundColor: Colors.transparent,
-              child: Icon(Icons.inventory_2_outlined, color: Colors.grey),
+          return ZebraTile(
+            index: index,
+            child: ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Colors.transparent,
+                child: Icon(Icons.inventory_2_outlined, color: Colors.grey),
+              ),
+              title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(_subtitleFor(p), maxLines: 1, overflow: TextOverflow.ellipsis),
+              trailing: p.isPublishedOnline
+                  ? const Icon(Icons.public, size: 18, color: Colors.green)
+                  : null,
+              onTap: () => context.push('/menu/products/${p.id}'),
             ),
-            title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text(_subtitleFor(p), maxLines: 1, overflow: TextOverflow.ellipsis),
-            trailing: p.isPublishedOnline
-                ? const Icon(Icons.public, size: 18, color: Colors.green)
-                : null,
-            onTap: () => context.push('/menu/products/${p.id}'),
           );
         },
       ),

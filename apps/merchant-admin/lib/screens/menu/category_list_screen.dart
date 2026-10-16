@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/menu_service.dart';
 import '../../utils/dio_error.dart';
 import '../../widgets/permission_gate.dart';
+import '../../widgets/zebra_tile.dart';
 
 class CategoryListScreen extends StatefulWidget {
   const CategoryListScreen({super.key});
@@ -103,18 +104,21 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
         itemBuilder: (context, index) {
           final c = _categories[index];
           final parentName = c.parentId != null ? byId[c.parentId]?.name : null;
-          return ListTile(
-            leading: const Icon(Icons.category_outlined, color: Colors.grey),
-            title: Text(c.name),
-            subtitle: parentName != null ? Text(parentName) : null,
-            trailing: PermissionGate(
-              code: 'warehouse.delete',
-              child: IconButton(
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () => _delete(c),
+          return ZebraTile(
+            index: index,
+            child: ListTile(
+              leading: const Icon(Icons.category_outlined, color: Colors.grey),
+              title: Text(c.name),
+              subtitle: parentName != null ? Text(parentName) : null,
+              trailing: PermissionGate(
+                code: 'warehouse.delete',
+                child: IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () => _delete(c),
+                ),
               ),
+              onTap: () => context.push('/menu/categories/${c.id}'),
             ),
-            onTap: () => context.push('/menu/categories/${c.id}'),
           );
         },
       ),

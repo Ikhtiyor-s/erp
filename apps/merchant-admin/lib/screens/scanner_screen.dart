@@ -158,7 +158,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
                     controller: _manualController,
                     decoration: const InputDecoration(
                       labelText: 'Shtrix-kod',
-                      border: OutlineInputBorder(),
                       isDense: true,
                     ),
                     onSubmitted: _lookup,

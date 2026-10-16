@@ -5,6 +5,7 @@ import '../services/expenses_service.dart';
 import '../services/permissions_service.dart';
 import '../utils/dio_error.dart';
 import '../widgets/permission_gate.dart';
+import '../widgets/zebra_tile.dart';
 
 /// `finance.extra-costs` list + create (DESIGN-merchant-admin.md §6.3).
 /// Delete is admin-only (`finance.delete` — `manager` never gets `.delete`
@@ -142,28 +143,31 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         itemCount: expenses.length,
         itemBuilder: (context, i) {
           final e = expenses[i];
-          return ListTile(
-            title: Text(e.category),
-            subtitle: Text([
-              if (e.costDate != null) e.costDate!.toLocal().toString().substring(0, 10),
-              if (e.cashboxName != null) e.cashboxName!,
-              if (e.description?.isNotEmpty == true) e.description!,
-            ].join(' · ')),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text([
-                  e.amount.toString(),
-                  if (e.currencyCode != null) e.currencyCode!,
-                ].join(' ')),
-                PermissionGate(
-                  code: 'finance.delete',
-                  child: IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => _delete(e),
+          return ZebraTile(
+            index: i,
+            child: ListTile(
+              title: Text(e.category),
+              subtitle: Text([
+                if (e.costDate != null) e.costDate!.toLocal().toString().substring(0, 10),
+                if (e.cashboxName != null) e.cashboxName!,
+                if (e.description?.isNotEmpty == true) e.description!,
+              ].join(' · ')),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text([
+                    e.amount.toString(),
+                    if (e.currencyCode != null) e.currencyCode!,
+                  ].join(' ')),
+                  PermissionGate(
+                    code: 'finance.delete',
+                    child: IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => _delete(e),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },

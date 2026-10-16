@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/statistics_service.dart';
 import '../../utils/dio_error.dart';
 import '../../widgets/permission_gate.dart';
+import '../../widgets/zebra_tile.dart';
 
 DateTimeRange _defaultRange() {
   final now = DateTime.now();
@@ -198,7 +199,7 @@ class _Section extends StatelessWidget {
                 child: Text(emptyLabel, style: Theme.of(context).textTheme.bodySmall),
               )
             else
-              ...rows,
+              for (var i = 0; i < rows.length; i++) ZebraTile(index: i, child: rows[i]),
           ],
         ),
       ),
@@ -333,11 +334,15 @@ class _CogsDetailScreenState extends State<_CogsDetailScreen> {
             children: report.byProduct.isEmpty
                 ? [const Padding(padding: EdgeInsets.all(12), child: Text('Ma\'lumot topilmadi'))]
                 : [
-                    for (final row in report.byProduct)
-                      _BreakdownTile(
-                        title: row.productName,
-                        subtitle: '${formatMoney(row.soldQty)} dona · marja ${formatMoney(row.marginPct)}%',
-                        trailing: '${formatMoney(row.profit)} so\'m',
+                    for (var i = 0; i < report.byProduct.length; i++)
+                      ZebraTile(
+                        index: i,
+                        child: _BreakdownTile(
+                          title: report.byProduct[i].productName,
+                          subtitle:
+                              '${formatMoney(report.byProduct[i].soldQty)} dona · marja ${formatMoney(report.byProduct[i].marginPct)}%',
+                          trailing: '${formatMoney(report.byProduct[i].profit)} so\'m',
+                        ),
                       ),
                   ],
           ),
@@ -346,11 +351,14 @@ class _CogsDetailScreenState extends State<_CogsDetailScreen> {
             children: report.byCategory.isEmpty
                 ? [const Padding(padding: EdgeInsets.all(12), child: Text('Ma\'lumot topilmadi'))]
                 : [
-                    for (final row in report.byCategory)
-                      _BreakdownTile(
-                        title: row.categoryName,
-                        subtitle: 'marja ${formatMoney(row.marginPct)}%',
-                        trailing: '${formatMoney(row.profit)} so\'m',
+                    for (var i = 0; i < report.byCategory.length; i++)
+                      ZebraTile(
+                        index: i,
+                        child: _BreakdownTile(
+                          title: report.byCategory[i].categoryName,
+                          subtitle: 'marja ${formatMoney(report.byCategory[i].marginPct)}%',
+                          trailing: '${formatMoney(report.byCategory[i].profit)} so\'m',
+                        ),
                       ),
                   ],
           ),
@@ -359,11 +367,14 @@ class _CogsDetailScreenState extends State<_CogsDetailScreen> {
             children: report.byWarehouse.isEmpty
                 ? [const Padding(padding: EdgeInsets.all(12), child: Text('Ma\'lumot topilmadi'))]
                 : [
-                    for (final row in report.byWarehouse)
-                      _BreakdownTile(
-                        title: row.warehouseName,
-                        subtitle: 'marja ${formatMoney(row.marginPct)}%',
-                        trailing: '${formatMoney(row.profit)} so\'m',
+                    for (var i = 0; i < report.byWarehouse.length; i++)
+                      ZebraTile(
+                        index: i,
+                        child: _BreakdownTile(
+                          title: report.byWarehouse[i].warehouseName,
+                          subtitle: 'marja ${formatMoney(report.byWarehouse[i].marginPct)}%',
+                          trailing: '${formatMoney(report.byWarehouse[i].profit)} so\'m',
+                        ),
                       ),
                   ],
           ),

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../services/permissions_service.dart';
 import '../state/auth_state.dart';
+import '../theme/app_theme.dart';
 
 class _NavTab {
   final String route;
@@ -54,6 +55,11 @@ class AppShell extends StatelessWidget {
     return Scaffold(
       body: child,
       bottomNavigationBar: NavigationBar(
+        backgroundColor: BrandColors.navy,
+        indicatorColor: BrandColors.primaryGreen,
+        surfaceTintColor: Colors.transparent,
+        height: 64,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
         selectedIndex: currentIndex < 0 ? 0 : currentIndex,
         onDestinationSelected: (i) => context.go(tabs[i].route),
         destinations: [

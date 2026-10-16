@@ -5,6 +5,7 @@ import '../config.dart';
 import '../services/auth_service.dart';
 import '../services/org_service.dart';
 import '../state/auth_state.dart';
+import '../widgets/zebra_tile.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -92,12 +93,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ),
-            for (final org in orgs)
-              ListTile(
-                leading: const Icon(Icons.apartment_outlined),
-                title: Text(org.name),
-                subtitle: Text(org.code),
-                onTap: () => Navigator.of(ctx).pop(org.id),
+            for (var i = 0; i < orgs.length; i++)
+              ZebraTile(
+                index: i,
+                child: ListTile(
+                  leading: const Icon(Icons.apartment_outlined),
+                  title: Text(orgs[i].name),
+                  subtitle: Text(orgs[i].code),
+                  onTap: () => Navigator.of(ctx).pop(orgs[i].id),
+                ),
               ),
           ],
         ),

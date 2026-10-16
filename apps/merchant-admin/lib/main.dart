@@ -7,6 +7,7 @@ import 'services/api_client.dart';
 import 'services/fcm_service.dart';
 import 'services/permissions_service.dart';
 import 'state/auth_state.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,14 +65,7 @@ class _MerchantAdminAppState extends State<MerchantAdminApp> with WidgetsBinding
     return MaterialApp.router(
       title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB)),
-        appBarTheme: const AppBarTheme(
-          centerTitle: false,
-          elevation: 0,
-        ),
-      ),
+      theme: buildAppTheme(),
       routerConfig: _router,
     );
   }

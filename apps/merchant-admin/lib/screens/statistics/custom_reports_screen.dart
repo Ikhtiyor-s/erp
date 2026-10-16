@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/statistics_service.dart';
 import '../../utils/dio_error.dart';
+import '../../widgets/zebra_tile.dart';
 
 DateTimeRange _defaultRange() {
   final now = DateTime.now();
@@ -251,7 +252,8 @@ class _ReportSectionState<T> extends State<_ReportSection<T>> {
           else if (_loaded && _rows.isEmpty)
             Padding(padding: const EdgeInsets.all(16), child: Text(widget.emptyLabel))
           else if (_loaded)
-            for (final row in _rows) widget.itemBuilder(context, row),
+            for (var i = 0; i < _rows.length; i++)
+              ZebraTile(index: i, child: widget.itemBuilder(context, _rows[i])),
         ],
       ),
     );
