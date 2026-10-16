@@ -3594,7 +3594,7 @@ async def barcode_lookup(
         result["source"] = "local"
         return result
 
-    shared = await barcode_katalog_client.lookup(q)
+    shared = await barcode_katalog_client.lookup(q, org_id)
     if shared:
         return {
             "id": None,

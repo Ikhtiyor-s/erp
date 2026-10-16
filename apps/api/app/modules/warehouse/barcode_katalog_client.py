@@ -14,14 +14,19 @@ def _configured() -> bool:
     return bool(settings.BARCODE_KATALOG_BASE_URL and settings.BARCODE_KATALOG_API_KEY)
 
 
-async def lookup(barcode: str) -> dict | None:
+async def lookup(barcode: str, org_id: str) -> dict | None:
     """GET /v1/lookup/{barcode} on the shared barcode-katalog service.
 
-    Returns the entry dict on a 200 hit. Returns None on 404 (real miss),
-    400 (shape rejected by the shared service), 401/429, any network
-    error/timeout, or when BARCODE_KATALOG_BASE_URL/API_KEY aren't
-    configured — callers MUST treat all of these identically to their own
-    ordinary miss (DESIGN.md §9), never as an error to propagate.
+    Passes our own org_id so a barcode this org contributed itself, but
+    that's still awaiting admin review on the shared service, keeps
+    resolving for that org (just not for anyone else) until approved.
+
+    Returns the entry dict on a 200 hit. Returns None on 404 (real miss,
+    including a pending entry this org doesn't own), 400 (shape rejected
+    by the shared service), 401/429, any network error/timeout, or when
+    BARCODE_KATALOG_BASE_URL/API_KEY aren't configured — callers MUST
+    treat all of these identically to their own ordinary miss
+    (DESIGN.md §9), never as an error to propagate.
     """
     if not _configured():
         return None
@@ -29,7 +34,9 @@ async def lookup(barcode: str) -> dict | None:
     try:
         async with httpx.AsyncClient(timeout=_LOOKUP_TIMEOUT_SECONDS) as client:
             resp = await client.get(
-                url, headers={"X-API-Key": settings.BARCODE_KATALOG_API_KEY}
+                url,
+                params={"org_id": org_id},
+                headers={"X-API-Key": settings.BARCODE_KATALOG_API_KEY},
             )
     except httpx.HTTPError as exc:
         log.warning("barcode-katalog lookup unreachable for %r: %s", barcode, exc)

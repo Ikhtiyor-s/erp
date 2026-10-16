@@ -257,8 +257,9 @@ class _MockBarcodeKatalogHandler(BaseHTTPRequestHandler):
         return self.headers.get("X-API-Key") == _MOCK_API_KEY
 
     def do_GET(self):
-        if self.path.startswith("/v1/lookup/"):
-            barcode = self.path.rsplit("/", 1)[-1]
+        path, _, _query = self.path.partition("?")
+        if path.startswith("/v1/lookup/"):
+            barcode = path.rsplit("/", 1)[-1]
             if barcode == _MOCK_SLOW_LOOKUP_BARCODE:
                 time.sleep(1.0)
             if not self._check_key():
@@ -323,20 +324,20 @@ def configured_shared_service(mock_shared_service, monkeypatch):
 
 
 async def test_client_lookup_hit_returns_entry(configured_shared_service):
-    result = await barcode_katalog_client.lookup(_MOCK_HIT_BARCODE)
+    result = await barcode_katalog_client.lookup(_MOCK_HIT_BARCODE, "org_test")
     assert result is not None
     assert result["name"] == "Coca-Cola Classic"
     assert result["brand"] == "Coca-Cola"
 
 
 async def test_client_lookup_miss_returns_none(configured_shared_service):
-    result = await barcode_katalog_client.lookup("00000000")
+    result = await barcode_katalog_client.lookup("00000000", "org_test")
     assert result is None
 
 
 async def test_client_lookup_slow_service_times_out_to_none(configured_shared_service):
     start = time.monotonic()
-    result = await barcode_katalog_client.lookup(_MOCK_SLOW_LOOKUP_BARCODE)
+    result = await barcode_katalog_client.lookup(_MOCK_SLOW_LOOKUP_BARCODE, "org_test")
     elapsed = time.monotonic() - start
     assert result is None
     assert elapsed < 0.9, f"lookup() took {elapsed:.2f}s — 300ms client timeout not enforced"
@@ -346,7 +347,7 @@ async def test_client_lookup_unreachable_returns_none_fast(monkeypatch):
     monkeypatch.setattr(erp_settings, "BARCODE_KATALOG_BASE_URL", "http://127.0.0.1:1")
     monkeypatch.setattr(erp_settings, "BARCODE_KATALOG_API_KEY", "whatever")
     start = time.monotonic()
-    result = await barcode_katalog_client.lookup(_MOCK_HIT_BARCODE)
+    result = await barcode_katalog_client.lookup(_MOCK_HIT_BARCODE, "org_test")
     elapsed = time.monotonic() - start
     assert result is None
     assert elapsed < 1.0, f"lookup() took {elapsed:.2f}s against an unreachable host"
@@ -355,7 +356,7 @@ async def test_client_lookup_unreachable_returns_none_fast(monkeypatch):
 async def test_client_lookup_noop_when_not_configured(monkeypatch):
     monkeypatch.setattr(erp_settings, "BARCODE_KATALOG_BASE_URL", "")
     monkeypatch.setattr(erp_settings, "BARCODE_KATALOG_API_KEY", "")
-    result = await barcode_katalog_client.lookup(_MOCK_HIT_BARCODE)
+    result = await barcode_katalog_client.lookup(_MOCK_HIT_BARCODE, "org_test")
     assert result is None
 
 
